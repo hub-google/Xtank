@@ -174,7 +174,7 @@ function viewUpdate(dt){
     m.rotation.y=t.yaw;
     m.userData.turret.rotation.y=t.aimYaw-t.yaw;
     m.userData.teamRing.material.color.setHex(match.mode==='FFA'?0x78bdff:(t.team===0?0xff655d:0x65a9fc));
-    const ownTeam=t.id==='player'||match.mode!=='FFA'&&t.team===0;
+    const ownTeam=t.id==='player'||match.mode!=='FFA'&&t.team===match.tanks[0].team;
     if(t.kind==='S'&&t.abilityTime>0&&!ownTeam)m.visible=false;
   }
   const live=new Set(match.projectiles.map(b=>b.id));
@@ -318,7 +318,7 @@ el('againButton').addEventListener('click',()=>{
 });
 el('returnButton').addEventListener('click',goHome);
 
-function onlineStatus(message){el('networkStatus').textContent=message;}
+function onlineStatus(message){el('networkStatus').textContent=message;if(match&&online&&message.includes('斷線'))el('statusText').textContent=message;}
 function onlineMessage(msg){
  if(msg.type==='ERROR'){onlineStatus('伺服器拒絕：'+msg.code);return;}
  if(msg.type==='JOINED'){
