@@ -21,6 +21,29 @@ export const OBSTACLES = [
   {type:'circle',x:9,z:16,r:2.3,height:3,name:'left-cup'},
   {type:'circle',x:39,z:16,r:2.3,height:3,name:'right-cup'},
 ];
+
+export const MAPS=Object.freeze({
+ desk:{name:'巨型書桌',obstacles:OBSTACLES},
+ chess:{name:'棋盤戰場',obstacles:[
+  {type:'circle',x:24,z:16,r:2.1,height:4,name:'black-king'},
+  {type:'box',x1:22,z1:23,x2:26,z2:26,height:2.5,name:'north-rook'},
+  {type:'box',x1:22,z1:6,x2:26,z2:9,height:2.5,name:'south-rook'},
+  {type:'circle',x:14,z:11,r:1.8,height:2,name:'white-bishop-west'},
+  {type:'circle',x:34,z:21,r:1.8,height:2,name:'black-bishop-east'},
+  {type:'circle',x:14,z:21,r:1.5,height:1.5,name:'pawn-west'},
+  {type:'circle',x:34,z:11,r:1.5,height:1.5,name:'pawn-east'},
+ ]},
+ circuit:{name:'電路板戰場',obstacles:[
+  {type:'box',x1:21,z1:12,x2:27,z2:20,height:3.2,name:'main-chip'},
+  {type:'box',x1:11,z1:8,x2:17,z2:13,height:2.6,name:'chip-sw'},
+  {type:'box',x1:31,z1:19,x2:37,z2:24,height:2.6,name:'chip-ne'},
+  {type:'box',x1:14,z1:19,x2:18,z2:22,height:1.5,name:'resistor-nw'},
+  {type:'box',x1:30,z1:10,x2:34,z2:13,height:1.5,name:'resistor-se'},
+  {type:'circle',x:10,z:23,r:1.7,height:2.1,name:'capacitor-nw'},
+  {type:'circle',x:38,z:9,r:1.7,height:2.1,name:'capacitor-se'},
+ ]}
+});
+
 export const WEAPONS = Object.freeze({
   hurricane: {name:'颶風飛彈',cooldown:.68,speed:32,damage:23,radius:.19,range:38,splash:0,ammo:-1},
   vulcan: {name:'火神機炮',cooldown:.13,speed:52,damage:7,radius:.11,range:27,splash:0,ammo:-1},
@@ -38,15 +61,15 @@ const FLAG_SPAWNS=[[24,12.8],[24,19.2],[19,16],[29,16]];
 const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
 const len=(x,z)=>Math.hypot(x,z)||1;
 const norm=(x,z)=>{const d=len(x,z);return [x/d,z/d]};
-function blocked(x,z,r=RADIUS){
+function blocked(x,z,r=RADIUS,obstacles=OBSTACLES){
   if(x<r+.8||z<r+.8||x>WIDTH-r-.8||z>DEPTH-r-.8)return true;
-  for(const o of OBSTACLES){
+  for(const o of obstacles){
     if(o.type==='box'){const a=clamp(x,o.x1,o.x2),b=clamp(z,o.z1,o.z2);if((x-a)**2+(z-b)**2<(r+.06)**2)return true;}
     else if(Math.hypot(x-o.x,z-o.z)<r+o.r+.06)return true;
   }
   return false;
 }
-export function isWalkable(x,z,r=RADIUS){return !blocked(x,z,r);}
+export function isWalkable(x,z,r=RADIUS,obstacles=OBSTACLES){return !blocked(x,z,r,obstacles);}
 function seeded(seed){let a=seed>>>0;return ()=>{a=(Math.imul(a,1664525)+1013904223)>>>0;return a/4294967296;};}
 function tank(id,kind,team,x,z){
   const cfg=TANKS[kind];
@@ -56,9 +79,11 @@ function tank(id,kind,team,x,z){
     lastDamage:0,aiDir:0,aiThink:0,aiStrafe:1,vx:0,vz:0};
 }
 export class Game {
-  constructor({mode='FFA',selectedTank='X',seed=42,size}={}){
+  constructor({mode='FFA',selectedTank='X',seed=42,size,mapId='desk'}={}){
     if(!['FFA','TDM','FLAG_HOLD'].includes(mode))throw Error('invalid mode');
     if(!TANKS[selectedTank])throw Error('invalid tank');
+    if(!MAPS[mapId])throw Error('invalid map');
+    this.mapId=mapId;this.obstacles=MAPS[mapId].obstacles;
     this.mode=mode;this.rng=seeded(seed);this.time=mode==='FFA'?300:480;this.tick=0;this.ended=false;
     this.events=[];this.projectiles=[];this.smokes=[];this.repairFields=[];this.scores=[0,0];this.humanIds=null;this.collisionTimes=new Map();this.nextBullet=0;this.target=mode==='FFA'?12:mode==='TDM'?30:5;
     const kinds=['X','D','M','R','H','A','O','S'];
@@ -75,8 +100,10 @@ export class Game {
     this.flag={x:24,z:4,holder:null,holdTime:0,respawn:0,spawnIndex:0};
     this.spawnFlag();
   }
+  blocked(x,z,r=RADIUS){return blocked(x,z,r,this.obstacles);}
+  isWalkable(x,z,r=RADIUS){return isWalkable(x,z,r,this.obstacles);}
   spawnFlag(){
-    const valid=FLAG_SPAWNS.filter(([x,z])=>isWalkable(x,z,.8));
+    const valid=FLAG_SPAWNS.filter(([x,z])=>this.isWalkable(x,z,.8));
     if(!valid.length)throw Error('flag map has no valid spawn');
     this.flag.spawnIndex=Math.floor(this.rng()*valid.length);
     [this.flag.x,this.flag.z]=valid[this.flag.spawnIndex];
@@ -92,8 +119,8 @@ export class Game {
     if(this.mode==='FLAG_HOLD'&&this.flag.holder===t.id)speed*=.9;
     const beforeX=t.x,beforeZ=t.z;
     const nx=t.x+vx*speed*dt,nz=t.z+vz*speed*dt;
-    if(!blocked(nx,t.z))t.x=nx;
-    if(!blocked(t.x,nz))t.z=nz;
+    if(!this.blocked(nx,t.z))t.x=nx;
+    if(!this.blocked(t.x,nz))t.z=nz;
     t.vx=(t.x-beforeX)/Math.max(dt,.0001);
     t.vz=(t.z-beforeZ)/Math.max(dt,.0001);
     if(vx||vz)t.yaw=Math.atan2(-vx,-vz);
@@ -108,8 +135,8 @@ export class Game {
       const overlap=RADIUS*2-distance;
       const ax=a.x-nx*overlap*.5,az=a.z-nz*overlap*.5;
       const bx=b.x+nx*overlap*.5,bz=b.z+nz*overlap*.5;
-      if(!blocked(ax,az)){a.x=ax;a.z=az;}
-      if(!blocked(bx,bz)){b.x=bx;b.z=bz;}
+      if(!this.blocked(ax,az)){a.x=ax;a.z=az;}
+      if(!this.blocked(bx,bz)){b.x=bx;b.z=bz;}
       const key=[a.id,b.id].sort().join('|');
       if((this.collisionTimes.get(key)||-100)+.6>this.tick)continue;
       const speed=Math.hypot(a.vx-b.vx,a.vz-b.vz);
@@ -169,7 +196,7 @@ export class Game {
   }
   respawnTank(t){
     const points=this.mode==='FFA'?FFA_SPAWNS:t.team===RED?SPAWN_RED:SPAWN_BLUE;
-    const spots=[...points].filter(([x,z])=>isWalkable(x,z));
+    const spots=[...points].filter(([x,z])=>this.isWalkable(x,z));
     spots.sort((a,b)=>{
       const dist=p=>Math.min(...this.tanks.filter(o=>o.alive&&o.team!==t.team&&o.id!==t.id).map(o=>Math.hypot(o.x-p[0],o.z-p[1])),99);
       return dist(b)-dist(a);
@@ -229,7 +256,7 @@ export class Game {
     const dx=gx-t.x,dz=gz-t.z,d=Math.hypot(dx,dz);
     let vx=d>4?dx:dx*.1-dz*t.aiStrafe*.7;
     let vz=d>4?dz:dz*.1+dx*t.aiStrafe*.7;
-    if(blocked(t.x+vx/Math.max(1,d)*1.1,t.z+vz/Math.max(1,d)*1.1)){vx=-dz*t.aiStrafe;vz=dx*t.aiStrafe;}
+    if(this.blocked(t.x+vx/Math.max(1,d)*1.1,t.z+vz/Math.max(1,d)*1.1)){vx=-dz*t.aiStrafe;vz=dx*t.aiStrafe;}
     const [mx,mz]=norm(vx,vz);this.move(t,mx,mz,dt);
     const a=Math.atan2(-(target.x-t.x),-(target.z-t.z));
     t.aimYaw=a;
@@ -294,7 +321,7 @@ export class Game {
       const step=Math.max(1,Math.ceil(w.speed*dt/.3)),dx=b.vx*dt/step,dz=b.vz*dt/step;
       for(let k=0;k<step;k++){
         b.x+=dx;b.z+=dz;b.travel+=Math.hypot(dx,dz);
-        if(blocked(b.x,b.z,w.radius)||b.travel>w.range){
+        if(this.blocked(b.x,b.z,w.radius)||b.travel>w.range){
           b.alive=false;this.detonate(b);break;
         }
         const hit=this.tanks.find(t=>t.alive&&t.id!==b.owner&&(this.mode==='FFA'||t.team!==b.team)&&Math.hypot(b.x-t.x,b.z-t.z)<RADIUS+w.radius);
