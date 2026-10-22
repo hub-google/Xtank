@@ -52,7 +52,7 @@ function tank(id,kind,team,x,z){
   const cfg=TANKS[kind];
   return {id,kind,team,x,z,yaw:0,aimYaw:0,hp:cfg.hp,shield:cfg.shield,maxHp:cfg.hp,maxShield:cfg.shield,
     alive:true,respawn:0,kills:0,deaths:0,assists:0,score:0,damage:0,cooldown:0,weapon:'hurricane',
-    ammo:{chemical:18,ion_missile:8,mine:5}, repair:2,repairCooldown:0,boostCooldown:0,boostTime:0,abilityCooldown:0,abilityTime:0,
+    ammo:{chemical:18,ion_missile:8,mine:5}, repair:2,repairCooldown:0,boostCooldown:0,boostTime:0,shieldCells:2,shieldCooldown:0,radarCooldown:0,radarTime:0,smokeCooldown:0,teamRepairCooldown:0,abilityCooldown:0,abilityTime:0,
     lastDamage:0,aiDir:0,aiThink:0,aiStrafe:1,vx:0,vz:0};
 }
 export class Game {
@@ -60,7 +60,7 @@ export class Game {
     if(!['FFA','TDM','FLAG_HOLD'].includes(mode))throw Error('invalid mode');
     if(!TANKS[selectedTank])throw Error('invalid tank');
     this.mode=mode;this.rng=seeded(seed);this.time=mode==='FFA'?300:480;this.tick=0;this.ended=false;
-    this.events=[];this.projectiles=[];this.scores=[0,0];this.humanIds=null;this.collisionTimes=new Map();this.nextBullet=0;this.target=mode==='FFA'?12:mode==='TDM'?30:5;
+    this.events=[];this.projectiles=[];this.smokes=[];this.repairFields=[];this.scores=[0,0];this.humanIds=null;this.collisionTimes=new Map();this.nextBullet=0;this.target=mode==='FFA'?12:mode==='TDM'?30:5;
     const kinds=['X','D','M','R','H','A','O','S'];
     this.tanks=[tank('player',selectedTank,RED,4,13)];
     if(mode==='FFA'){
@@ -189,6 +189,23 @@ export class Game {
       t.boostTime=5;t.boostCooldown=30;
       this.events.push({type:'boost',id:t.id,x:t.x,z:t.z});return true;
     }
+    if(index===3&&t.shieldCells>0&&t.shieldCooldown<=0&&t.shield<t.maxShield){
+      t.shield=Math.min(t.maxShield,t.shield+35);t.shieldCells--;t.shieldCooldown=25;
+      this.events.push({type:'shield',id:t.id,x:t.x,z:t.z});return true;
+    }
+    if(index===4&&t.radarCooldown<=0){
+      t.radarTime=5;t.radarCooldown=35;
+      this.events.push({type:'radar',id:t.id,x:t.x,z:t.z});return true;
+    }
+    if(index===5&&t.smokeCooldown<=0){
+      t.smokeCooldown=35;this.smokes.push({id:++this.nextBullet,x:t.x,z:t.z,time:6,team:t.team,radius:5});
+      this.events.push({type:'smoke',id:t.id,x:t.x,z:t.z});return true;
+    }
+    if(index===6&&t.teamRepairCooldown<=0){
+      t.teamRepairCooldown=60;
+      this.repairFields.push({id:++this.nextBullet,x:t.x,z:t.z,time:5,team:t.team,owner:t.id,radius:7});
+      this.events.push({type:'teamRepair',id:t.id,x:t.x,z:t.z});return true;
+    }
     return false;
   }
   useAbility(t){
@@ -216,7 +233,8 @@ export class Game {
     const [mx,mz]=norm(vx,vz);this.move(t,mx,mz,dt);
     const a=Math.atan2(-(target.x-t.x),-(target.z-t.z));
     t.aimYaw=a;
-    if(Math.hypot(target.x-t.x,target.z-t.z)<27&&this.rng()<.70)this.fire(t);
+    const targetInSmoke=this.smokes.some(s=>s.time>0&&Math.hypot(target.x-s.x,target.z-s.z)<s.radius);
+    if(Math.hypot(target.x-t.x,target.z-t.z)<27&&this.rng()<(targetInSmoke?.13:.70))this.fire(t);
     if(t.hp<t.maxHp*.4&&t.repair>0)this.useItem(t,1);
     if(this.mode==='FLAG_HOLD'&&this.flag.holder===t.id&&!t.boostTime)this.useItem(t,2);
   }
@@ -224,7 +242,7 @@ export class Game {
     if(this.ended)return [];
     dt=clamp(dt,0,.05);this.events=[];this.tick+=dt;this.time=Math.max(0,this.time-dt);
     for(const t of this.tanks){
-      for(const key of ['cooldown','repairCooldown','boostCooldown','boostTime','abilityCooldown','abilityTime']) t[key]=Math.max(0,t[key]-dt);
+      for(const key of ['cooldown','repairCooldown','boostCooldown','boostTime','shieldCooldown','radarCooldown','radarTime','smokeCooldown','teamRepairCooldown','abilityCooldown','abilityTime']) t[key]=Math.max(0,t[key]-dt);
       if(!t.alive){t.respawn-=dt;if(t.respawn<=0)this.respawnTank(t);continue;}
       // Shield recovery after the last 6s with no damage (prototype).
       if(this.tick-t.lastDamage>6)t.shield=Math.min(t.maxShield,t.shield+4*dt);
@@ -239,6 +257,15 @@ export class Game {
         if(cmd.ability)this.useAbility(t);
       }else this.ai(t,dt);
     }
+    for(const field of this.repairFields){
+      field.time=Math.max(0,field.time-dt);
+      for(const ally of this.tanks)if(ally.alive&&(this.mode==='FFA'?ally.id===field.owner:ally.team===field.team)&&Math.hypot(ally.x-field.x,ally.z-field.z)<=field.radius){
+        ally.hp=Math.min(ally.maxHp,ally.hp+6*dt);
+      }
+    }
+    this.repairFields=this.repairFields.filter(f=>f.time>0);
+    for(const smoke of this.smokes)smoke.time=Math.max(0,smoke.time-dt);
+    this.smokes=this.smokes.filter(z=>z.time>0);
     this.resolveTankCollisions();
     for(const b of this.projectiles){
       if(!b.alive)continue;
