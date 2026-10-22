@@ -51,3 +51,8 @@ X-TANK 是一款最多 8 人同場的 3D 第三人稱即時坦克射擊遊戲。
 **目前狀態：文件規格完成第一版，還沒有可執行的遊戲，也沒有已部署的聯機服務。**
 
 重要發現：2002 年同期報導的「12 張地圖」與宣傳所稱的「50 種背景」不是同一個已核實量；舊 README 的單一玩法資料和韓文回顧可能屬不同版本，對照表見 [19](docs/19_史料引用版本差異與待查.md)。
+
+
+## 🎮 首個可玩版本（0.1.0）
+已新增真正的 3D 單機遊戲（8 種坦克、三種對戰模式、AI、武器及小地圖）與 Windows Portable EXE 打包流程。**注意：目前沒有真人多人連線、帳號與原版素材**。從 [Build Windows EXE 工作流程](https://github.com/hub-google/Xtank/actions/workflows/windows-exe.yml) 找到成功的執行，在 Artifacts 下載 \`XTANK-Windows-Portable-EXE\` ZIP，解壓後執行 EXE。詳細玩法和已知限制見 [21 試玩說明](docs/21_實作進度與試玩方式.md)。
+

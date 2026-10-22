@@ -29,7 +29,7 @@
     "asar": true,
     "win": {
       "target": [{"target": "portable", "arch": ["x64"]}],
-      "artifactName": "XTANK-Prototype-\${version}-Windows.exe"
+      "artifactName": "XTANK-Prototype-${version}-Windows.exe"
     }
   }
 }

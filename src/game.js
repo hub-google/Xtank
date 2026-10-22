@@ -1,0 +1,296 @@
+import * as THREE from 'three';
+import './style.css';
+import {Game, TANKS, WEAPONS, OBSTACLES, WIDTH, DEPTH} from './simulation.js';
+
+const el = id => document.getElementById(id);
+const viewport = el('viewport');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x12253e);
+scene.fog = new THREE.Fog(0x12253e, 50, 98);
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, .08, 170);
+camera.position.set(24, 24, 42);
+camera.lookAt(24, 0, 16);
+const renderer = new THREE.WebGLRenderer({antialias:true, powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.8));
+renderer.setSize(innerWidth,innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.45;
+viewport.appendChild(renderer.domElement);
+const hemi = new THREE.HemisphereLight(0xc4e5ff,0x59442d,2.2); scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xffe7c4,3.4);
+sun.position.set(14,34,14);sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048);sun.shadow.camera.left=-36;sun.shadow.camera.right=36;
+sun.shadow.camera.top=36;sun.shadow.camera.bottom=-36;sun.shadow.bias=-.0005;scene.add(sun);
+const mat=(c,rough=.7,metal=0)=>new THREE.MeshStandardMaterial({color:c,roughness:rough,metalness:metal});
+const wood = mat(0x876247);const paper=mat(0xe5dfcc);const bluePaper=mat(0x526784);
+const steel=mat(0x495c6b,.4,.45),pencilMat=mat(0xf0bd48),dark=mat(0x192430);
+function box(w,h,d,material,x,y,z,parent=scene){
+  const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),material);
+  m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;
+}
+function cylinder(r,h,material,x,y,z,parent=scene,r2=r){
+  const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r2,h,22),material);
+  m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;
+}
+// Original-looking miniature household setting; all geometry is newly modeled.
+const desk=box(48,1,32,wood,24,-.58,16);
+const grid = new THREE.GridHelper(48,24,0x7b6651,0x937559);
+grid.position.set(24,-.064,16);grid.material.transparent=true;grid.material.opacity=.19;scene.add(grid);
+box(49,1.6,.65,steel,24,.50,-.2); box(49,1.6,.65,steel,24,.50,32.2);
+box(.65,1.6,33,steel,-.2,.50,16); box(.65,1.6,33,steel,48.2,.50,16);
+for(const o of OBSTACLES){
+  if(o.type==='box'){
+    const material=o.name.includes('notebook')?bluePaper:pencilMat;
+    const mesh=box(o.x2-o.x1,o.height,o.z2-o.z1,material,(o.x1+o.x2)/2,o.height/2,(o.z1+o.z2)/2);
+    if(o.name.includes('notebook')){
+      box(o.x2-o.x1+.2,.08,o.z2-o.z1+.2,paper,(o.x1+o.x2)/2,o.height+.04,(o.z1+o.z2)/2);
+      for(let i=0;i<5;i++){const strip=box(o.x2-o.x1-1,.018,.015,mat(0xabbdd5), (o.x1+o.x2)/2,o.height+.089,o.z1+.8+i*.7);strip.castShadow=false;}
+    }else{cylinder(.4,o.height+1,mat(0x342c2b),(o.x1+o.x2)/2,o.height/2,(o.z1+o.z2)/2);}
+    void mesh;
+  }else if(o.name==='lamp'){
+    cylinder(o.r,.55,steel,o.x,.28,o.z);
+    cylinder(.30,5,steel,o.x,2.7,o.z);
+    const shade=cylinder(2.0,.8,mat(0xf7deaa),o.x,5.2,o.z,scene,1.2);
+    shade.rotation.z=.16;
+    const bulb=new THREE.PointLight(0xffd8a7,24,21,2);bulb.position.set(o.x,4.7,o.z);scene.add(bulb);
+  }else {
+    cylinder(o.r,o.height,mat(0xdadadd,.36),o.x,o.height/2,o.z);
+    cylinder(o.r*.82,.08,mat(0x775a44),o.x,o.height+.045,o.z);
+  }
+}
+const roomFloor=box(130,1,130,mat(0x182d3b),24,-5,16);roomFloor.receiveShadow=false;
+for(let i=0;i<16;i++){
+  const x=(i%8)*7+3,z=(i<8)?-2:34;
+  const led=new THREE.PointLight(i%2?0x7baaff:0xffd6a0,.4,6);
+  led.position.set(x,.5,z);scene.add(led);
+}
+const sparks=[];
+let models=new Map(), bulletModels=new Map(), flagGroup=null, match=null;
+let paused=true,resultShown=false,last=performance.now(),accum=0;
+const keyboard = new Set();
+let fireHeld=false, itemQueue=0, abilityQueue=false, mouseX=innerWidth*.5,mouseY=innerHeight*.53, selectedWeapon=0;
+const raycaster=new THREE.Raycaster(), ground=new THREE.Plane(new THREE.Vector3(0,1,0),-.2), cursor=new THREE.Vector3();
+const cameraTarget=new THREE.Vector3(24,0,16);
+const weaponKeys=['hurricane','vulcan','chemical'];
+function tankModel(t){
+  const group=new THREE.Group();
+  const teamGlow = mat(t.team===0?0xf96b62:0x5f9eff,.35,.4);
+  const base=mat(TANKS[t.kind].color,.56,.32);
+  const lower=box(1.75,.43,1.65,steel,0,.25,0,group);
+  box(1.75,.48,1.3,base,0,.64,0,group);
+  box(.34,.48,1.84,dark,-.90,.21,0,group);box(.34,.48,1.84,dark,.90,.21,0,group);
+  for(let i=-1;i<=1;i++){
+    cylinder(.24,.13,mat(0x788492),-.99,.2,i*.50,group).rotation.z=Math.PI/2;
+    cylinder(.24,.13,mat(0x788492),.99,.2,i*.50,group).rotation.z=Math.PI/2;
+  }
+  const turret=new THREE.Group();turret.position.y=.77;group.add(turret);
+  cylinder(t.kind==='D'?.63:.49,.42,base,0,.15,0,turret);
+  const barrel=box(.20,.20,1.35,steel,0,.26,-.85,turret);
+  box(.35,.33,.28,dark,0,.26,-1.5,turret);
+  if(t.kind==='S'){box(.16,.15,1.3,steel,-.29,.26,-.87,turret);box(.16,.15,1.3,steel,.29,.26,-.87,turret);}
+  if(t.kind==='A'){const antenna=cylinder(.055,1.35,mat(0xefe6be),.35,.93,.24,turret);antenna.castShadow=false;}
+  if(t.kind==='O'){box(1.7,.12,.7,mat(0x8bd2f2),0,.04,.0,group);}
+  const teamRing = new THREE.Mesh(new THREE.RingGeometry(.92,1.06,32),new THREE.MeshBasicMaterial({color:t.team===0?0xff655d:0x65a9fc,side:THREE.DoubleSide,transparent:true,opacity:.9}));
+  teamRing.rotation.x=-Math.PI/2;teamRing.position.y=.052;group.add(teamRing);
+  // Player has golden tracking cone, bots do not.
+  if(t.id==='player'){
+    const point=new THREE.Mesh(new THREE.ConeGeometry(.32,.56,4),new THREE.MeshBasicMaterial({color:0xffde69}));
+    point.position.set(0,2.05,0);point.rotation.z=Math.PI;group.add(point);
+  }
+  group.userData={turret,teamRing,lower};
+  group.traverse(c=>{if(c.isMesh)c.castShadow=true;});
+  scene.add(group);return group;
+}
+const materialBullets={hurricane:mat(0xffbe61,.3,.1),vulcan:mat(0xe9efff,.2,.2),chemical:mat(0x5de8b6,.24,.12)};
+function bulletModel(b){
+  const radius=WEAPONS[b.kind].radius*1.5;
+  const mesh=new THREE.Mesh(new THREE.SphereGeometry(radius,9,8),materialBullets[b.kind]);
+  mesh.castShadow=false;scene.add(mesh);return mesh;
+}
+function makeFlag(){
+  flagGroup=new THREE.Group();
+  cylinder(.07,2.8,steel,0,1.4,0,flagGroup);
+  const flag=box(1,.65,.04,mat(0xffd244,.35),.57,2.35,0,flagGroup);void flag;
+  const orb=new THREE.Mesh(new THREE.SphereGeometry(.15,12,12),mat(0xffee9a));orb.position.y=2.85;flagGroup.add(orb);
+  const ring=new THREE.Mesh(new THREE.RingGeometry(1,1.16,32),new THREE.MeshBasicMaterial({color:0xffd749,side:THREE.DoubleSide}));
+  ring.rotation.x=-Math.PI/2;ring.position.y=.03;flagGroup.add(ring);
+  scene.add(flagGroup);
+}
+makeFlag();
+function clearModels(){
+  for(const m of models.values())scene.remove(m);
+  for(const m of bulletModels.values())scene.remove(m);
+  for(const p of sparks)scene.remove(p.mesh);
+  models=new Map();bulletModels=new Map();sparks.length=0;
+}
+function start(){
+  try {
+    clearModels();
+    match=new Game({mode:el('modeSelect').value,selectedTank:el('tankSelect').value,seed:Date.now()>>>0});
+    for(const t of match.tanks)models.set(t.id,tankModel(t));
+    paused=false;resultShown=false;accum=0;keyboard.clear();fireHeld=false;itemQueue=0;abilityQueue=false;selectedWeapon=0;
+    el('startMenu').hidden=true;el('resultMenu').hidden=true;el('hud').hidden=false;el('pauseBadge').hidden=true;
+    camera.position.set(4,18,31);cameraTarget.set(4,0,13);
+    updateHUD();
+  } catch(e){console.error(e);el('matchInfo').textContent='啟動失敗：'+e.message;}
+}
+function goHome(){
+  paused=true;match=null;clearModels();el('startMenu').hidden=false;el('resultMenu').hidden=true;
+  el('hud').hidden=true;el('pauseBadge').hidden=true;el('matchInfo').textContent='未開始';
+}
+function flash(color, x, z, size=.22){
+  const mesh=new THREE.Mesh(new THREE.SphereGeometry(size,8,7),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.9}));
+  mesh.position.set(x,.65,z);scene.add(mesh);sparks.push({mesh,life:.25,total:.25});
+}
+function handleEvents(events){
+  for(const e of events){
+    if(e.type==='fire')flash(e.weapon==='chemical'?0x56ffc7:0xffd16c,e.x,e.z,.15);
+    if(e.type==='explosion')for(let i=0;i<5;i++){const a=i*Math.PI*2/5;flash(0xff9d3f,e.x+Math.cos(a)*.35,e.z+Math.sin(a)*.35,.20);}
+    if(e.type==='hit'&&e.id==='player'){
+      el('statusText').textContent='受到攻擊！';
+    }
+    if(e.type==='death'&&e.id==='player')el('statusText').textContent='坦克被擊毀 · 等待重生';
+    if(e.type==='flagPickup')el('statusText').textContent=e.id==='player'?'你拿到旗幟！':'有人拿到旗幟！';
+    if(e.type==='flagScore')el('statusText').textContent=e.team===0?'紅隊成功得分！':'藍隊成功得分！';
+  }
+}
+function viewUpdate(dt){
+  for(const s of sparks){s.life-=dt;s.mesh.material.opacity=Math.max(0,s.life/s.total);s.mesh.scale.setScalar(1+(1-s.life/s.total)*2);}
+  for(let i=sparks.length-1;i>=0;i--){if(sparks[i].life<=0){scene.remove(sparks[i].mesh);sparks.splice(i,1);}}
+  if(!match)return;
+  for(const t of match.tanks){
+    let m=models.get(t.id);
+    if(!m){m=tankModel(t);models.set(t.id,m);}
+    m.visible=t.alive;m.position.set(t.x,.04,t.z);
+    m.rotation.y=t.yaw;
+    m.userData.turret.rotation.y=t.aimYaw-t.yaw;
+    m.userData.teamRing.material.color.setHex(match.mode==='FFA'?0x78bdff:(t.team===0?0xff655d:0x65a9fc));
+    const ownTeam=t.id==='player'||match.mode!=='FFA'&&t.team===0;
+    if(t.kind==='S'&&t.abilityTime>0&&!ownTeam)m.visible=false;
+  }
+  const live=new Set(match.projectiles.map(b=>b.id));
+  for(const [id,m] of bulletModels)if(!live.has(id)){scene.remove(m);bulletModels.delete(id);}
+  for(const b of match.projectiles){
+    let mesh=bulletModels.get(b.id);
+    if(!mesh){mesh=bulletModel(b);bulletModels.set(b.id,mesh);}
+    mesh.position.set(b.x,.84,b.z);
+  }
+  flagGroup.visible=match.mode==='FLAG_HOLD'&&!match.flag.respawn;
+  if(flagGroup.visible){
+    flagGroup.position.set(match.flag.x,.03,match.flag.z);
+    flagGroup.children[1].rotation.y=Math.sin(performance.now()*.003)*.1;
+  }
+  const p=match.tanks[0];
+  const follow=new THREE.Vector3(p.x,17,p.z+17);
+  camera.position.lerp(follow,Math.min(1,dt*4.7));
+  cameraTarget.lerp(new THREE.Vector3(p.x,.85,p.z),Math.min(1,dt*5.2));
+  camera.lookAt(cameraTarget);
+}
+function aimYaw(){
+  const r=renderer.domElement.getBoundingClientRect();
+  const x=((mouseX-r.left)/r.width)*2-1,y=-((mouseY-r.top)/r.height)*2+1;
+  raycaster.setFromCamera(new THREE.Vector2(x,y),camera);
+  if(!raycaster.ray.intersectPlane(ground,cursor))return match?.tanks[0].aimYaw||0;
+  const t=match?.tanks[0];if(!t)return 0;
+  return Math.atan2(-(cursor.x-t.x),-(cursor.z-t.z));
+}
+function tick(dt){
+  const p=match.tanks[0];
+  const dx=Number(keyboard.has('KeyD'))-Number(keyboard.has('KeyA'));
+  const dz=Number(keyboard.has('KeyS'))-Number(keyboard.has('KeyW'));
+  const events=match.update(dt,{dx,dz,aimYaw:aimYaw(),fire:fireHeld,item:itemQueue,ability:abilityQueue});
+  itemQueue=0;abilityQueue=false;
+  handleEvents(events);
+  if(match.ended&&!resultShown){
+    resultShown=true;paused=true;
+    const s=match.summary();
+    el('resultTitle').textContent=s.title;
+    el('resultStats').textContent='你的擊殺 '+s.kills+'  /  被擊毀 '+s.deaths+
+      (s.rank?'  /  名次 第 '+s.rank+' 名':'')+
+      (s.teamScore?'  /  紅隊 '+s.teamScore[0]+' : '+s.teamScore[1]+' 藍隊':'');
+    el('resultMenu').hidden=false;
+  }
+}
+function timeFmt(t){const seconds=Math.ceil(t);return String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0');}
+function updateHUD(){
+  if(!match)return;
+  const p=match.tanks[0];
+  el('hpText').textContent=Math.ceil(p.hp)+'/'+p.maxHp;
+  el('shieldText').textContent=Math.ceil(p.shield)+'/'+p.maxShield;
+  el('hpBar').style.width=(100*p.hp/p.maxHp)+'%';
+  el('shieldBar').style.width=(100*p.shield/p.maxShield)+'%';
+  const mode=match.mode==='FFA'?'個人死鬥':match.mode==='TDM'?'團隊戰':'持旗戰';
+  el('matchInfo').textContent=mode+' · 書桌戰場 · '+match.tanks.length+' 台坦克';
+  const ffa=[...match.tanks].sort((a,b)=>b.score-a.score);
+  const score=match.mode==='FFA'?'你的擊殺 '+p.kills+' / '+match.target+'　|　榜首 '+ffa[0].score:
+    '紅 '+match.scores[0]+' : '+match.scores[1]+' 藍　|　目標 '+match.target;
+  el('scoreText').textContent=score+'　　'+timeFmt(match.time);
+  if(!p.alive)el('statusText').textContent='重生倒數 '+Math.ceil(p.respawn)+' 秒';
+  else if(match.mode==='FLAG_HOLD'&&match.flag.holder===p.id)el('statusText').textContent='持旗中 '+match.flag.holdTime.toFixed(1)+'/15 秒';
+  else if(p.abilityTime>0)el('statusText').textContent='技能 '+TANKS[p.kind].ability+' '+p.abilityTime.toFixed(1)+'s';
+  else el('statusText').textContent='F1 修理('+p.repair+') / F2 加速 '+(p.boostCooldown>0?'冷卻 '+Math.ceil(p.boostCooldown)+'s':'就緒')+' / E 技能';
+  const weapons=weaponKeys.map((k,i)=>{
+    const w=WEAPONS[k],ammo=w.ammo<0?'∞':p.ammo[k]||0;
+    return '<div class="slot '+(k===p.weapon?'selected':'')+'">'+(i+1)+'. '+w.name+'<small>彈量 '+ammo+'</small></div>';
+  }).join('');
+  el('weaponList').innerHTML=weapons;
+  drawMap();
+}
+function drawMap(){
+  const canvas=el('minimap'),ctx=canvas.getContext('2d');const w=canvas.width,h=canvas.height;
+  ctx.clearRect(0,0,w,h);ctx.fillStyle='#10293b';ctx.fillRect(0,0,w,h);
+  const sx=w/WIDTH,sz=h/DEPTH;
+  ctx.fillStyle='#526078';
+  for(const o of OBSTACLES){
+    if(o.type==='box')ctx.fillRect(o.x1*sx,o.z1*sz,(o.x2-o.x1)*sx,(o.z2-o.z1)*sz);
+    else{ctx.beginPath();ctx.arc(o.x*sx,o.z*sz,o.r*sx,0,2*Math.PI);ctx.fill();}
+  }
+  if(match.mode==='FLAG_HOLD'&&!match.flag.respawn){
+    ctx.fillStyle='#ffdc42';ctx.beginPath();ctx.arc(match.flag.x*sx,match.flag.z*sz,4,0,2*Math.PI);ctx.fill();
+  }
+  for(const t of match.tanks){
+    if(!t.alive)continue;
+    ctx.fillStyle=t.id==='player'?'#ffe46a':match.mode==='FFA'?'#ff7b70':t.team===0?'#ff8b7b':'#77b3fa';
+    ctx.beginPath();ctx.arc(t.x*sx,t.z*sz,t.id==='player'?4:2.6,0,2*Math.PI);ctx.fill();
+  }
+}
+function animate(now){
+  requestAnimationFrame(animate);
+  const dt=Math.min(.06,(now-last)/1000||0);last=now;
+  if(match&&!paused){
+    accum+=dt;
+    let steps=0;
+    while(accum>=1/60&&steps++<4){tick(1/60);accum-=1/60;if(paused)break;}
+  }
+  viewUpdate(dt);
+  renderer.render(scene,camera);
+}
+el('startButton').addEventListener('click',start);
+el('againButton').addEventListener('click',start);
+el('returnButton').addEventListener('click',goHome);
+window.addEventListener('keydown',e=>{
+  if(['Space','ArrowUp','ArrowDown','F1','F2'].includes(e.code))e.preventDefault();
+  if(e.repeat&&['KeyP','KeyE','F1','F2','Escape'].includes(e.code))return;
+  keyboard.add(e.code);
+  if(e.code==='KeyP'&&match&&!resultShown){paused=!paused;el('pauseBadge').hidden=!paused;fireHeld=false;}
+  if(e.code==='Escape'&&match&&!resultShown){paused=true;el('pauseBadge').hidden=false;fireHeld=false;}
+  if(!match||paused)return;
+  if(['Digit1','Digit2','Digit3'].includes(e.code)){
+    selectedWeapon=Number(e.code.slice(-1))-1;match.tanks[0].weapon=weaponKeys[selectedWeapon];
+  }
+  if(e.code==='F1')itemQueue=1;
+  if(e.code==='F2')itemQueue=2;
+  if(e.code==='KeyE')abilityQueue=true;
+  if(e.code==='Space')fireHeld=true;
+});
+window.addEventListener('keyup',e=>{keyboard.delete(e.code);if(e.code==='Space')fireHeld=false;});
+renderer.domElement.addEventListener('mousemove',e=>{mouseX=e.clientX;mouseY=e.clientY;});
+renderer.domElement.addEventListener('mousedown',e=>{if(e.button===0)fireHeld=true;});
+window.addEventListener('mouseup',e=>{if(e.button===0)fireHeld=false;});
+renderer.domElement.addEventListener('contextmenu',e=>e.preventDefault());
+window.addEventListener('blur',()=>{keyboard.clear();fireHeld=false;});
+window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+requestAnimationFrame(animate);

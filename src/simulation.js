@@ -30,7 +30,7 @@ const RED = 0, BLUE = 1;
 const SPAWN_RED=[[4,6],[4,13],[4,19],[4,26]];
 const SPAWN_BLUE=[[44,6],[44,13],[44,19],[44,26]];
 const FFA_SPAWNS=[[4,5],[44,5],[4,27],[44,27],[12,4],[36,28]];
-const FLAG_SPAWNS=[[24,4],[24,12.8],[24,28]];
+const FLAG_SPAWNS=[[24,12.8],[24,19.2],[19,16],[29,16]];
 const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
 const len=(x,z)=>Math.hypot(x,z)||1;
 const norm=(x,z)=>{const d=len(x,z);return [x/d,z/d]};
@@ -125,7 +125,7 @@ export class Game {
     if(w.splash>0){
       for(const t of this.tanks){
         const d=Math.hypot(t.x-b.x,t.z-b.z);
-        if(t.alive&&d<w.splash+RADIUS)this.hit(t,w.damage*clamp(1-d/(w.splash+RADIUS),.2,1),b.owner);
+        if(t.alive&&t.id!==b.directHit&&d<w.splash+RADIUS)this.hit(t,w.damage*clamp(1-d/(w.splash+RADIUS),.2,1),b.owner);
       }
     }
   }
@@ -174,7 +174,7 @@ export class Game {
     const dx=gx-t.x,dz=gz-t.z,d=Math.hypot(dx,dz);
     let vx=d>4?dx:dx*.1-dz*t.aiStrafe*.7;
     let vz=d>4?dz:dz*.1+dx*t.aiStrafe*.7;
-    if(blocked(t.x+vx/d*1.1,t.z+vz/d*1.1)){vx=-dz*t.aiStrafe;vz=dx*t.aiStrafe;}
+    if(blocked(t.x+vx/Math.max(1,d)*1.1,t.z+vz/Math.max(1,d)*1.1)){vx=-dz*t.aiStrafe;vz=dx*t.aiStrafe;}
     const [mx,mz]=norm(vx,vz);this.move(t,mx,mz,dt);
     const a=Math.atan2(-(target.x-t.x),-(target.z-t.z));
     t.aimYaw=a;
@@ -208,7 +208,7 @@ export class Game {
           b.alive=false;this.detonate(b);break;
         }
         const hit=this.tanks.find(t=>t.alive&&t.id!==b.owner&&(this.mode==='FFA'||t.team!==b.team)&&Math.hypot(b.x-t.x,b.z-t.z)<RADIUS+w.radius);
-        if(hit){this.hit(hit,w.damage*TANKS[this.tanks.find(t=>t.id===b.owner)?.kind||'X'].power*(this.tanks.find(t=>t.id===b.owner)?.abilityTime>0&&TANKS[this.tanks.find(t=>t.id===b.owner)?.kind||'X'].ability==='nitro'?1.2:1),b.owner);
+        if(hit){b.directHit=hit.id;this.hit(hit,w.damage*TANKS[this.tanks.find(t=>t.id===b.owner)?.kind||'X'].power*(this.tanks.find(t=>t.id===b.owner)?.abilityTime>0&&TANKS[this.tanks.find(t=>t.id===b.owner)?.kind||'X'].ability==='nitro'?1.2:1),b.owner);
           b.alive=false;this.detonate(b);break;}
       }
     }
