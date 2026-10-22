@@ -76,7 +76,7 @@ const keyboard = new Set();
 let fireHeld=false, itemQueue=0, abilityQueue=false, mouseX=innerWidth*.5,mouseY=innerHeight*.53, selectedWeapon=0;
 const raycaster=new THREE.Raycaster(), ground=new THREE.Plane(new THREE.Vector3(0,1,0),-.2), cursor=new THREE.Vector3();
 const cameraTarget=new THREE.Vector3(24,0,16);
-const weaponKeys=['hurricane','vulcan','chemical'];
+const weaponKeys=['hurricane','death_knight','vulcan','plasma','chemical','ion_missile','mine'];
 function tankModel(t){
   const group=new THREE.Group();
   const teamGlow = mat(t.team===0?0xf96b62:0x5f9eff,.35,.4);
@@ -106,7 +106,7 @@ function tankModel(t){
   group.traverse(c=>{if(c.isMesh)c.castShadow=true;});
   scene.add(group);return group;
 }
-const materialBullets={hurricane:mat(0xffbe61,.3,.1),vulcan:mat(0xe9efff,.2,.2),chemical:mat(0x5de8b6,.24,.12)};
+const materialBullets={hurricane:mat(0xffbe61,.3,.1),vulcan:mat(0xe9efff,.2,.2),chemical:mat(0x5de8b6,.24,.12),death_knight:mat(0xff5476),plasma:mat(0x82a9ff),ion_missile:mat(0x62fff5),mine:mat(0xc3bb4d)};
 function bulletModel(b){
   const radius=WEAPONS[b.kind].radius*1.5;
   const mesh=new THREE.Mesh(new THREE.SphereGeometry(radius,9,8),materialBullets[b.kind]);
@@ -369,13 +369,13 @@ el('hostServerButton').addEventListener('click',async()=>{
  }catch(e){onlineStatus('無法啟動：'+e.message);}
 });
 window.addEventListener('keydown',e=>{
-  if(['Space','ArrowUp','ArrowDown','F1','F2'].includes(e.code))e.preventDefault();
-  if(e.repeat&&['KeyP','KeyE','F1','F2','Escape'].includes(e.code))return;
+  if(['Space','ArrowUp','ArrowDown','F1','F2','F3','F4','F5','F6'].includes(e.code))e.preventDefault();
+  if(e.repeat&&['KeyP','KeyE','F1','F2','F3','F4','F5','F6','Escape'].includes(e.code))return;
   keyboard.add(e.code);
   if(e.code==='KeyP'&&match&&!resultShown){paused=!paused;el('pauseBadge').hidden=!paused;fireHeld=false;}
   if(e.code==='Escape'&&match&&!resultShown){paused=true;el('pauseBadge').hidden=false;fireHeld=false;}
   if(!match||paused)return;
-  if(['Digit1','Digit2','Digit3'].includes(e.code)){
+  if(/^Digit[1-7]$/.test(e.code)){
     selectedWeapon=Number(e.code.slice(-1))-1;match.tanks[0].weapon=weaponKeys[selectedWeapon];
   }
   if(e.code==='F1')itemQueue=1;
