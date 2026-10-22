@@ -25,6 +25,10 @@ export const WEAPONS = Object.freeze({
   hurricane: {name:'颶風飛彈',cooldown:.68,speed:32,damage:23,radius:.19,range:38,splash:0,ammo:-1},
   vulcan: {name:'火神機炮',cooldown:.13,speed:52,damage:7,radius:.11,range:27,splash:0,ammo:-1},
   chemical: {name:'化學爆破彈',cooldown:1.55,speed:23,damage:37,radius:.30,range:34,splash:3.5,ammo:18},
+  death_knight: {name:'死亡騎士',cooldown:.85,speed:40,damage:30,radius:.18,range:44,splash:0,ammo:-1},
+  plasma: {name:'電漿炮',cooldown:.19,speed:48,damage:10,radius:.14,range:28,splash:0,ammo:-1},
+  ion_missile: {name:'離子導彈',cooldown:2.5,speed:19,damage:42,radius:.25,range:37,splash:2.1,ammo:8,homing:true},
+  mine: {name:'接觸地雷',cooldown:1.3,speed:0,damage:45,radius:.25,range:0,splash:2.6,ammo:5,mine:true},
 });
 const RED = 0, BLUE = 1;
 const SPAWN_RED=[[4,6],[4,13],[4,19],[4,26]];
@@ -48,7 +52,7 @@ function tank(id,kind,team,x,z){
   const cfg=TANKS[kind];
   return {id,kind,team,x,z,yaw:0,aimYaw:0,hp:cfg.hp,shield:cfg.shield,maxHp:cfg.hp,maxShield:cfg.shield,
     alive:true,respawn:0,kills:0,deaths:0,assists:0,score:0,damage:0,cooldown:0,weapon:'hurricane',
-    ammo:{chemical:18}, repair:2,repairCooldown:0,boostCooldown:0,boostTime:0,abilityCooldown:0,abilityTime:0,
+    ammo:{chemical:18,ion_missile:8,mine:5}, repair:2,repairCooldown:0,boostCooldown:0,boostTime:0,abilityCooldown:0,abilityTime:0,
     lastDamage:0,aiDir:0,aiThink:0,aiStrafe:1,vx:0,vz:0};
 }
 export class Game {
@@ -127,8 +131,13 @@ export class Game {
     if(w.ammo>0)t.ammo[t.weapon]--;
     t.cooldown=w.cooldown;
     const dx=-Math.sin(t.aimYaw), dz=-Math.cos(t.aimYaw);
+    if(w.mine){
+      const owned=this.projectiles.filter(p=>p.alive&&p.kind==='mine'&&p.owner===t.id);
+      if(owned.length>=3)owned[0].alive=false;
+    }
     this.projectiles.push({id:++this.nextBullet,owner:t.id,team:t.team,kind:t.weapon,
-      x:t.x+dx*.95,z:t.z+dz*.95,vx:dx*w.speed,vz:dz*w.speed,travel:0,alive:true});
+      x:w.mine?t.x:t.x+dx*.95,z:w.mine?t.z:t.z+dz*.95,
+      vx:dx*w.speed,vz:dz*w.speed,travel:0,age:0,alive:true});
     this.events.push({type:'fire',x:t.x,z:t.z,owner:t.id,weapon:t.weapon});
     return true;
   }
@@ -167,7 +176,7 @@ export class Game {
     });
     if(!spots.length)return;
     [t.x,t.z]=spots[0];
-    t.hp=t.maxHp;t.shield=t.maxShield;t.alive=true;t.respawn=0;t.cooldown=.8;t.boostTime=0;t.abilityTime=0;
+    t.hp=t.maxHp;t.shield=t.maxShield;t.alive=true;t.respawn=0;t.cooldown=.8;t.boostTime=0;t.abilityTime=0;t.ammo={chemical:18,ion_missile:8,mine:5};
     this.events.push({type:'respawn',id:t.id,x:t.x,z:t.z});
   }
   useItem(t,index){
@@ -233,7 +242,29 @@ export class Game {
     this.resolveTankCollisions();
     for(const b of this.projectiles){
       if(!b.alive)continue;
-      const w=WEAPONS[b.kind], step=Math.ceil(w.speed*dt/.3),dx=b.vx*dt/step,dz=b.vz*dt/step;
+      const w=WEAPONS[b.kind];
+      b.age=(b.age||0)+dt;
+      if(w.mine){
+        if(b.age>15){b.alive=false;continue;}
+        if(b.age>.8&&this.tanks.some(t=>t.alive&&t.id!==b.owner&&(this.mode==='FFA'||t.team!==b.team)
+          &&Math.hypot(t.x-b.x,t.z-b.z)<1.25)){
+          b.alive=false;this.detonate(b);
+        }
+        continue;
+      }
+      if(w.homing){
+        const enemies=this.tanks.filter(t=>t.alive&&t.id!==b.owner&&(this.mode==='FFA'||t.team!==b.team));
+        enemies.sort((a,c)=>Math.hypot(a.x-b.x,a.z-b.z)-Math.hypot(c.x-b.x,c.z-b.z));
+        const target=enemies[0];
+        if(target&&Math.hypot(target.x-b.x,target.z-b.z)<24){
+          const wanted=Math.atan2(target.z-b.z,target.x-b.x);
+          const current=Math.atan2(b.vz,b.vx);
+          let difference=Math.atan2(Math.sin(wanted-current),Math.cos(wanted-current));
+          const next=current+clamp(difference,-2.4*dt,2.4*dt);
+          b.vx=Math.cos(next)*w.speed;b.vz=Math.sin(next)*w.speed;
+        }
+      }
+      const step=Math.max(1,Math.ceil(w.speed*dt/.3)),dx=b.vx*dt/step,dz=b.vz*dt/step;
       for(let k=0;k<step;k++){
         b.x+=dx;b.z+=dz;b.travel+=Math.hypot(dx,dz);
         if(blocked(b.x,b.z,w.radius)||b.travel>w.range){
