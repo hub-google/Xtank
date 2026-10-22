@@ -326,7 +326,8 @@ export class Game {
       const leaderboard=[...this.tanks].sort((a,b)=>b.score-a.score||a.deaths-b.deaths||b.damage-a.damage);
       return {title:leaderboard[0].id==='player'?'你贏了！':'對戰結束',rank:leaderboard.findIndex(t=>t.id==='player')+1,kills:p.kills,deaths:p.deaths,score:p.score,teamScore:null};
     }
-    const winner=this.scores[RED]===this.scores[BLUE]?'平手':this.scores[RED]>this.scores[BLUE]?'你的小隊獲勝！':'敵隊獲勝';
+    const myTeam=this.tanks[0]?.team??RED;
+    const winner=this.scores[RED]===this.scores[BLUE]?'平手':this.scores[myTeam]>this.scores[1-myTeam]?'你的小隊獲勝！':'敵隊獲勝';
     return {title:winner,rank:null,kills:p.kills,deaths:p.deaths,score:p.score,teamScore:[...this.scores]};
   }
 }
