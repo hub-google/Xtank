@@ -49,14 +49,14 @@ function tank(id,kind,team,x,z){
   return {id,kind,team,x,z,yaw:0,aimYaw:0,hp:cfg.hp,shield:cfg.shield,maxHp:cfg.hp,maxShield:cfg.shield,
     alive:true,respawn:0,kills:0,deaths:0,assists:0,score:0,damage:0,cooldown:0,weapon:'hurricane',
     ammo:{chemical:18}, repair:2,repairCooldown:0,boostCooldown:0,boostTime:0,abilityCooldown:0,abilityTime:0,
-    lastDamage:0,aiDir:0,aiThink:0,aiStrafe:1};
+    lastDamage:0,aiDir:0,aiThink:0,aiStrafe:1,vx:0,vz:0};
 }
 export class Game {
   constructor({mode='FFA',selectedTank='X',seed=42,size}={}){
     if(!['FFA','TDM','FLAG_HOLD'].includes(mode))throw Error('invalid mode');
     if(!TANKS[selectedTank])throw Error('invalid tank');
     this.mode=mode;this.rng=seeded(seed);this.time=mode==='FFA'?300:480;this.tick=0;this.ended=false;
-    this.events=[];this.projectiles=[];this.scores=[0,0];this.humanIds=null;this.nextBullet=0;this.target=mode==='FFA'?12:mode==='TDM'?30:5;
+    this.events=[];this.projectiles=[];this.scores=[0,0];this.humanIds=null;this.collisionTimes=new Map();this.nextBullet=0;this.target=mode==='FFA'?12:mode==='TDM'?30:5;
     const kinds=['X','D','M','R','H','A','O','S'];
     this.tanks=[tank('player',selectedTank,RED,4,13)];
     if(mode==='FFA'){
@@ -86,10 +86,38 @@ export class Game {
     if(t.abilityTime>0&&TANKS[t.kind].ability==='accel')speed*=1.3;
     // The flag speed reduction is a prototype rule, not original historical data.
     if(this.mode==='FLAG_HOLD'&&this.flag.holder===t.id)speed*=.9;
+    const beforeX=t.x,beforeZ=t.z;
     const nx=t.x+vx*speed*dt,nz=t.z+vz*speed*dt;
     if(!blocked(nx,t.z))t.x=nx;
     if(!blocked(t.x,nz))t.z=nz;
+    t.vx=(t.x-beforeX)/Math.max(dt,.0001);
+    t.vz=(t.z-beforeZ)/Math.max(dt,.0001);
     if(vx||vz)t.yaw=Math.atan2(-vx,-vz);
+  }
+  resolveTankCollisions(){
+    for(let i=0;i<this.tanks.length;i++)for(let j=i+1;j<this.tanks.length;j++){
+      const a=this.tanks[i],b=this.tanks[j];
+      if(!a.alive||!b.alive)continue;
+      const dx=b.x-a.x,dz=b.z-a.z,distance=Math.hypot(dx,dz);
+      if(distance>=RADIUS*2)continue;
+      const nx=distance>.0001?dx/distance:1,nz=distance>.0001?dz/distance:0;
+      const overlap=RADIUS*2-distance;
+      const ax=a.x-nx*overlap*.5,az=a.z-nz*overlap*.5;
+      const bx=b.x+nx*overlap*.5,bz=b.z+nz*overlap*.5;
+      if(!blocked(ax,az)){a.x=ax;a.z=az;}
+      if(!blocked(bx,bz)){b.x=bx;b.z=bz;}
+      const key=[a.id,b.id].sort().join('|');
+      if((this.collisionTimes.get(key)||-100)+.6>this.tick)continue;
+      const speed=Math.hypot(a.vx-b.vx,a.vz-b.vz);
+      if(speed<2)continue;
+      this.collisionTimes.set(key,this.tick);
+      this.events.push({type:'ram',x:(a.x+b.x)/2,z:(a.z+b.z)/2});
+      if(this.mode==='FFA'||a.team!==b.team){
+        const damageA=Math.min(35,(speed-2)*4*TANKS[b.kind].collision);
+        const damageB=Math.min(35,(speed-2)*4*TANKS[a.kind].collision);
+        this.hit(a,damageA,b.id);this.hit(b,damageB,a.id);
+      }
+    }
   }
   fire(t){
     if(!t.alive||t.cooldown>0||this.ended)return false;
@@ -202,6 +230,7 @@ export class Game {
         if(cmd.ability)this.useAbility(t);
       }else this.ai(t,dt);
     }
+    this.resolveTankCollisions();
     for(const b of this.projectiles){
       if(!b.alive)continue;
       const w=WEAPONS[b.kind], step=Math.ceil(w.speed*dt/.3),dx=b.vx*dt/step,dz=b.vz*dt/step;
