@@ -31,12 +31,12 @@ async function createHost({port=8787,host='0.0.0.0'}={}){
   people:members(r).map(p=>({id:p.id,name:p.name,tank:p.tank,connected:!!p.ws,host:p.id===r.hostId}))});}
  function start(r,p){
   if(p.id!==r.hostId||r.phase!=='lobby')return send(p.ws,{type:'ERROR',code:'NOT_HOST_OR_PHASE'});
-  if(r.people.size<2)return send(p.ws,{type:'ERROR',code:'NEED_TWO_PLAYERS'});
+  if(members(r).filter(v=>v.ws).length<2)return send(p.ws,{type:'ERROR',code:'NEED_TWO_PLAYERS'});
   const game=new Game({mode:r.mode,selectedTank:'X',size:8,seed:crypto.randomBytes(4).readUInt32LE()});
   game.humanIds=new Set();
   r.game=game;r.inputs=new Map();r.phase='live';r.roundId=id();r.events=[];
   const slots=r.mode==='FFA'?[0,1,2,3,4,5,6,7]:[0,4,1,5,2,6,3,7];
-  members(r).forEach((x,i)=>{
+  members(r).filter(x=>x.ws).forEach((x,i)=>{
    const t=game.tanks[slots[i]],cfg=TANKS[x.tank];
    x.slot=t.id;x.seq=-1;
    t.kind=x.tank;t.hp=t.maxHp=cfg.hp;t.shield=t.maxShield=cfg.shield;t.ammo={chemical:18,ion_missile:8,mine:5};
