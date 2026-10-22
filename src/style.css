@@ -18,3 +18,5 @@
 #roomDetails{font-size:17px;font-weight:800;color:#ffd973;margin:0 0 8px}
 #roomPeople{font-size:13px;color:#d5e2f1;line-height:1.5}
 #networkLobby button{margin-top:8px;font-size:14px}
+
+#weaponList{max-width:min(96vw,900px);flex-wrap:wrap}.weapons{width:min(96vw,900px);white-space:normal}.weapons .slot{min-width:92px}.weapons .slot small{white-space:nowrap}
