@@ -165,7 +165,7 @@ function handleEvents(events){
 function viewUpdate(dt){
   for(const s of sparks){s.life-=dt;s.mesh.material.opacity=Math.max(0,s.life/s.total);s.mesh.scale.setScalar(1+(1-s.life/s.total)*2);}
   for(let i=sparks.length-1;i>=0;i--){if(sparks[i].life<=0){scene.remove(sparks[i].mesh);sparks.splice(i,1);}}
-  if(!match)return;
+  if(!match||!match.tanks.length)return;
   for(const t of match.tanks){
     let m=models.get(t.id);
     if(!m){m=tankModel(t);models.set(t.id,m);}
@@ -198,12 +198,11 @@ function aimYaw(){
   const r=renderer.domElement.getBoundingClientRect();
   const x=((mouseX-r.left)/r.width)*2-1,y=-((mouseY-r.top)/r.height)*2+1;
   raycaster.setFromCamera(new THREE.Vector2(x,y),camera);
-  if(!raycaster.ray.intersectPlane(ground,cursor))return match?.tanks[0].aimYaw||0;
+  if(!raycaster.ray.intersectPlane(ground,cursor))return match?.tanks?.[0]?.aimYaw||0;
   const t=match?.tanks[0];if(!t)return 0;
   return Math.atan2(-(cursor.x-t.x),-(cursor.z-t.z));
 }
 function tick(dt){
-  const p=match.tanks[0];
   const dx=Number(keyboard.has('KeyD'))-Number(keyboard.has('KeyA'));
   const dz=Number(keyboard.has('KeyS'))-Number(keyboard.has('KeyW'));
   if(online){
@@ -232,7 +231,7 @@ function showResult(){
 }
 function timeFmt(t){const seconds=Math.ceil(t);return String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0');}
 function updateHUD(){
-  if(!match)return;
+  if(!match||!match.tanks.length)return;
   const p=match.tanks[0];
   el('hpText').textContent=Math.ceil(p.hp)+'/'+p.maxHp;
   el('shieldText').textContent=Math.ceil(p.shield)+'/'+p.maxShield;
@@ -317,7 +316,7 @@ function onlineMessage(msg){
  if(msg.type==='START'){
   networkSlot=msg.slotId;networkSeq=0;networkAccumulator=0;
   clearModels();
-  match=new Game({mode:el('modeSelect').value,selectedTank:el('tankSelect').value});
+  match=new Game({mode:msg.mode||el('modeSelect').value,selectedTank:el('tankSelect').value});
   // Rendering uses snapshots; never run a second combat simulation in this client.
   match.tanks=[];match.projectiles=[];
   match.mode=msg.mode||match.mode;
