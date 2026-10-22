@@ -11,7 +11,7 @@ const sanitizeInput=m=>{
  if(Math.abs(m.dx)>1||Math.abs(m.dz)>1||Math.abs(m.aimYaw)>Math.PI*2)return null;
  return {dx:m.dx,dz:m.dz,aimYaw:m.aimYaw,fire:m.fire===true,
   weapon:['hurricane','death_knight','vulcan','plasma','chemical','ion_missile','mine'].includes(m.weapon)?m.weapon:undefined,
-  item:[1,2].includes(m.item)?m.item:0,ability:m.ability===true};
+  item:[1,2,3,4,5,6].includes(m.item)?m.item:0,ability:m.ability===true};
 };
 async function createHost({port=8787,host='0.0.0.0'}={}){
  let engine;
@@ -124,7 +124,7 @@ async function createHost({port=8787,host='0.0.0.0'}={}){
      broadcast(r,{type:'SNAPSHOT',mode:g.mode,roundId:r.roundId,time:g.time,tick:g.tick,
       ended:g.ended,score:[...g.scores],target:g.target,flag:{...g.flag},
       tanks:g.tanks.map(x=>({...x,ammo:{...x.ammo}})),
-      projectiles:g.projectiles.map(x=>({...x})),events:r.events.splice(0)});
+      projectiles:g.projectiles.map(x=>({...x})),smokes:g.smokes.map(x=>({...x})),repairFields:g.repairFields.map(x=>({...x})),events:r.events.splice(0)});
      if(r.phase==='finished')lobby(r);
     }
    }
