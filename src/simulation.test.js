@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Game,TANKS,WEAPONS,isWalkable} from './simulation.js';
 test('eight distinct selectable tanks and weapon definitions',()=>{
- assert.equal(Object.keys(TANKS).length,8);assert.equal(Object.keys(WEAPONS).length,3);
+ assert.equal(Object.keys(TANKS).length,8);assert.equal(Object.keys(WEAPONS).length,7);
  for(const kind of Object.keys(TANKS)) assert.equal(new Game({selectedTank:kind}).tanks[0].kind,kind);
 });
 test('tanks cannot move through giant desk obstacles or off map',()=>{
@@ -62,4 +62,30 @@ test('eight-person FFA allocates eight unique player slots',()=>{
  const g=new Game({mode:'FFA',size:8});
  assert.equal(g.tanks.length,8);
  assert.equal(new Set(g.tanks.map(t=>t.id)).size,8);
+});
+
+test('mine requires arming, damages nearby enemy and spends limited ammo',()=>{
+ const g=new Game({mode:'FFA'}),p=g.tanks[0],enemy=g.tanks[1];
+ p.weapon='mine';p.x=17;p.z=15;enemy.x=17;enemy.z=18;
+ assert.equal(g.fire(p),true);assert.equal(p.ammo.mine,4);
+ const mine=g.projectiles[0];assert.equal(mine.kind,'mine');
+ g.humanIds=new Set(g.tanks.map(t=>t.id));
+ for(let i=0;i<20;i++)g.update(.05,{},{}); // arm the mine
+ enemy.x=17;enemy.z=15.8;
+ const oldShield=enemy.shield;
+ g.update(.05,{},{});
+ assert.ok(enemy.shield<oldShield||enemy.hp<enemy.maxHp,'armed mine should hit enemy');
+ assert.ok(!g.projectiles.some(b=>b.id===mine.id),'detonated mine should disappear');
+});
+test('six numbered consumables apply clamped recovery or create timed zones',()=>{
+ const g=new Game(),p=g.tanks[0];
+ p.shield=10;p.hp=50;
+ assert.equal(g.useItem(p,3),true);assert.equal(p.shield,45);
+ assert.equal(g.useItem(p,3),false);
+ assert.equal(g.useItem(p,4),true);assert.equal(p.radarTime,5);
+ assert.equal(g.useItem(p,5),true);assert.equal(g.smokes.length,1);
+ assert.equal(g.useItem(p,6),true);assert.equal(g.repairFields.length,1);
+ const before=p.hp;
+ g.update(.05,{},{});
+ assert.ok(p.hp>before,'team healing field should recover HP');
 });
