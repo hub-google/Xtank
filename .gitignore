@@ -23,3 +23,6 @@ dist/
 release/
 *.exe
 npm-debug.log*
+
+# Compiled server copy
+server/engine.cjs
