@@ -9,10 +9,11 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "test": "node --test",
-    "build": "vite build",
+    "build": "vite build && npm run build:server",
     "desktop": "npm run build && electron .",
     "dist:win": "electron-builder --win portable --x64",
-    "server": "node server/main.cjs"
+    "server": "node server/main.cjs",
+    "build:server": "node scripts/build-server.cjs"
   },
   "dependencies": {
     "three": "^0.180.0",
@@ -21,7 +22,8 @@
   "devDependencies": {
     "vite": "^7.1.0",
     "electron": "^38.0.0",
-    "electron-builder": "^26.0.0"
+    "electron-builder": "^26.0.0",
+    "esbuild": "^0.25.10"
   },
   "build": {
     "appId": "io.github.hubgoogle.xtank.revival",
@@ -33,7 +35,6 @@
       "dist/**/*",
       "electron/**/*",
       "server/**/*",
-      "src/simulation.js",
       "package.json"
     ],
     "asar": true,
