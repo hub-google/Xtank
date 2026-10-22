@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import './style.css';
+import {OnlineConnection} from './online.js';
 import {Game, TANKS, WEAPONS, OBSTACLES, WIDTH, DEPTH} from './simulation.js';
 
 const el = id => document.getElementById(id);
@@ -70,6 +71,7 @@ for(let i=0;i<16;i++){
 const sparks=[];
 let models=new Map(), bulletModels=new Map(), flagGroup=null, match=null;
 let paused=true,resultShown=false,last=performance.now(),accum=0;
+let online=null,networkSlot=null,networkSeq=0,networkAccumulator=0,networkRoomId=null;
 const keyboard = new Set();
 let fireHeld=false, itemQueue=0, abilityQueue=false, mouseX=innerWidth*.5,mouseY=innerHeight*.53, selectedWeapon=0;
 const raycaster=new THREE.Raycaster(), ground=new THREE.Plane(new THREE.Vector3(0,1,0),-.2), cursor=new THREE.Vector3();
@@ -127,6 +129,7 @@ function clearModels(){
   models=new Map();bulletModels=new Map();sparks.length=0;
 }
 function start(){
+  online?.close();online=null;networkSlot=null;
   try {
     clearModels();
     match=new Game({mode:el('modeSelect').value,selectedTank:el('tankSelect').value,seed:Date.now()>>>0});
@@ -138,6 +141,8 @@ function start(){
   } catch(e){console.error(e);el('matchInfo').textContent='啟動失敗：'+e.message;}
 }
 function goHome(){
+  online?.close();online=null;networkSlot=null;networkRoomId=null;
+  el('networkLobby').hidden=true;
   paused=true;match=null;clearModels();el('startMenu').hidden=false;el('resultMenu').hidden=true;
   el('hud').hidden=true;el('pauseBadge').hidden=true;el('matchInfo').textContent='未開始';
 }
@@ -201,18 +206,29 @@ function tick(dt){
   const p=match.tanks[0];
   const dx=Number(keyboard.has('KeyD'))-Number(keyboard.has('KeyA'));
   const dz=Number(keyboard.has('KeyS'))-Number(keyboard.has('KeyW'));
-  const events=match.update(dt,{dx,dz,aimYaw:aimYaw(),fire:fireHeld,item:itemQueue,ability:abilityQueue});
-  itemQueue=0;abilityQueue=false;
-  handleEvents(events);
-  if(match.ended&&!resultShown){
-    resultShown=true;paused=true;
-    const s=match.summary();
-    el('resultTitle').textContent=s.title;
-    el('resultStats').textContent='你的擊殺 '+s.kills+'  /  被擊毀 '+s.deaths+
-      (s.rank?'  /  名次 第 '+s.rank+' 名':'')+
-      (s.teamScore?'  /  紅隊 '+s.teamScore[0]+' : '+s.teamScore[1]+' 藍隊':'');
-    el('resultMenu').hidden=false;
+  if(online){
+    networkAccumulator+=dt;
+    if(networkAccumulator>=.05){
+      networkAccumulator=0;
+      online.send({type:'INPUT',seq:++networkSeq,dx,dz,aimYaw:aimYaw(),fire:fireHeld,
+        weapon:weaponKeys[selectedWeapon],item:itemQueue,ability:abilityQueue});
+      itemQueue=0;abilityQueue=false;
+    }
+  }else{
+    const events=match.update(dt,{dx,dz,aimYaw:aimYaw(),fire:fireHeld,item:itemQueue,ability:abilityQueue});
+    itemQueue=0;abilityQueue=false;handleEvents(events);
+    if(match.ended)showResult();
   }
+}
+function showResult(){
+  if(!match||resultShown)return;
+  resultShown=true;paused=true;
+  const info=match.summary();
+  el('resultTitle').textContent=info.title;
+  el('resultStats').textContent='你的擊殺 '+info.kills+'  /  被擊毀 '+info.deaths+
+    (info.rank?'  /  名次 第 '+info.rank+' 名':'')+
+    (info.teamScore?'  /  紅隊 '+info.teamScore[0]+' : '+info.teamScore[1]+' 藍隊':'');
+  el('resultMenu').hidden=false;
 }
 function timeFmt(t){const seconds=Math.ceil(t);return String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0');}
 function updateHUD(){
@@ -271,8 +287,88 @@ function animate(now){
   renderer.render(scene,camera);
 }
 el('startButton').addEventListener('click',start);
-el('againButton').addEventListener('click',start);
+el('againButton').addEventListener('click',()=>{
+ if(!online)return start();
+ online.send({type:'BACK_TO_LOBBY'});
+ match=null;paused=true;resultShown=false;clearModels();
+ el('resultMenu').hidden=true;el('startMenu').hidden=false;el('hud').hidden=true;
+ el('networkLobby').hidden=false;
+});
 el('returnButton').addEventListener('click',goHome);
+
+function onlineStatus(message){el('networkStatus').textContent=message;}
+function onlineMessage(msg){
+ if(msg.type==='ERROR'){onlineStatus('伺服器拒絕：'+msg.code);return;}
+ if(msg.type==='JOINED'){
+  networkRoomId=msg.roomId;onlineStatus('已加入房間 '+msg.roomId);
+  el('roomCode').value=msg.roomId;el('networkLobby').hidden=false;return;
+ }
+ if(msg.type==='LOBBY'){
+  el('networkLobby').hidden=false;
+  el('roomDetails').textContent='房間 '+msg.roomId+' · '+msg.mode+' · '+msg.phase;
+  el('roomPeople').textContent=msg.people.map(p=>(p.host?'房主 ':'')+p.name+(p.connected?' ●':' ○')).join('、');
+  el('startNetworkButton').hidden=msg.hostId!==online?.playerId||msg.phase!=='lobby';
+  if(msg.phase==='lobby'&&match&&resultShown){
+    match=null;paused=true;resultShown=false;
+    el('resultMenu').hidden=true;el('startMenu').hidden=false;el('hud').hidden=true;
+  }
+  return;
+ }
+ if(msg.type==='START'){
+  networkSlot=msg.slotId;networkSeq=0;networkAccumulator=0;
+  clearModels();
+  match=new Game({mode:el('modeSelect').value,selectedTank:el('tankSelect').value});
+  // Rendering uses snapshots; never run a second combat simulation in this client.
+  match.tanks=[];match.projectiles=[];
+  match.mode=msg.mode||match.mode;
+  paused=false;resultShown=false;accum=0;
+  keyboard.clear();fireHeld=false;itemQueue=0;abilityQueue=false;selectedWeapon=0;
+  el('startMenu').hidden=true;el('resultMenu').hidden=true;el('hud').hidden=false;
+  el('pauseBadge').hidden=true;
+  onlineStatus('已進入真正的連線房間 '+msg.roomId);
+  return;
+ }
+ if(msg.type==='SNAPSHOT'&&online&&networkSlot&&match){
+  const alias=id=>id===networkSlot?'player':id==='player'?'remote-host':id;
+  match.mode=msg.mode;match.time=msg.time;match.tick=msg.tick;
+  match.scores=msg.score;match.target=msg.target;match.ended=msg.ended;
+  match.flag={...msg.flag,holder:msg.flag.holder?alias(msg.flag.holder):null};
+  const tanks=msg.tanks.map(t=>({...t,id:alias(t.id)}));
+  tanks.sort((a,b)=>Number(b.id==='player')-Number(a.id==='player'));
+  match.tanks=tanks;
+  match.projectiles=msg.projectiles.map(b=>({...b,owner:alias(b.owner)}));
+  handleEvents((msg.events||[]).map(e=>({...e,id:e.id?alias(e.id):e.id,
+    owner:e.owner?alias(e.owner):e.owner})));
+  if(match.ended)showResult();
+ }
+}
+function establishNetwork(action){
+ online?.close();match=null;paused=true;networkSlot=null;
+ online=new OnlineConnection(onlineMessage,onlineStatus);
+ try{
+  online.open(el('serverAddress').value.trim(),{
+    type:action,name:el('playerName').value.trim()||'Player',
+    tank:el('tankSelect').value,mode:el('modeSelect').value,
+    roomId:el('roomCode').value.trim().toUpperCase()
+  });
+ }catch(e){onlineStatus('設定錯誤：'+e.message);online=null;}
+}
+el('makeRoomButton').addEventListener('click',()=>establishNetwork('CREATE'));
+el('joinRoomButton').addEventListener('click',()=>establishNetwork('JOIN'));
+el('startNetworkButton').addEventListener('click',()=>online?.send({type:'START'}));
+el('leaveNetworkButton').addEventListener('click',()=>{
+ online?.close();online=null;networkSlot=null;el('networkLobby').hidden=true;
+ onlineStatus('已離開多人房間');
+});
+el('hostServerButton').addEventListener('click',async()=>{
+ if(!window.xtankHost){onlineStatus('瀏覽器不能開伺服器。請使用 Windows EXE，或在主機執行 npm run server。');return;}
+ try{
+  onlineStatus('正在啟動 LAN 伺服器…');
+  const details=await window.xtankHost.start();
+  el('serverAddress').value='ws://127.0.0.1:'+details.port;
+  onlineStatus('LAN 伺服器已啟動！\n將下列網址告訴同一網路的朋友：\n'+details.urls.join('\n'));
+ }catch(e){onlineStatus('無法啟動：'+e.message);}
+});
 window.addEventListener('keydown',e=>{
   if(['Space','ArrowUp','ArrowDown','F1','F2'].includes(e.code))e.preventDefault();
   if(e.repeat&&['KeyP','KeyE','F1','F2','Escape'].includes(e.code))return;
