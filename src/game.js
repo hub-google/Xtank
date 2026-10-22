@@ -69,7 +69,7 @@ for(let i=0;i<16;i++){
   led.position.set(x,.5,z);scene.add(led);
 }
 const sparks=[];
-let models=new Map(), bulletModels=new Map(), flagGroup=null, match=null;
+let models=new Map(), bulletModels=new Map(), zoneModels=new Map(), flagGroup=null, match=null;
 let paused=true,resultShown=false,last=performance.now(),accum=0;
 let online=null,networkSlot=null,networkSeq=0,networkAccumulator=0,networkRoomId=null;
 const keyboard = new Set();
@@ -125,8 +125,9 @@ makeFlag();
 function clearModels(){
   for(const m of models.values())scene.remove(m);
   for(const m of bulletModels.values())scene.remove(m);
+  for(const m of zoneModels.values())scene.remove(m);
   for(const p of sparks)scene.remove(p.mesh);
-  models=new Map();bulletModels=new Map();sparks.length=0;
+  models=new Map();bulletModels=new Map();zoneModels=new Map();sparks.length=0;
 }
 function start(){
   online?.close();online=null;networkSlot=null;
@@ -182,6 +183,25 @@ function viewUpdate(dt){
     let mesh=bulletModels.get(b.id);
     if(!mesh){mesh=bulletModel(b);bulletModels.set(b.id,mesh);}
     mesh.position.set(b.x,.84,b.z);
+  }
+  const zones=[...(match.smokes||[]).map(z=>({...z,zone:'smoke'})),
+    ...(match.repairFields||[]).map(z=>({...z,zone:'repair'}))];
+  const liveZones=new Set(zones.map(z=>z.zone+'-'+z.id));
+  for(const [key,obj] of zoneModels)if(!liveZones.has(key)){scene.remove(obj);zoneModels.delete(key);}
+  for(const zone of zones){
+    const key=zone.zone+'-'+zone.id;
+    let mesh=zoneModels.get(key);
+    if(!mesh){
+      const material=new THREE.MeshBasicMaterial({color:zone.zone==='smoke'?0xbec6d0:0x70e7a9,
+        transparent:true,opacity:zone.zone==='smoke'?.13:.38,depthWrite:false,side:THREE.DoubleSide});
+      mesh=zone.zone==='smoke'
+       ?new THREE.Mesh(new THREE.CylinderGeometry(zone.radius,zone.radius,1.8,24),material)
+       :new THREE.Mesh(new THREE.RingGeometry(zone.radius-.14,zone.radius,40),material);
+      if(zone.zone==='repair')mesh.rotation.x=-Math.PI/2;
+      scene.add(mesh);zoneModels.set(key,mesh);
+    }
+    mesh.position.set(zone.x,zone.zone==='smoke'?.85:.10,zone.z);
+    mesh.material.opacity=(zone.zone==='smoke'?.13:.38)*Math.min(1,zone.time);
   }
   flagGroup.visible=match.mode==='FLAG_HOLD'&&!match.flag.respawn;
   if(flagGroup.visible){
@@ -246,7 +266,7 @@ function updateHUD(){
   if(!p.alive)el('statusText').textContent='重生倒數 '+Math.ceil(p.respawn)+' 秒';
   else if(match.mode==='FLAG_HOLD'&&match.flag.holder===p.id)el('statusText').textContent='持旗中 '+match.flag.holdTime.toFixed(1)+'/15 秒';
   else if(p.abilityTime>0)el('statusText').textContent='技能 '+TANKS[p.kind].ability+' '+p.abilityTime.toFixed(1)+'s';
-  else el('statusText').textContent='F1 修理('+p.repair+') / F2 加速 '+(p.boostCooldown>0?'冷卻 '+Math.ceil(p.boostCooldown)+'s':'就緒')+' / E 技能';
+  else el('statusText').textContent='F1 修理('+p.repair+')　F2 加速　F3 護盾('+p.shieldCells+')　F4 雷達　F5 煙霧　F6 團隊修復　E 技能';
   const weapons=weaponKeys.map((k,i)=>{
     const w=WEAPONS[k],ammo=w.ammo<0?'∞':p.ammo[k]||0;
     return '<div class="slot '+(k===p.weapon?'selected':'')+'">'+(i+1)+'. '+w.name+'<small>彈量 '+ammo+'</small></div>';
@@ -266,8 +286,11 @@ function drawMap(){
   if(match.mode==='FLAG_HOLD'&&!match.flag.respawn){
     ctx.fillStyle='#ffdc42';ctx.beginPath();ctx.arc(match.flag.x*sx,match.flag.z*sz,4,0,2*Math.PI);ctx.fill();
   }
+  const own=match.tanks[0];
   for(const t of match.tanks){
     if(!t.alive)continue;
+    const enemy=t.id!=='player'&&(match.mode==='FFA'||t.team!==own.team);
+    if(enemy&&Math.hypot(t.x-own.x,t.z-own.z)>15&&own.radarTime<=0&&!(own.kind==='A'&&own.abilityTime>0))continue;
     ctx.fillStyle=t.id==='player'?'#ffe46a':match.mode==='FFA'?'#ff7b70':t.team===0?'#ff8b7b':'#77b3fa';
     ctx.beginPath();ctx.arc(t.x*sx,t.z*sz,t.id==='player'?4:2.6,0,2*Math.PI);ctx.fill();
   }
@@ -336,6 +359,7 @@ function onlineMessage(msg){
   tanks.sort((a,b)=>Number(b.id==='player')-Number(a.id==='player'));
   match.tanks=tanks;
   match.projectiles=msg.projectiles.map(b=>({...b,owner:alias(b.owner)}));
+  match.smokes=msg.smokes||[];match.repairFields=msg.repairFields||[];
   handleEvents((msg.events||[]).map(e=>({...e,id:e.id?alias(e.id):e.id,
     owner:e.owner?alias(e.owner):e.owner})));
   if(match.ended)showResult();
@@ -380,6 +404,10 @@ window.addEventListener('keydown',e=>{
   }
   if(e.code==='F1')itemQueue=1;
   if(e.code==='F2')itemQueue=2;
+  if(e.code==='F3')itemQueue=3;
+  if(e.code==='F4')itemQueue=4;
+  if(e.code==='F5')itemQueue=5;
+  if(e.code==='F6')itemQueue=6;
   if(e.code==='KeyE')abilityQueue=true;
   if(e.code==='Space')fireHeld=true;
 });
