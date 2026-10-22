@@ -16,3 +16,10 @@ $RECYCLE.BIN/
 *.swp
 *.swo
 *~
+
+# Node and built executable files
+node_modules/
+dist/
+release/
+*.exe
+npm-debug.log*

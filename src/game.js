@@ -257,6 +257,7 @@ function drawMap(){
     ctx.beginPath();ctx.arc(t.x*sx,t.z*sz,t.id==='player'?4:2.6,0,2*Math.PI);ctx.fill();
   }
 }
+let hudAccumulator=0;
 function animate(now){
   requestAnimationFrame(animate);
   const dt=Math.min(.06,(now-last)/1000||0);last=now;
@@ -266,6 +267,7 @@ function animate(now){
     while(accum>=1/60&&steps++<4){tick(1/60);accum-=1/60;if(paused)break;}
   }
   viewUpdate(dt);
+  if(match&&!el('hud').hidden){hudAccumulator+=dt;if(hudAccumulator>=.1){updateHUD();hudAccumulator=0;}}
   renderer.render(scene,camera);
 }
 el('startButton').addEventListener('click',start);
