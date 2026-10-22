@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import './style.css';
 import {OnlineConnection} from './online.js';
-import {Game, TANKS, WEAPONS, OBSTACLES, WIDTH, DEPTH} from './simulation.js';
+import {Game, TANKS, WEAPONS, OBSTACLES, MAPS, WIDTH, DEPTH} from './simulation.js';
 
 const el = id => document.getElementById(id);
 const viewport = el('viewport');
@@ -42,26 +42,62 @@ const grid = new THREE.GridHelper(48,24,0x7b6651,0x937559);
 grid.position.set(24,-.064,16);grid.material.transparent=true;grid.material.opacity=.19;scene.add(grid);
 box(49,1.6,.65,steel,24,.50,-.2); box(49,1.6,.65,steel,24,.50,32.2);
 box(.65,1.6,33,steel,-.2,.50,16); box(.65,1.6,33,steel,48.2,.50,16);
-for(const o of OBSTACLES){
-  if(o.type==='box'){
-    const material=o.name.includes('notebook')?bluePaper:pencilMat;
-    const mesh=box(o.x2-o.x1,o.height,o.z2-o.z1,material,(o.x1+o.x2)/2,o.height/2,(o.z1+o.z2)/2);
-    if(o.name.includes('notebook')){
-      box(o.x2-o.x1+.2,.08,o.z2-o.z1+.2,paper,(o.x1+o.x2)/2,o.height+.04,(o.z1+o.z2)/2);
-      for(let i=0;i<5;i++){const strip=box(o.x2-o.x1-1,.018,.015,mat(0xabbdd5), (o.x1+o.x2)/2,o.height+.089,o.z1+.8+i*.7);strip.castShadow=false;}
-    }else{cylinder(.4,o.height+1,mat(0x342c2b),(o.x1+o.x2)/2,o.height/2,(o.z1+o.z2)/2);}
-    void mesh;
-  }else if(o.name==='lamp'){
-    cylinder(o.r,.55,steel,o.x,.28,o.z);
-    cylinder(.30,5,steel,o.x,2.7,o.z);
-    const shade=cylinder(2.0,.8,mat(0xf7deaa),o.x,5.2,o.z,scene,1.2);
-    shade.rotation.z=.16;
-    const bulb=new THREE.PointLight(0xffd8a7,24,21,2);bulb.position.set(o.x,4.7,o.z);scene.add(bulb);
-  }else {
-    cylinder(o.r,o.height,mat(0xdadadd,.36),o.x,o.height/2,o.z);
-    cylinder(o.r*.82,.08,mat(0x775a44),o.x,o.height+.045,o.z);
+const levelGroup=new THREE.Group();scene.add(levelGroup);
+const squareMaterials=[mat(0xe2d6bb),mat(0x576978)];
+const circuitFloor=mat(0x214a4b,.5,.2);
+function buildLevel(mapId,obstacles){
+  levelGroup.traverse(o=>{if(o.isMesh)o.geometry?.dispose();});
+  levelGroup.clear();
+  desk.material=mapId==='chess'?squareMaterials[0]:mapId==='circuit'?circuitFloor:wood;
+  grid.visible=mapId==='desk';
+  if(mapId==='chess'){
+    for(let col=0;col<8;col++)for(let row=0;row<8;row++){
+      const tile=box(5.95,.08,3.95,squareMaterials[(col+row)%2],3+col*6,.01,2+row*4,levelGroup);
+      tile.castShadow=false;
+    }
+  } else if(mapId==='circuit'){
+    const trace=mat(0x44b9a4,.45,.3);
+    for(let k=0;k<10;k++){
+      box(46,.035,.045,trace,24,.015,1.4+k*3.2,levelGroup).castShadow=false;
+      box(.045,.035,30,trace,2.4+k*4.8,.016,16,levelGroup).castShadow=false;
+    }
+  }
+  for(const o of obstacles){
+    if(o.type==='box'){
+      let material;
+      if(mapId==='chess')material=mat(0x35455e,.4);
+      else if(mapId==='circuit')material=mat(0x24445c,.4,.35);
+      else material=o.name.includes('notebook')?bluePaper:pencilMat;
+      box(o.x2-o.x1,o.height,o.z2-o.z1,material,(o.x1+o.x2)/2,o.height/2,(o.z1+o.z2)/2,levelGroup);
+      if(o.name.includes('notebook')){
+        box(o.x2-o.x1+.2,.08,o.z2-o.z1+.2,paper,(o.x1+o.x2)/2,o.height+.04,(o.z1+o.z2)/2,levelGroup);
+        for(let i=0;i<5;i++){
+          const strip=box(o.x2-o.x1-1,.018,.015,mat(0xabbdd5),(o.x1+o.x2)/2,o.height+.089,o.z1+.8+i*.7,levelGroup);
+          strip.castShadow=false;
+        }
+      }else if(mapId==='desk'){
+        cylinder(.4,o.height+1,mat(0x342c2b),(o.x1+o.x2)/2,o.height/2,(o.z1+o.z2)/2,levelGroup);
+      } else if(mapId==='circuit'){
+        for(let i=-2;i<=2;i++){
+          box(.12,.25,.38,steel,(o.x1+o.x2)/2+(i*.8),.14,o.z1-.22,levelGroup);
+          box(.12,.25,.38,steel,(o.x1+o.x2)/2+(i*.8),.14,o.z2+.22,levelGroup);
+        }
+      }
+    } else if(o.name==='lamp'){
+      cylinder(o.r,.55,steel,o.x,.28,o.z,levelGroup);
+      cylinder(.30,5,steel,o.x,2.7,o.z,levelGroup);
+      const shade=cylinder(2.0,.8,mat(0xf7deaa),o.x,5.2,o.z,levelGroup,1.2);
+      shade.rotation.z=.16;
+      const bulb=new THREE.PointLight(0xffd8a7,24,21,2);bulb.position.set(o.x,4.7,o.z);levelGroup.add(bulb);
+    } else {
+      const chess=o.name.includes('white')||o.name.includes('pawn');
+      cylinder(o.r,o.height,mapId==='chess'?mat(chess?0xe0cfb6:0x303748):mat(mapId==='circuit'?0x6cbeb3:0xdadadd,.36),
+        o.x,o.height/2,o.z,levelGroup);
+      cylinder(o.r*.82,.08,mat(mapId==='chess'?0xbaa982:0x775a44),o.x,o.height+.045,o.z,levelGroup);
+    }
   }
 }
+buildLevel('desk',OBSTACLES);
 const roomFloor=box(130,1,130,mat(0x182d3b),24,-5,16);roomFloor.receiveShadow=false;
 for(let i=0;i<16;i++){
   const x=(i%8)*7+3,z=(i<8)?-2:34;
@@ -133,7 +169,8 @@ function start(){
   online?.close();online=null;networkSlot=null;
   try {
     clearModels();
-    match=new Game({mode:el('modeSelect').value,selectedTank:el('tankSelect').value,seed:Date.now()>>>0});
+    match=new Game({mode:el('modeSelect').value,selectedTank:el('tankSelect').value,mapId:el('mapSelect').value,seed:Date.now()>>>0});
+    buildLevel(match.mapId,match.obstacles);
     for(const t of match.tanks)models.set(t.id,tankModel(t));
     paused=false;resultShown=false;accum=0;keyboard.clear();fireHeld=false;itemQueue=0;abilityQueue=false;selectedWeapon=0;
     el('startMenu').hidden=true;el('resultMenu').hidden=true;el('hud').hidden=false;el('pauseBadge').hidden=true;
@@ -258,7 +295,7 @@ function updateHUD(){
   el('hpBar').style.width=(100*p.hp/p.maxHp)+'%';
   el('shieldBar').style.width=(100*p.shield/p.maxShield)+'%';
   const mode=match.mode==='FFA'?'個人死鬥':match.mode==='TDM'?'團隊戰':'持旗戰';
-  el('matchInfo').textContent=mode+' · 書桌戰場 · '+match.tanks.length+' 台坦克';
+  el('matchInfo').textContent=mode+' · '+MAPS[match.mapId].name+' · '+match.tanks.length+' 台坦克';
   const ffa=[...match.tanks].sort((a,b)=>b.score-a.score);
   const score=match.mode==='FFA'?'你的擊殺 '+p.kills+' / '+match.target+'　|　榜首 '+ffa[0].score:
     '紅 '+match.scores[0]+' : '+match.scores[1]+' 藍　|　目標 '+match.target;
@@ -279,7 +316,7 @@ function drawMap(){
   ctx.clearRect(0,0,w,h);ctx.fillStyle='#10293b';ctx.fillRect(0,0,w,h);
   const sx=w/WIDTH,sz=h/DEPTH;
   ctx.fillStyle='#526078';
-  for(const o of OBSTACLES){
+  for(const o of match.obstacles){
     if(o.type==='box')ctx.fillRect(o.x1*sx,o.z1*sz,(o.x2-o.x1)*sx,(o.z2-o.z1)*sz);
     else{ctx.beginPath();ctx.arc(o.x*sx,o.z*sz,o.r*sx,0,2*Math.PI);ctx.fill();}
   }
@@ -327,7 +364,7 @@ function onlineMessage(msg){
  }
  if(msg.type==='LOBBY'){
   el('networkLobby').hidden=false;
-  el('roomDetails').textContent='房間 '+msg.roomId+' · '+msg.mode+' · '+msg.phase;
+  el('roomDetails').textContent='房間 '+msg.roomId+' · '+msg.mode+' · '+(MAPS[msg.mapId]?.name||'地圖')+' · '+msg.phase;
   el('roomPeople').textContent=msg.people.map(p=>(p.host?'房主 ':'')+p.name+(p.connected?' ●':' ○')).join('、');
   el('startNetworkButton').hidden=msg.hostId!==online?.playerId||msg.phase!=='lobby';
   if(msg.phase==='lobby'&&match&&resultShown){
@@ -339,7 +376,8 @@ function onlineMessage(msg){
  if(msg.type==='START'){
   networkSlot=msg.slotId;networkSeq=0;networkAccumulator=0;
   clearModels();
-  match=new Game({mode:msg.mode||el('modeSelect').value,selectedTank:el('tankSelect').value});
+  match=new Game({mode:msg.mode||el('modeSelect').value,selectedTank:el('tankSelect').value,mapId:msg.mapId||'desk'});
+  buildLevel(match.mapId,match.obstacles);
   // Rendering uses snapshots; never run a second combat simulation in this client.
   match.tanks=[];match.projectiles=[];
   match.mode=msg.mode||match.mode;
@@ -371,7 +409,7 @@ function establishNetwork(action){
  try{
   online.open(el('serverAddress').value.trim(),{
     type:action,name:el('playerName').value.trim()||'Player',
-    tank:el('tankSelect').value,mode:el('modeSelect').value,
+    tank:el('tankSelect').value,mode:el('modeSelect').value,mapId:el('mapSelect').value,
     roomId:el('roomCode').value.trim().toUpperCase()
   });
  }catch(e){onlineStatus('設定錯誤：'+e.message);online=null;}
