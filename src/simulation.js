@@ -52,16 +52,17 @@ function tank(id,kind,team,x,z){
     lastDamage:0,aiDir:0,aiThink:0,aiStrafe:1};
 }
 export class Game {
-  constructor({mode='FFA',selectedTank='X',seed=42}={}){
+  constructor({mode='FFA',selectedTank='X',seed=42,size}={}){
     if(!['FFA','TDM','FLAG_HOLD'].includes(mode))throw Error('invalid mode');
     if(!TANKS[selectedTank])throw Error('invalid tank');
     this.mode=mode;this.rng=seeded(seed);this.time=mode==='FFA'?300:480;this.tick=0;this.ended=false;
-    this.events=[];this.projectiles=[];this.scores=[0,0];this.nextBullet=0;this.target=mode==='FFA'?12:mode==='TDM'?30:5;
+    this.events=[];this.projectiles=[];this.scores=[0,0];this.humanIds=null;this.nextBullet=0;this.target=mode==='FFA'?12:mode==='TDM'?30:5;
     const kinds=['X','D','M','R','H','A','O','S'];
     this.tanks=[tank('player',selectedTank,RED,4,13)];
     if(mode==='FFA'){
-      const points=[FFA_SPAWNS[1],FFA_SPAWNS[2],FFA_SPAWNS[3]];
-      for(let i=0;i<3;i++){const t=tank('bot'+i,kinds[(i+1)%8],i+1,...points[i]);t.weapon=i===1?'vulcan':'hurricane';this.tanks.push(t);}
+      const points=[...FFA_SPAWNS.slice(1),[12,28],[36,4],[24,1.6]];
+      const count=Math.max(2,Math.min(8,Number.isInteger(size)?size:4));
+      for(let i=0;i<count-1;i++){const t=tank('bot'+i,kinds[(i+1)%8],i+1,...points[i]);t.weapon=i===1?'vulcan':'hurricane';this.tanks.push(t);}
     } else {
       let i=0;
       for(const p of SPAWN_RED.slice(1)){this.tanks.push(tank('bot'+i,kinds[(i+1)%8],RED,...p));i++;}
@@ -182,7 +183,7 @@ export class Game {
     if(t.hp<t.maxHp*.4&&t.repair>0)this.useItem(t,1);
     if(this.mode==='FLAG_HOLD'&&this.flag.holder===t.id&&!t.boostTime)this.useItem(t,2);
   }
-  update(dt,input={}){
+  update(dt,input={},inputsById={}){
     if(this.ended)return [];
     dt=clamp(dt,0,.05);this.events=[];this.tick+=dt;this.time=Math.max(0,this.time-dt);
     for(const t of this.tanks){
@@ -191,12 +192,14 @@ export class Game {
       // Shield recovery after the last 6s with no damage (prototype).
       if(this.tick-t.lastDamage>6)t.shield=Math.min(t.maxShield,t.shield+4*dt);
       if(t.abilityTime>0){t.hp=Math.max(1,t.hp-2*dt);}
-      if(t.id==='player'){
-        this.move(t,input.dx||0,input.dz||0,dt);
-        if(Number.isFinite(input.aimYaw))t.aimYaw=input.aimYaw;
-        if(input.fire)this.fire(t);
-        if(input.item)this.useItem(t,input.item);
-        if(input.ability)this.useAbility(t);
+      if(t.id==='player'||this.humanIds?.has(t.id)){
+        const cmd=this.humanIds ? inputsById[t.id]||{} : input;
+        this.move(t,cmd.dx||0,cmd.dz||0,dt);
+        if(Number.isFinite(cmd.aimYaw))t.aimYaw=cmd.aimYaw;
+        if(cmd.weapon&&WEAPONS[cmd.weapon])t.weapon=cmd.weapon;
+        if(cmd.fire)this.fire(t);
+        if(cmd.item)this.useItem(t,cmd.item);
+        if(cmd.ability)this.useAbility(t);
       }else this.ai(t,dt);
     }
     for(const b of this.projectiles){
