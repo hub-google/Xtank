@@ -56,3 +56,18 @@ X-TANK 是一款最多 8 人同場的 3D 第三人稱即時坦克射擊遊戲。
 ## 🎮 首個可玩版本（0.1.0）
 已新增真正的 3D 單機遊戲（8 種坦克、三種對戰模式、AI、武器及小地圖）與 Windows Portable EXE 打包流程。**注意：目前沒有真人多人連線、帳號與原版素材**。從 [Build Windows EXE 工作流程](https://github.com/hub-google/Xtank/actions/workflows/windows-exe.yml) 找到成功的執行，在 Artifacts 下載 \`XTANK-Windows-Portable-EXE\` ZIP，解壓後執行 EXE。詳細玩法和已知限制見 [21 試玩說明](docs/21_實作進度與試玩方式.md)。
 
+
+
+## 最新可玩版：0.2.0（單機 + LAN 真人對戰）
+
+這個儲存庫已由歷史資料整理進入遊戲實作階段。最新 **Windows Portable EXE** 提供巨型書桌 3D 射擊、8 台車、個人／團隊／持旗對戰、7 種武器、6 種道具與 AI，並可讓最多 8 名真人在同一個 **LAN 房間**連線（未滿房由 AI 補位）。房間中的生命、命中、旗戰計分與物理規則由 WebSocket 伺服器運算。
+
+**[下載最新 Windows EXE（請選最新成功的 Actions 執行）](https://github.com/hub-google/Xtank/actions/workflows/windows-exe.yml)**
+
+**[多人連線及 EXE 操作教學](docs/22_多人連線與EXE試玩.md)**
+
+注意：目前**沒有公開 24 小時的線上遊戲伺服器**。跨不同網路的玩家需要自行部署可連線的 WSS 主機；只靠 GitHub Pages 不足以支援持續多人對戰。完整歷史地圖、全部官方武器、帳號 DB、商城、經驗成長等仍待後續開發。這不是宣稱已完成全部 X-TANK 復刻。
+
+開發者使用 Node.js 22+：
+\`npm install\`、\`npm test\`、\`npm run build\`、\`npm run server\`（獨立伺服器）或 \`npm run desktop\`（Electron）。
+
