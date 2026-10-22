@@ -64,3 +64,41 @@ test('invalid inputs and injected packet fields never become trusted authority',
  assert.equal(sanitizeInput({dx:20,dz:0,aimYaw:0}),null);
  assert.equal(sanitizeInput({dx:0,dz:0,aimYaw:0,weapon:'cheat'}).weapon,undefined);
 });
+
+test('eight real WebSocket clients occupy unique slots; ninth denied; session resumes',async t=>{
+ const host=await createHost({host:'127.0.0.1',port:0});
+ t.after(async()=>host.close());
+ const url='ws://127.0.0.1:'+host.port;
+ const clients=[];
+ t.after(()=>clients.forEach(ws=>ws.terminate()));
+ const owner=await connect(url);clients.push(owner);
+ send(owner,{type:'CREATE',name:'Host',mode:'TDM',tank:'X'});
+ const info=await message(owner,'JOINED');await message(owner,'LOBBY');
+ const joined=[info];
+ for(let i=1;i<8;i++){
+  const ws=await connect(url);clients.push(ws);
+  send(ws,{type:'JOIN',roomId:info.roomId,name:'Human'+i,tank:'D'});
+  joined.push(await message(ws,'JOINED'));
+  await message(ws,'LOBBY');
+ }
+ const ninth=await connect(url);clients.push(ninth);
+ send(ninth,{type:'JOIN',roomId:info.roomId,name:'Extra'});
+ assert.equal((await message(ninth,'ERROR')).code,'ROOM_FULL');
+ send(owner,{type:'START'});
+ const slots=[];
+ for(const ws of clients.slice(0,8))slots.push((await message(ws,'START')).slotId);
+ assert.equal(new Set(slots).size,8);
+ const frame=await message(owner,'SNAPSHOT');
+ assert.equal(frame.tanks.length,8);
+ // Resume after a deliberate connection loss and invalidate the old transport.
+ const old=clients[1];
+ await new Promise(resolve=>{old.once('close',resolve);old.close();});
+ const replacement=await connect(url);clients.push(replacement);
+ send(replacement,{type:'RESUME',roomId:info.roomId,playerId:joined[1].playerId,token:joined[1].token});
+ const resumed=await message(replacement,'JOINED');
+ assert.equal(resumed.playerId,joined[1].playerId);
+ assert.notEqual(resumed.token,joined[1].token);
+ assert.equal((await message(replacement,'START')).slotId,slots[1]);
+ const latest=await message(replacement,'SNAPSHOT');
+ assert.equal(latest.tanks.length,8);
+});
