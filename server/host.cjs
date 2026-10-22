@@ -14,7 +14,11 @@ const sanitizeInput=m=>{
   item:[1,2].includes(m.item)?m.item:0,ability:m.ability===true};
 };
 async function createHost({port=8787,host='0.0.0.0'}={}){
- const {Game,TANKS}=await import(pathToFileURL(path.join(__dirname,'../src/simulation.js')).href);
+ let engine;
+ try{engine=require('./engine.cjs');}
+ catch(e){if(e.code!=='MODULE_NOT_FOUND')throw e;
+  engine=await import(pathToFileURL(path.join(__dirname,'../src/simulation.js')).href);}
+ const {Game,TANKS}=engine;
  const rooms=new Map();
  const httpServer=http.createServer((req,res)=>{
   if(req.url==='/health'){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({ok:true,rooms:rooms.size}));}
