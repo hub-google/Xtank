@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>X-TANK Revival — playable prototype</title>
+</head>
+<body>
+  <main id="app">
+    <div id="viewport" aria-label="3D 坦克戰場"></div>
+    <header id="topbar">
+      <div class="brand"><span class="brand-mark">X</span> X-TANK <b>REVIVAL</b> <small>ALPHA 0.1 / 單機試玩版</small></div>
+      <div id="matchInfo" class="top-info">未開始</div>
+    </header>
+    <section id="hud" hidden>
+      <div class="stats">
+        <div class="stat-label">裝甲 <strong id="hpText">100/100</strong></div>
+        <div class="meter"><div id="hpBar" class="fill hp"></div></div>
+        <div class="stat-label">護盾 <strong id="shieldText">65/65</strong></div>
+        <div class="meter"><div id="shieldBar" class="fill shield"></div></div>
+        <div id="statusText" class="status">就緒</div>
+      </div>
+      <div class="score" id="scoreText"></div>
+      <canvas id="minimap" width="192" height="128" aria-label="戰場小地圖"></canvas>
+      <div class="weapons"><div id="weaponList"></div><div class="controls">WASD 移動 · 滑鼠瞄準 · 左鍵射擊 · 1/2/3 換武器<br>F1 修理 · F2 加速 · E 技能 · P 暫停 · Esc 選單</div></div>
+    </section>
+    <section id="startMenu" class="overlay">
+      <div class="panel">
+        <p class="eyebrow">致敬 2000 年代的迷你坦克遊戲</p>
+        <h1>X-TANK <span>REVIVAL</span></h1>
+        <p class="lead">一張巨大書桌，八種坦克，爆炸、碰撞與搶旗。現在就能離線打 AI。</p>
+        <div class="fields">
+          <label>坦克型號 <select id="tankSelect">
+            <option value="X">X — 均衡型</option><option value="D">D — 重裝型</option>
+            <option value="M">M — 撞擊型</option><option value="R">R — 極速型</option>
+            <option value="H">H — 高速型</option><option value="A">A — 雷達型</option>
+            <option value="O">O — 高護盾型</option><option value="S">S — 火力型</option>
+          </select></label>
+          <label>對戰模式 <select id="modeSelect">
+            <option value="FFA">個人死鬥 — 4 台坦克</option>
+            <option value="TDM">團隊死鬥 — 4 對 4</option>
+            <option value="FLAG_HOLD">持旗爭奪 — 4 對 4</option>
+          </select></label>
+        </div>
+        <button id="startButton" class="primary">開始戰鬥 ▶</button>
+        <p class="note">本作目前是「單機 + AI」可玩原型。連線伺服器與原版完整地圖／數值仍在後續開發範圍。所有 3D 模型均為自製幾何佔位素材。</p>
+      </div>
+    </section>
+    <section id="resultMenu" class="overlay" hidden>
+      <div class="panel"><p class="eyebrow">MATCH COMPLETE</p><h1 id="resultTitle">對戰結束</h1>
+        <div id="resultStats"></div><button id="againButton" class="primary">重新開戰</button>
+        <button id="returnButton" class="secondary">返回主畫面</button>
+      </div>
+    </section>
+    <div id="pauseBadge" hidden>暫停中 · 按 P 繼續</div>
+    <div id="hitMarker" hidden>✕</div>
+  </main>
+  <script type="module" src="/src/game.js"></script>
+</body>
+</html>
