@@ -40,3 +40,26 @@ test('selected tank health and mode player count',()=>{
   const s=g.summary();assert.ok(s.title);
  }
 });
+
+test('ramming physically separates tanks and causes shield damage only once per cooldown',()=>{
+ const g=new Game({mode:'FFA',selectedTank:'X'}),a=g.tanks[0],b=g.tanks[1];
+ a.x=17.8;a.z=16;b.x=19.35;b.z=16;
+ g.humanIds=new Set(g.tanks.map(t=>t.id));
+ const oldA=a.shield,oldB=b.shield;
+ g.update(.05,{},{
+  [a.id]:{dx:1,dz:0,aimYaw:0,fire:false},
+  [b.id]:{dx:-1,dz:0,aimYaw:0,fire:false}
+ });
+ assert.ok(Math.hypot(a.x-b.x,a.z-b.z)>=1.35,'vehicles may not occupy same space');
+ assert.ok(a.shield<oldA&&b.shield<oldB,'relative impact damage should apply');
+ const after=a.shield;
+ g.update(.05,{},{
+  [a.id]:{dx:0,dz:0},[b.id]:{dx:0,dz:0}
+ });
+ assert.equal(a.shield,after,'same collision pair cannot spam damage each tick');
+});
+test('eight-person FFA allocates eight unique player slots',()=>{
+ const g=new Game({mode:'FFA',size:8});
+ assert.equal(g.tanks.length,8);
+ assert.equal(new Set(g.tanks.map(t=>t.id)).size,8);
+});
