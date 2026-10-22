@@ -1,7 +1,7 @@
 {
   "name": "xtank-revival",
   "productName": "X-TANK Revival Prototype",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Independent X-TANK-inspired playable 3D desktop prototype",
@@ -11,10 +11,12 @@
     "test": "node --test",
     "build": "vite build",
     "desktop": "npm run build && electron .",
-    "dist:win": "electron-builder --win portable --x64"
+    "dist:win": "electron-builder --win portable --x64",
+    "server": "node server/main.cjs"
   },
   "dependencies": {
-    "three": "^0.180.0"
+    "three": "^0.180.0",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "vite": "^7.1.0",
@@ -24,11 +26,26 @@
   "build": {
     "appId": "io.github.hubgoogle.xtank.revival",
     "productName": "X-TANK Revival",
-    "directories": {"output": "release"},
-    "files": ["dist/**/*", "electron/**/*", "package.json"],
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "server/**/*",
+      "src/simulation.js",
+      "package.json"
+    ],
     "asar": true,
     "win": {
-      "target": [{"target": "portable", "arch": ["x64"]}],
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "artifactName": "XTANK-Prototype-${version}-Windows.exe"
     }
   }
