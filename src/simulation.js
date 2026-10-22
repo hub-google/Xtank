@@ -192,7 +192,7 @@ export class Game {
       // Shield recovery after the last 6s with no damage (prototype).
       if(this.tick-t.lastDamage>6)t.shield=Math.min(t.maxShield,t.shield+4*dt);
       if(t.abilityTime>0){t.hp=Math.max(1,t.hp-2*dt);}
-      if(t.id==='player'||this.humanIds?.has(t.id)){
+      if(this.humanIds?this.humanIds.has(t.id):t.id==='player'){
         const cmd=this.humanIds ? inputsById[t.id]||{} : input;
         this.move(t,cmd.dx||0,cmd.dz||0,dt);
         if(Number.isFinite(cmd.aimYaw))t.aimYaw=cmd.aimYaw;
