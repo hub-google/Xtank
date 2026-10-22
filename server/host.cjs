@@ -10,7 +10,7 @@ const sanitizeInput=m=>{
  if(!['dx','dz','aimYaw'].every((k)=>typeof m[k]==='number'&&Number.isFinite(m[k])))return null;
  if(Math.abs(m.dx)>1||Math.abs(m.dz)>1||Math.abs(m.aimYaw)>Math.PI*2)return null;
  return {dx:m.dx,dz:m.dz,aimYaw:m.aimYaw,fire:m.fire===true,
-  weapon:['hurricane','vulcan','chemical'].includes(m.weapon)?m.weapon:undefined,
+  weapon:['hurricane','death_knight','vulcan','plasma','chemical','ion_missile','mine'].includes(m.weapon)?m.weapon:undefined,
   item:[1,2].includes(m.item)?m.item:0,ability:m.ability===true};
 };
 async function createHost({port=8787,host='0.0.0.0'}={}){
@@ -39,7 +39,7 @@ async function createHost({port=8787,host='0.0.0.0'}={}){
   members(r).forEach((x,i)=>{
    const t=game.tanks[slots[i]],cfg=TANKS[x.tank];
    x.slot=t.id;x.seq=-1;
-   t.kind=x.tank;t.hp=t.maxHp=cfg.hp;t.shield=t.maxShield=cfg.shield;
+   t.kind=x.tank;t.hp=t.maxHp=cfg.hp;t.shield=t.maxShield=cfg.shield;t.ammo={chemical:18,ion_missile:8,mine:5};
    game.humanIds.add(t.id);
    r.inputs.set(t.id,{dx:0,dz:0,aimYaw:0,fire:false,item:0,ability:false});
    send(x.ws,{type:'START',mode:r.mode,slotId:t.id,roundId:r.roundId,roomId:r.id});
