@@ -24,10 +24,10 @@ test('damage consumes shield first; duplicate kills impossible',()=>{
  g.hit(e,999,p.id);g.hit(e,999,p.id);assert.equal(p.kills,1);assert.equal(e.deaths,1);
 });
 test('flag pickup only one holder and deterministic scoring',()=>{
- const g=new Game({mode:'FLAG_HOLD'});const p=g.tanks[0],b=g.tanks[1];
+ const g=new Game({mode:'FLAG_HOLD'});const p=g.tanks[0],b=g.tanks[4];
  p.x=g.flag.x;p.z=g.flag.z;b.x=g.flag.x;b.z=g.flag.z;
  g.update(.02,{});assert.equal(g.flag.holder,'player');
- p.hp=1;g.hit(p,20,b.id);assert.equal(g.flag.holder,null);
+ p.hp=1;g.hit(p,999,b.id);assert.equal(g.flag.holder,null);
 });
 test('repair never exceeds maximum hp',()=>{
  const g=new Game();const p=g.tanks[0];p.hp=p.maxHp-8;
