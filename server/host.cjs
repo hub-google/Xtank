@@ -38,7 +38,7 @@ async function createHost({port=8787,host='0.0.0.0'}={}){
    t.kind=x.tank;t.hp=t.maxHp=cfg.hp;t.shield=t.maxShield=cfg.shield;
    game.humanIds.add(t.id);
    r.inputs.set(t.id,{dx:0,dz:0,aimYaw:0,fire:false,item:0,ability:false});
-   send(x.ws,{type:'START',slotId:t.id,roundId:r.roundId,roomId:r.id});
+   send(x.ws,{type:'START',mode:r.mode,slotId:t.id,roundId:r.roundId,roomId:r.id});
   });
   lobby(r);
  }
@@ -70,9 +70,9 @@ async function createHost({port=8787,host='0.0.0.0'}={}){
     const old=found&&members(found).find(x=>x.id===m.playerId&&x.token===m.token);
     if(!old)return send(ws,{type:'ERROR',code:'INVALID_SESSION'});
     if(old.ws?.readyState===WebSocket.OPEN)old.ws.close(4001,'replaced');
-    r=found;p=old;p.ws=ws;p.token=id()+id();p.lastSeen=Date.now();
+    r=found;p=old;p.ws=ws;p.token=id()+id();p.seq=-1;p.lastSeen=Date.now();
     send(ws,{type:'JOINED',roomId:r.id,playerId:p.id,token:p.token,host:p.id===r.hostId});
-    lobby(r);if(r.phase==='live')send(ws,{type:'START',slotId:p.slot,roundId:r.roundId,roomId:r.id});
+    lobby(r);if(r.phase==='live')send(ws,{type:'START',mode:r.mode,slotId:p.slot,roundId:r.roundId,roomId:r.id});
    }else if(!p||p.ws!==ws){send(ws,{type:'ERROR',code:'NOT_JOINED'});}
    else if(m.type==='START')start(r,p);
    else if(m.type==='INPUT'&&r.phase==='live'&&p.slot){
