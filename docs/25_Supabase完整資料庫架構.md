@@ -1,6 +1,6 @@
 # X-TANK｜Supabase 完整資料庫架構（已部署）
 > 2026-10-27 / Supabase **Game** 專案 / 私有 schema: `xtank`  
-> 實際部署 **62 張遊戲業務資料表 + 2 張私有 QA 專用表 = 64 張資料表，64 張 RLS 啟用**。種子資料：8 車、7 武器、6 道具、3 張地圖、3 模式、5 技能、3 項初始商店商品、1 種金幣及 1 版規則。  
+> 實際部署 **62 張原始遊戲表 + 2 張私有 QA 表 + 2 張新帳務表 = **66 張資料表，66 張 RLS 啟用****。種子資料：8 車、7 武器、6 道具、3 張地圖、3 模式、5 技能、3 項初始武器商品 + 6 項道具商品、1 種金幣及 1 版規則。  
 > 此文件代表資料庫已建好，**不代表 EXE 登入、購物或結算 UI 已串接**。
 
 ## 1. 唯一規格與正式 SQL
@@ -201,3 +201,13 @@ SELECT proname FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE 
 ```
 
 > 安全附註：既有 Game 專案 `public` schema 另有其他遊戲的 RLS 風險，本次不修改非 X-TANK 既有表。
+
+
+## 2026-10-27 新增的正式交易及賽季資料
+- **實際 Supabase 查核：xtank 共 66 張 BASE TABLE，66 張全數 RLS ENABLED**。原始 62 表的完整欄位字典仍於上方；新增的四張表不隸屬原始業務字典。
+- `xtank.qa_credentials`、`xtank.qa_bootstrap`：私有帳密測試資料與已停用的首次註冊引導。
+- `xtank.match_item_consumptions`：`match_id, player_id, item_id, quantity, created_at`；伺服器授權戰鬥結算時扣除背包並留下防重複消耗記錄，僅 service_role 可直接寫入。
+- `xtank.season_payouts`：`season_id, player_id, mode_id, final_rank, coins, granted_at`；每玩家每賽季每模式至多一筆，防止重複派獎。
+- `xtank.close_expired_seasons()`：使用交易鎖、支付帳本，及 Supabase `pg_cron` 每天 UTC 00:15 執行到期賽季結算。已以回滾交易測試重複執行只產生一筆獎勵。
+- [6 種商城道具](../supabase/migrations/20261027_xtank_six_item_shop_offers.sql)、[官方結算扣道具](../supabase/migrations/20261027_xtank_official_settlement_consumes_items.sql)、[賽季獎勵](../supabase/migrations/20261027_xtank_secure_season_payouts.sql)、[自動排程](../supabase/migrations/20261027_xtank_auto_season_closure.sql)、[活動進度](../supabase/migrations/20261027_xtank_match_event_progress_v1.sql)、[公會權限](../supabase/migrations/20261027_xtank_clan_admin_column_fix_v2.sql)。
+- **重要營運限制**：正式對戰的道具目前於開局讀取玩家擁有數量、結算扣除；需要把「開局物資預留（reservation/escrow）」補強，以避免長時間比賽期間並行交易使正式結算因庫存不足而重試。正式 WSS 公網上線亦尚未完成。
