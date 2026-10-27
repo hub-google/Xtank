@@ -53,6 +53,10 @@ async function rpc(action,payload={}){
  const token=await getToken();
  return rest('/rest/v1/rpc/xtank_player_api',{body:{p_action:action,p_payload:payload},token});
 }
+async function rpcNamed(name,args={}){
+ const token=await getToken();
+ return rest('/rest/v1/rpc/'+name,{body:args,token});
+}
 async function signIn(email,password,signup=false){
  const route=signup?'/auth/v1/signup':'/auth/v1/token?grant_type=password';
  const data=await rest(route,{body:{email,password}});
@@ -92,7 +96,7 @@ function bar(){
  return `<div class="xtank-account-user"><strong>${escaped(profile.display_name)}</strong>
  <span>Lv. ${progress.level}</span><span>XP ${progress.total_xp}</span><span>金幣 ${balance}</span>
  <button type="button" data-action="logout">登出</button></div>
- <nav class="xtank-account-nav">${[['home','總覽'],['garage','機庫'],['inventory','背包配裝'],['shop','商店'],['rank','排行榜'],['settings','設定']].map(([id,t])=>button(t,'tab:'+id,id===tab?'active':'')).join('')}</nav>`;
+ <nav class="xtank-account-nav">${[['home','總覽'],['garage','機庫'],['inventory','背包配裝'],['shop','商店'],['rank','排行榜'],['friends','好友'],['settings','設定']].map(([id,t])=>button(t,'tab:'+id,id===tab?'active':'')).join('')}</nav>`;
 }
 function panel(){
  if(tab==='home')return `<h2>玩家總覽</h2><dl class="xtank-stats">${Object.entries({等級:dashboard.progress.level,經驗:dashboard.progress.total_xp,剩餘升級點:dashboard.progress.unspent_points,已玩場次:dashboard.stats.matches_played,勝場:dashboard.stats.wins,擊殺:dashboard.stats.kills}).map(([k,v])=>`<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
@@ -108,12 +112,22 @@ function panel(){
  if(tab==='inventory')return `<h2>背包及配裝</h2><p>已持有物品：</p>
  <div class="xtank-inventory">${dashboard.inventory.length?dashboard.inventory.map(x=>`<span>${escaped(x.weapon_id||x.item_id||x.cosmetic_id)} × ${x.quantity}</span>`).join(''):'目前沒有購買的物品'}</div>
  <h3>已儲存配裝</h3>${dashboard.loadouts.length?dashboard.loadouts.map(x=>`<p>${escaped(x.tank_id)} / ${escaped(x.name)} (${x.is_selected?'使用中':'未選'})</p>`).join(''):'尚未儲存配裝'}
- <p>戰鬥內仍可按數字鍵 1–7 切換武器；此處的背包持久化與武器槽限制尚需跟戰鬥伺服器同步。</p>`;
+ <p>戰鬥內仍可按數字鍵 1–7 切換武器；正式對戰需由伺服器讀取已保存的配裝。</p>
+ <h3>新增配裝方案</h3><form id="xtankLoadoutForm">
+ <label>坦克<select name="tank_id">${dashboard.tanks.map(t=>`<option value="${escaped(t.tank_id)}">${escaped(t.tank_id)}-TANK</option>`).join('')}</select></label>
+ <label>配裝名稱<input name="name" maxlength="40" value="標準配置" required></label>
+ <div class="xtank-slot-grid">${Array.from({length:7},(_,i)=>`<label>武器 ${i+1}<select name="weapon_${i+1}">
+ <option value="">— 空槽 —</option>${catalog.weapons.filter(w=>['hurricane','death_knight','vulcan','plasma'].includes(w.weapon_id)||dashboard.inventory.some(v=>v.weapon_id===w.weapon_id)).map(w=>`<option value="${escaped(w.weapon_id)}">${escaped(w.display_name)}</option>`).join('')}
+ </select></label>`).join('')}</div>
+ <button type="submit">儲存為使用中的配裝</button></form>`;
  if(tab==='shop')return `<h2>坦克軍火商店</h2><div class="xtank-card-grid">${catalog.offers.map(o=>{
  const item=catalog.weapons.find(x=>x.weapon_id===o.weapon_id)||catalog.items.find(x=>x.item_id===o.item_id);
  return `<article><h3>${escaped(item?.display_name||o.offer_key)}</h3><p>${o.unit_price} ${escaped(o.currency_code)} / ${o.quantity} 個</p>
  ${button('購買','buy:'+o.offer_id)}</article>`;}).join('')||'<p>商店暫無上架商品</p>'}</div>`;
  if(tab==='rank')return '<h2>玩家排行榜</h2><div id="xtankRankContent">讀取排行榜中…</div>';
+ if(tab==='friends')return `<h2>好友</h2><div id="xtankFriendsList">讀取好友中…</div>
+ <form id="xtankFriendForm"><label>玩家 UUID <input name="player_id" placeholder="輸入好友玩家 ID" required></label>
+ <button type="submit">送出好友邀請</button></form>`;
  if(tab==='settings')return `<h2>設定</h2><form id="xtankSettingsForm">
  <label>玩家名稱<input name="name" minlength="3" maxlength="24" value="${escaped(dashboard.profile.display_name)}"></label>
  <label>主音量 (0–1)<input name="master_volume" type="number" min="0" max="1" step=".1" value="${dashboard.settings.master_volume}"></label>
@@ -126,6 +140,19 @@ function draw(){
  if(!session?.access_token){authView();return}
  if(!dashboard||!catalog){content.innerHTML='<p>玩家資料載入中…</p>';return}
  content.innerHTML=bar()+`<section class="xtank-account-panel">${panel()}</section>`;
+ if(tab==='friends')rpcNamed('xtank_social_api',{p_action:'list'}).then(data=>{
+  const target=$('#xtankFriendsList');
+  if(target)target.innerHTML=(data.friends||[]).map(f=>`<p>${escaped(f.friend_name)}　${escaped(f.status)} ${f.status==='pending'&&f.friend_id===dashboard.profile.player_id?button('接受邀請','accept:'+f.player_id):''}</p>`).join('')||'<p>目前沒有好友邀請</p>';
+  target?.querySelectorAll('[data-action]').forEach(b=>b.onclick=()=>run(async()=>{await rpcNamed('xtank_social_api',{p_action:'accept',p_target:b.dataset.action.split(':')[1]});draw();msg('已接受好友邀請')}));
+ }).catch(e=>msg(e.message));
+ $('#xtankFriendForm')?.addEventListener('submit',e=>{e.preventDefault();const f=e.target;run(async()=>{await rpcNamed('xtank_social_api',{p_action:'invite',p_target:f.elements.player_id.value.trim()});draw();msg('已送出邀請')})});
+ $('#xtankLoadoutForm')?.addEventListener('submit',e=>{e.preventDefault();const f=e.target;
+ run(async()=>{
+  const slots=Array.from({length:7},(_,i)=>({slot_type:'weapon',slot_number:i+1,ref:f.elements['weapon_'+(i+1)].value})).filter(v=>v.ref);
+  const saved=await rpcNamed('xtank_save_loadout',{p_tank_id:f.elements.tank_id.value,p_name:f.elements.name.value.trim(),p_slots:slots});
+  await reload();msg('配裝已儲存：'+saved);
+ });
+ });
  if(tab==='rank')rpc('leaderboard').then(data=>{
   const target=$('#xtankRankContent');if(target)target.innerHTML=`<ol>${(data.players||[]).map(x=>`<li>${escaped(x.display_name)}　Lv.${x.level}　勝場 ${x.wins}　擊殺 ${x.kills}</li>`).join('')}</ol>`;
  }).catch(e=>msg(e.message));
