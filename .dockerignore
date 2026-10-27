@@ -1,0 +1,16 @@
+node_modules
+dist
+release
+qa-evidence
+.git
+.github
+*.env
+.env*
+*.exe
+*.zip
+*.log
+*.md
+test
+electron
+scripts
+docs
