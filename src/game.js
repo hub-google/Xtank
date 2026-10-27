@@ -11,7 +11,10 @@ scene.fog = new THREE.Fog(0x12253e, 50, 98);
 const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, .08, 170);
 camera.position.set(24, 24, 42);
 camera.lookAt(24, 0, 16);
-const renderer = new THREE.WebGLRenderer({antialias:true, powerPreference:'high-performance'});
+const renderer = new THREE.WebGLRenderer({antialias:false, powerPreference:'high-performance'});
+const gpuContext=renderer.getContext(),gpuDebug=gpuContext.getExtension('WEBGL_debug_renderer_info');
+const gpuRenderer=gpuDebug?gpuContext.getParameter(gpuDebug.UNMASKED_RENDERER_WEBGL):'unknown';
+const softwareGPU=/swiftshader|llvmpipe|software|microsoft basic|warp/i.test(gpuRenderer);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.8));
 renderer.setSize(innerWidth,innerHeight);
 renderer.shadowMap.enabled = true;
@@ -88,7 +91,7 @@ function buildLevel(mapId,obstacles){
       cylinder(.30,5,steel,o.x,2.7,o.z,levelGroup);
       const shade=cylinder(2.0,.8,mat(0xf7deaa),o.x,5.2,o.z,levelGroup,1.2);
       shade.rotation.z=.16;
-      const bulb=new THREE.PointLight(0xffd8a7,24,21,2);bulb.position.set(o.x,4.7,o.z);levelGroup.add(bulb);
+      const bulb=new THREE.PointLight(0xffd8a7,24,21,2);bulb.position.set(o.x,4.7,o.z);bulb.visible=renderer.shadowMap.enabled;levelGroup.add(bulb);
     } else {
       const chess=o.name.includes('white')||o.name.includes('pawn');
       cylinder(o.r,o.height,mapId==='chess'?mat(chess?0xe0cfb6:0x303748):mat(mapId==='circuit'?0x6cbeb3:0xdadadd,.36),
@@ -166,16 +169,18 @@ function clearModels(){
   models=new Map();bulletModels=new Map();zoneModels=new Map();sparks.length=0;
 }
 function start(){
-  qaEvents.length=0;
+  paused=true;qaEvents.length=0;
   online?.close();online=null;networkSlot=null;
   try {
     clearModels();
     match=new Game({mode:el('modeSelect').value,selectedTank:el('tankSelect').value,mapId:el('mapSelect').value,seed:Date.now()>>>0});
     buildLevel(match.mapId,match.obstacles);
     for(const t of match.tanks)models.set(t.id,tankModel(t));
-    paused=false;resultShown=false;accum=0;keyboard.clear();fireHeld=false;itemQueue=0;abilityQueue=false;selectedWeapon=0;
+    resultShown=false;accum=0;keyboard.clear();fireHeld=false;itemQueue=0;abilityQueue=false;selectedWeapon=0;
     el('startMenu').hidden=true;el('resultMenu').hidden=true;el('hud').hidden=false;el('pauseBadge').hidden=true;
     camera.position.set(4,18,31);cameraTarget.set(4,0,13);
+    viewUpdate(0);renderer.render(scene,camera);
+    last=performance.now();accum=0;paused=false;
     updateHUD();
   } catch(e){console.error(e);el('matchInfo').textContent='啟動失敗：'+e.message;}
 }
@@ -334,22 +339,26 @@ function drawMap(){
     ctx.beginPath();ctx.arc(t.x*sx,t.z*sz,t.id==='player'?4:2.6,0,2*Math.PI);ctx.fill();
   }
 }
-let hudAccumulator=0,slowFrames=0,qualityReduced=sessionStorage.getItem('xtankLowPower')==='1';
-if(qualityReduced){renderer.shadowMap.enabled=false;renderer.setPixelRatio(1);renderer.setSize(innerWidth,innerHeight);}
+let hudAccumulator=0,slowFrames=0,frameMs=0,qualityReduced=softwareGPU||sessionStorage.getItem('xtankLowPower')==='1';
+function reduceGraphics(){
+ renderer.shadowMap.enabled=false;
+ scene.traverse(o=>{if(o.isPointLight)o.visible=false;});
+ renderer.setPixelRatio(.75);renderer.setSize(innerWidth,innerHeight);
+}
+if(qualityReduced)reduceGraphics();
 function animate(now){
   requestAnimationFrame(animate);
   const elapsed=Math.max(0,(now-last)/1000||0);
-  const dt=Math.min(.06,elapsed);last=now;
+  const dt=Math.min(.06,elapsed);last=now;frameMs=elapsed*1000;
   // Keep simulation time independent of slow GPU frames. Visual interpolation is bounded separately.
   if(elapsed>.08)slowFrames+=elapsed;else slowFrames=Math.max(0,slowFrames-elapsed);
   if(!qualityReduced&&slowFrames>2){
-    qualityReduced=true;sessionStorage.setItem('xtankLowPower','1');renderer.shadowMap.enabled=false;
-    renderer.setPixelRatio(1);renderer.setSize(innerWidth,innerHeight);
+    qualityReduced=true;sessionStorage.setItem('xtankLowPower','1');reduceGraphics();
   }
   if(match&&(!paused||online)){
-    accum+=Math.min(1,elapsed);
+    accum+=elapsed;
     let steps=0;
-    while(accum>=1/60&&steps++<60){tick(1/60);accum-=1/60;if(paused)break;}
+    while(accum>=1/60&&steps++<600){tick(1/60);accum-=1/60;if(paused&&!online)break;}
   }
   viewUpdate(dt);
   if(match&&!el('hud').hidden){hudAccumulator+=dt;if(hudAccumulator>=.1){updateHUD();hudAccumulator=0;}}
@@ -484,7 +493,7 @@ handleEvents=function(events){
  return qaHandle(events);
 };
 Object.defineProperty(window,'xtankDiagnostics',{value:()=>JSON.parse(JSON.stringify({
- now:performance.now()/1000,viewport:{width:innerWidth,height:innerHeight},qualityReduced,paused,online:!!online,networkSlot,networkRoomId,
+ now:performance.now()/1000,gpuRenderer,softwareGPU,frameMs,viewport:{width:innerWidth,height:innerHeight},qualityReduced,paused,online:!!online,networkSlot,networkRoomId,
  match:match?{mode:match.mode,mapId:match.mapId,time:match.time,tick:match.tick,ended:match.ended,
  tanks:match.tanks,projectiles:match.projectiles,scores:match.scores,flag:match.flag,
  smokes:match.smokes,repairFields:match.repairFields}:null,
