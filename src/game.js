@@ -461,3 +461,20 @@ renderer.domElement.addEventListener('contextmenu',e=>e.preventDefault());
 window.addEventListener('blur',()=>{keyboard.clear();fireHeld=false;});
 window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
 requestAnimationFrame(animate);
+
+// Read-only diagnostics: real inputs still pass through normal DOM handlers.
+const qaEvents=[];
+const qaHandle=handleEvents;
+handleEvents=function(events){
+ qaEvents.push(...events.map(e=>({...e,tick:match?.tick})));
+ if(qaEvents.length>4000)qaEvents.splice(0,qaEvents.length-4000);
+ return qaHandle(events);
+};
+Object.defineProperty(window,'xtankDiagnostics',{value:()=>JSON.parse(JSON.stringify({
+ paused,online:!!online,networkSlot,networkRoomId,
+ match:match?{mode:match.mode,mapId:match.mapId,time:match.time,tick:match.tick,ended:match.ended,
+ tanks:match.tanks,projectiles:match.projectiles,scores:match.scores,flag:match.flag,
+ smokes:match.smokes,repairFields:match.repairFields}:null,
+ events:qaEvents,render:{calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,
+ frame:renderer.info.render.frame},camera:camera.position.toArray()
+}))),writable:false});
