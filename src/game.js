@@ -312,7 +312,7 @@ function viewUpdate(dt){
   for(const t of match.tanks){
     let m=models.get(t.id);
     if(!m){m=tankModel(t);models.set(t.id,m);}
-    m.visible=t.alive;m.position.set(t.x,.04,t.z);
+    m.visible=t.alive&&!(cameraMode===4&&t.id==='player');m.position.set(t.x,.04,t.z);
     m.rotation.y=t.yaw;
     m.userData.turret.rotation.y=t.aimYaw-t.yaw;
     m.userData.teamRing.material.color.setHex(match.mode==='FFA'?0x78bdff:(t.team===0?0xff655d:0x65a9fc));

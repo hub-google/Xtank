@@ -171,3 +171,7 @@ X-TANK 是一款最多 8 人同場的 3D 第三人稱即時坦克射擊遊戲。
 
 - [獨立 Windows QA Run #151](https://github.com/hub-google/Xtank/actions/runs/40506020053)：驗收分支將獨立完成 Node、Docker、EXE、72 組 GUI，不因主線持續開發而取消。
 - 此分支**不是正式版本標籤或已通過證書**；只能在 GitHub Actions job 成功且逐項證據確認後，標示實際 PASS。
+
+
+### 開發中：五種自選鏡頭
+`feat/five-gameplay-cameras-20261027` 分支增加近距、中距、戰術俯角、低角與第一人稱等五種可循環鏡頭，`C` 可自訂為其他快捷鍵。為避免打斷正在進行的 `main` Windows GUI 矩陣，先在獨立分支開發及確認語法，尚未宣稱已通過 Windows 實測。
