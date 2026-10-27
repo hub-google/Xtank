@@ -23,7 +23,7 @@
       </div>
       <div class="score" id="scoreText"></div>
       <canvas id="minimap" width="192" height="128" aria-label="戰場小地圖"></canvas>
-      <div class="weapons"><div id="weaponList"></div><div class="controls">WASD 移動 · 滑鼠瞄準 · 左鍵射擊 · 1–7 換武器<br>F1 修理 · F2 加速 · F3 補盾 · F4 雷達 · F5 煙霧 · F6 團隊修復 · E 技能 · P 暫停 · Esc 選單</div></div>
+      <div class="weapons"><div id="weaponList"></div><div class="controls" id="controlHint">WASD 移動 · 滑鼠瞄準 · 左鍵射擊 · 1–7 換武器 · F1–F6 道具 · E 技能 · P 暫停 · Esc 選單</div></div>
     </section>
     <section id="startMenu" class="overlay">
       <div class="panel">
@@ -48,6 +48,11 @@
             <option value="circuit">電路板戰場</option>
           </select></label>
         </div>
+        <details class="control-settings">
+          <summary>自訂鍵位（儲存於本機）</summary>
+          <div id="controlsEditor" class="controls-grid"></div>
+          <button id="resetControlBindings" class="secondary" type="button">恢復預設鍵位</button>
+        </details>
         <button id="startButton" class="primary">單機開始戰鬥 ▶</button>
         <section class="online-box" aria-label="多人連線">
           <h2>真人連線對戰 <small>LAN / 自備伺服器</small></h2>
