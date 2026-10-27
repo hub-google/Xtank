@@ -114,6 +114,7 @@ let paused=true,resultShown=false,last=performance.now(),accum=0;
 let online=null,networkSlot=null,networkSeq=0,networkAccumulator=0,networkRoomId=null;
 let networkReady=false;
 let officialWeaponAllowlist=null;
+let officialRound=false,roundSettlementSaved=false;
 const keyboard = new Set();
 let fireHeld=false, itemQueue=0, abilityQueue=false, mouseX=innerWidth*.5,mouseY=innerHeight*.53, selectedWeapon=0;
 const raycaster=new THREE.Raycaster(), ground=new THREE.Plane(new THREE.Vector3(0,1,0),-.2), cursor=new THREE.Vector3();
@@ -189,6 +190,7 @@ function start(){
 }
 function goHome(){
   online?.close();online=null;networkSlot=null;networkRoomId=null;officialWeaponAllowlist=null;
+  officialRound=false;roundSettlementSaved=false;
   el('networkLobby').hidden=true;
   paused=true;match=null;clearModels();el('startMenu').hidden=false;el('resultMenu').hidden=true;
   el('hud').hidden=true;el('pauseBadge').hidden=true;el('matchInfo').textContent='未開始';
@@ -296,6 +298,15 @@ function showResult(){
     (info.rank?'  /  名次 第 '+info.rank+' 名':'')+
     (info.teamScore?'  /  紅隊 '+info.teamScore[0]+' : '+info.teamScore[1]+' 藍隊':'');
   el('resultMenu').hidden=false;
+  updateRematchAvailability();
+}
+function updateRematchAvailability(){
+  const pending=!!online&&officialRound&&!roundSettlementSaved;
+  const button=el('againButton');
+  button.disabled=pending;
+  button.textContent=pending?'官方獎勵入帳中…':'重新開戰';
+  if(resultShown&&pending&&!el('resultStats').textContent.includes('獎勵結算中'))
+    el('resultStats').textContent+='  /  獎勵結算中，請保留此畫面';
 }
 function timeFmt(t){const seconds=Math.ceil(t);return String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0');}
 function updateHUD(){
@@ -401,8 +412,11 @@ function onlineMessage(msg){
     return;
   }
   if(msg.type==='MATCH_SAVED'){
+    roundSettlementSaved=true;
     onlineStatus('官方戰績及獎勵已寫入永久資料庫 · '+msg.matchId);
-    if(resultShown&&el('resultStats'))el('resultStats').textContent+='  /  官方獎勵已入帳';
+    if(resultShown&&el('resultStats')&&!el('resultStats').textContent.includes('官方獎勵已入帳'))
+      el('resultStats').textContent+='  /  官方獎勵已入帳';
+    updateRematchAvailability();
     window.xtankAccount?.refresh?.().catch(e=>console.warn('Profile refresh after match:',e.message));
     return;
   }
@@ -424,7 +438,11 @@ function onlineMessage(msg){
     }
     onlineStatus('已取得 '+rooms.length+' 間公開房間');return;
   }
- if(msg.type==='ERROR'){onlineStatus('伺服器拒絕：'+msg.code);return;}
+ if(msg.type==='ERROR'){
+  onlineStatus('伺服器拒絕：'+msg.code);
+  if(resultShown&&msg.code==='MATCH_SETTLEMENT_PENDING')updateRematchAvailability();
+  return;
+ }
  if(msg.type==='JOINED'){
   networkRoomId=msg.roomId;networkReady=false;el('roomChatMessages').replaceChildren();onlineStatus('已加入房間 '+msg.roomId);
   el('roomCode').value=msg.roomId;el('networkLobby').hidden=false;return;
@@ -441,12 +459,13 @@ function onlineMessage(msg){
    el('readyNetworkButton').textContent=networkReady?'取消準備':'準備';
   el('startNetworkButton').hidden=msg.hostId!==online?.playerId||msg.phase!=='lobby';
   if(msg.phase==='lobby'&&match&&resultShown){
-    match=null;paused=true;resultShown=false;
+    match=null;paused=true;resultShown=false;officialRound=false;roundSettlementSaved=false;
     el('resultMenu').hidden=true;el('startMenu').hidden=false;el('hud').hidden=true;
   }
   return;
  }
  if(msg.type==='START'){
+  officialRound=msg.official===true;roundSettlementSaved=false;
   qaEvents.length=0;
   networkSlot=msg.slotId;networkSeq=0;networkAccumulator=0;
    officialWeaponAllowlist=msg.official&&Array.isArray(msg.allowedWeapons)?new Set(msg.allowedWeapons):null;
