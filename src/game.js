@@ -428,12 +428,13 @@ function onlineMessage(msg){
   if(match.ended)showResult();
  }
 }
-function establishNetwork(action){
+async function establishNetwork(action){
+ const accessToken=await window.xtankAccount?.getAccessToken?.().catch(()=>null);
  online?.close();match=null;paused=true;networkSlot=null;
  online=new OnlineConnection(onlineMessage,onlineStatus);
  try{
   online.open(el('serverAddress').value.trim(),{
-    type:action,name:el('playerName').value.trim()||'Player',
+    type:action,name:el('playerName').value.trim()||'Player',accessToken,
     tank:el('tankSelect').value,mode:el('modeSelect').value,mapId:el('mapSelect').value,
     roomId:el('roomCode').value.trim().toUpperCase()
   });
