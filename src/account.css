@@ -1,0 +1,38 @@
+.xtank-account-layer[hidden]{display:none!important}
+.xtank-account-layer{position:fixed;inset:0;z-index:400;display:flex;align-items:center;justify-content:center;background:rgba(4,11,24,.86);padding:12px}
+.xtank-account-dialog{width:min(960px,97vw);max-height:94vh;overflow:auto;background:#0d1f32;border:1px solid #5b809b;border-radius:16px;color:#ebf5ff;box-shadow:0 25px 70px #000b;font:14px/1.6 system-ui,'Microsoft JhengHei',sans-serif}
+.xtank-account-dialog *{box-sizing:border-box}
+.xtank-account-dialog header{display:flex;align-items:center;justify-content:space-between;padding:16px 22px;border-bottom:1px solid #385a76;background:#122b44}
+.xtank-account-dialog header strong{font-size:23px;color:#ffe18a;display:block}
+.xtank-account-dialog header small{display:block;color:#a3bcd3}
+.xtank-account-dialog header button{background:#28435d;color:white;border:1px solid #6087a5;border-radius:8px;font-size:19px;cursor:pointer;padding:5px 13px}
+.xtank-account-dialog main{padding:14px 22px 26px}
+.xtank-account-dialog h2{font-size:21px;margin:10px 0 16px;color:#ffdb7a}
+.xtank-account-dialog h3{font-size:16px;margin:2px 0 8px}
+.xtank-account-dialog p{margin:7px 0 12px}
+.xtank-account-dialog input,.xtank-account-dialog select{width:100%;padding:10px;margin:5px 0 12px;border:1px solid #56748c;border-radius:7px;color:#fff;background:#102b47}
+.xtank-account-dialog button{padding:8px 13px;color:#122238;background:#f8ce63;border:0;border-radius:8px;cursor:pointer;font-weight:700}
+.xtank-account-dialog button:hover{filter:brightness(1.1)}
+.xtank-account-dialog button.active{background:#ffe6a0}
+.xtank-account-dialog .xtank-account-status{padding:0 22px;background:#183c59;color:#ffdda7;min-height:0}
+.xtank-account-dialog .xtank-account-status:not(:empty){padding:8px 22px}
+.xtank-auth{max-width:510px;margin:auto}.xtank-auth label{display:block;margin:9px 0}
+.xtank-actions,.xtank-account-nav,.xtank-account-user{display:flex;flex-wrap:wrap;gap:9px;align-items:center}
+.xtank-actions button{flex:1}
+.xtank-account-user{padding:10px;background:#1b344c;border-radius:10px}
+.xtank-account-user strong{font-size:20px;margin-right:auto}
+.xtank-account-user span{color:#c5d9ee;padding:2px 7px;background:#314b63;border-radius:6px}
+.xtank-account-nav{margin:14px 0;border-bottom:1px solid #405e76;padding-bottom:12px}
+.xtank-account-nav button{background:#344b61;color:#dceaff}
+.xtank-account-nav button.active{background:#ffd77a;color:#1c2530}
+.xtank-card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(195px,1fr));gap:12px}
+.xtank-card-grid article{padding:14px;border:1px solid #3d607b;border-radius:9px;background:#19354d}
+.xtank-card-grid article p{color:#bfd3e5;font-size:13px}
+.xtank-upgrades{display:flex;gap:4px;flex-wrap:wrap;margin-top:9px}
+.xtank-upgrades button{padding:4px 6px;font-size:11px}
+.xtank-inventory{display:flex;gap:9px;flex-wrap:wrap}.xtank-inventory span{background:#23475f;padding:5px 10px;border-radius:6px}
+.xtank-stats{display:grid;grid-template-columns:repeat(3,minmax(90px,1fr));gap:12px}
+.xtank-stats>div{padding:12px;background:#1b394f;border-radius:10px}
+.xtank-stats dt{font-size:12px;color:#b2cbdf}.xtank-stats dd{font-size:22px;font-weight:700;color:#ffdf85;margin:0}
+#xtankAccountOpen{margin:12px 0;width:100%;padding:10px;border-radius:8px;border:1px solid #8ca6c2;background:#244a65;color:#fff;cursor:pointer}
+@media(max-width:640px){.xtank-account-dialog main{padding:12px}.xtank-stats{grid-template-columns:repeat(2,minmax(90px,1fr))}.xtank-account-dialog{font-size:13px}}
