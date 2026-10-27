@@ -506,7 +506,7 @@ function onlineMessage(msg){
 async function establishNetwork(action){
  const accessToken=window.xtankAccount?.getAccessToken?await window.xtankAccount.getAccessToken().catch(()=>null):null;
  online?.close();match=null;paused=true;networkSlot=null;
- online=new OnlineConnection(onlineMessage,onlineStatus);
+ online=new OnlineConnection(onlineMessage,onlineStatus,()=>window.xtankAccount?.getAccessToken?.());
  try{
   online.open(el('serverAddress').value.trim(),{
     type:action,name:el('playerName').value.trim()||'Player',accessToken,
