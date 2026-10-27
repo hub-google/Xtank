@@ -40,7 +40,8 @@ test('two authenticated WebSocket players naturally finish a short official matc
    if(endpoint.endsWith('/auth/v1/user'))return new Response(JSON.stringify({id:player}),{status:200});
    if(endpoint.endsWith('/rest/v1/rpc/xtank_player_api'))return new Response(JSON.stringify({
     profile:{player_id:player,display_name:player===UID_A?'QA-A':'QA-B'},
-    tanks:[{tank_id:'X'}],loadouts:[],slots:[]
+    tanks:[{tank_id:'X'}],loadouts:[],slots:[],
+    upgrades:player===UID_A?[{tank_id:'X',attribute:'energy',level:5},{tank_id:'X',attribute:'speed',level:6}]:[]
    }),{status:200});
    if(endpoint.endsWith('/rest/v1/rpc/xtank_record_official_match')){
     const body=JSON.parse(opts.body).p_result;
@@ -70,6 +71,9 @@ test('two authenticated WebSocket players naturally finish a short official matc
   assert.notEqual(gameA.slotId,gameB.slotId);
   const ended=await waitFor(a,'SNAPSHOT',{timeout:6000,check:s=>s.ended===true});
   assert.equal(ended.roundId,gameA.roundId);
+  const upgraded=ended.tanks.find(t=>t.id===gameA.slotId);
+  assert.equal(upgraded.maxShield,Math.round(65*1.10),'energy upgrade comes from verified profile');
+  assert.equal(upgraded.upgrades.speed,6,'speed modifier persisted into authoritative snapshot');
   assert(ended.tick>=1.4,'simulated time advanced through real game ticks');
   const resultA=await waitFor(a,'MATCH_SAVED',{timeout:6000});
   const resultB=await waitFor(b,'MATCH_SAVED',{timeout:6000});
