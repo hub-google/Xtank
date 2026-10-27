@@ -68,6 +68,11 @@
           <div id="publicRoomList" role="region" aria-label="公開房間列表" hidden></div>
           <div id="networkLobby" hidden>
             <p id="roomDetails"></p><p id="roomPeople"></p>
+            <div id="roomChatMessages" role="log" aria-live="polite" aria-label="房間聊天" style="max-height:110px;overflow:auto;text-align:left;"></div>
+            <form id="roomChatForm" style="display:flex;gap:8px;margin:8px 0">
+              <input id="roomChatInput" maxlength="140" placeholder="房間聊天（140 字以內）" required autocomplete="off" style="min-width:0;flex:1">
+              <button type="submit" class="secondary">傳送</button>
+            </form>
             <button id="readyNetworkButton" class="secondary" type="button">準備</button>
             <button id="startNetworkButton" class="primary" type="button" hidden>房主：開始連線對戰</button>
             <button id="leaveNetworkButton" class="secondary" type="button">離開線上房間</button>
