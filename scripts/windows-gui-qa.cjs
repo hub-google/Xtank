@@ -38,7 +38,14 @@ async function launch(i){
  await wait(p,()=>window.xtankDiagnostics?.().render.frame>1);if(await p.locator('#xtankAccountOverlay').count() && await p.isVisible('#xtankAccountOverlay')) await p.click('#xtankGuestContinue');try{execFileSync('powershell',['-NoProfile','-Command',`Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $b=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $im=New-Object System.Drawing.Bitmap($b.Width,$b.Height); $g=[System.Drawing.Graphics]::FromImage($im); $g.CopyFromScreen($b.Location,[System.Drawing.Point]::Empty,$b.Size); $im.Save('${path.join(out,'desktop-'+i+'.png').replace(/'/g,"''")}'); $g.Dispose(); $im.Dispose();`]);}catch(e){fs.writeFileSync(path.join(out,'desktop-capture-error.txt'),e.message);}return p;
 }
 async function home(p){
- const s=await state(p);
+ let s;
+ try{s=await state(p)}catch(error){
+  // Prior scenario remains FAIL. Recover only to test subsequent cases independently.
+  console.error('Renderer diagnostics unavailable, attempting reload:',error.message);
+  await p.reload({waitUntil:'domcontentloaded'});
+  await wait(p,()=>typeof window.xtankDiagnostics==='function');
+  s=await state(p);
+ }
  if(s?.match){
   if(await p.isVisible('#resultMenu'))await p.click('#returnButton');
   else if(await p.locator('#pauseHomeButton').count()){
@@ -144,8 +151,48 @@ async function testMockedNativeAccount(p){
  const p=await launch(0);
  await step('A-portable-exe-home-WebGL',p,async()=>{assert(await p.isVisible('#startMenu'));const s=await state(p);assert(s.render.triangles>100);});
  await step('A-account-frontend-mocked-backend',p,async()=>testMockedNativeAccount(p));
+ await step('A-custom-keybindings-persist-reload-reset',p,async()=>{
+  await home(p);
+  await p.locator('.control-settings summary').click();
+  const forward=p.locator('[aria-label="修改前進的快捷鍵"]');
+  assert.equal(await forward.textContent(),'W');
+  await forward.click();
+  await p.keyboard.press('ArrowUp');
+  assert.equal(await forward.textContent(),'↑');
+  const saved=await p.evaluate(()=>localStorage.getItem('xtankKeyboardBindingsV1'));
+  assert.equal(JSON.parse(saved).forward,'ArrowUp');
+  await p.reload({waitUntil:'domcontentloaded'});
+  await wait(p,()=>window.xtankDiagnostics?.().render.frame>1);
+  assert.equal(await p.locator('[aria-label="修改前進的快捷鍵"]').textContent(),'↑');
+  await p.locator('.control-settings summary').click();
+  await p.click('#resetControlBindings');
+  assert.equal(await p.locator('[aria-label="修改前進的快捷鍵"]').textContent(),'W');
+ });
  for(const tank of ['X','D','M','R','H','A','O','S'])for(const mode of ['FFA','TDM','FLAG_HOLD'])for(const map of ['desk','chess','circuit']){
-  await step(`B-${tank}-${mode}-${map}`,p,async()=>{await start(p,tank,mode,map);const s=await state(p);assert.equal(s.match.tanks[0].kind,tank);assert.equal(s.match.mode,mode);assert.equal(s.match.mapId,map);assert(s.render.calls>0);assert(await p.isVisible('#hud'));if(mode==='FFA'&&map==='desk'){await p.keyboard.press('e');await delay(250);const a=await state(p);assert(a.match.tanks[0].abilityTime>0,'tank ability '+tank);}});
+  await step(`B-${tank}-${mode}-${map}`,p,async()=>{
+   await start(p,tank,mode,map);
+   const s=await state(p);
+   assert.equal(s.match.tanks[0].kind,tank);
+   assert.equal(s.match.mode,mode);
+   assert.equal(s.match.mapId,map);
+   assert(s.render.calls>0);
+   assert(await p.isVisible('#hud'));
+   metrics.peakGeometries=Math.max(metrics.peakGeometries||0,s.render.geometries||0);
+   // A 72-round matrix must not exhaust graphics memory as arenas are rebuilt.
+   assert((s.render.geometries||0)<450,'Excess GPU geometry: '+s.render.geometries);
+   if(mode==='FFA'&&map==='desk'){
+    const deadline=Date.now()+6000;
+    let triggered=false,lastTank=null;
+    while(Date.now()<deadline){
+     const sample=await state(p);
+     lastTank=sample.match?.tanks[0];
+     if(sample.events.some(e=>e.type==='ability'&&e.id==='player')||lastTank?.abilityTime>0){triggered=true;break}
+     if(lastTank?.alive&&lastTank.hp>14&&lastTank.abilityCooldown<=0)await p.keyboard.press('e');
+     await delay(200);
+    }
+    assert(triggered,'tank ability '+tank+' not triggered '+JSON.stringify({hp:lastTank?.hp,alive:lastTank?.alive,cooldown:lastTank?.abilityCooldown}));
+   }
+  });
  }
  await step('C-wall-clock-simulation-rate',p,async()=>{await start(p);await delay(2500);const a=await state(p);await delay(5000);const b=await state(p);const ratio=(b.match.tick-a.match.tick)/(b.now-a.now);metrics.clock={ratio,simulationSeconds:b.match.tick-a.match.tick,wallSeconds:b.now-a.now,frameMs:b.frameMs,gpu:b.gpuRenderer};assert(ratio>.7&&ratio<1.3,'simulation / real time = '+ratio);});
  await step('C-WASD-camera',p,async()=>{
