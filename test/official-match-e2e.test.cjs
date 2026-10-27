@@ -49,7 +49,7 @@ test('two authenticated WebSocket players naturally finish a short official matc
    }
    return new Response(JSON.stringify({error:'unexpected mock endpoint'}),{status:404});
   };
-  assert.throws(()=>createHost({port:0,testRoundSeconds:0}),/TEST_ROUND_SECONDS_FORBIDDEN|invalid/i);
+  await assert.rejects(createHost({port:0,testRoundSeconds:0}),/TEST_ROUND_SECONDS_FORBIDDEN/);
   host=await createHost({host:'127.0.0.1',port:0,testRoundSeconds:1.5});
   const url='ws://127.0.0.1:'+host.port;
   const a=await connect(url),b=await connect(url);sockets.push(a,b);
