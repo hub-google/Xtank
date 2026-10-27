@@ -477,4 +477,4 @@ Object.defineProperty(window,'xtankDiagnostics',{value:()=>JSON.parse(JSON.strin
  smokes:match.smokes,repairFields:match.repairFields}:null,
  events:qaEvents,render:{calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,
  frame:renderer.info.render.frame},camera:camera.position.toArray()
-}))),writable:false});
+})),writable:false});
