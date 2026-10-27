@@ -68,7 +68,10 @@ async function testMockedNativeAccount(p){
   let input={};try{input=request.postDataJSON()||{}}catch{}
   const action=input.p_action||url.pathname;
   calls.push(action);
-  const ok=value=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(value)});
+  const cors={'access-control-allow-origin':'*','access-control-allow-headers':'authorization,apikey,content-type',
+    'access-control-allow-methods':'POST,GET,OPTIONS'};
+  if(request.method()==='OPTIONS')return route.fulfill({status:204,headers:cors});
+  const ok=value=>route.fulfill({status:200,contentType:'application/json',headers:cors,body:JSON.stringify(value)});
   if(url.pathname.startsWith('/auth/v1/token'))return ok({access_token:'mocked-gui-jwt',refresh_token:'mocked-gui-refresh',expires_in:3600});
   if(url.pathname.endsWith('/xtank_player_api')){
    if(action==='initialize')return ok({ok:true});
