@@ -5,6 +5,7 @@ ENV NODE_ENV=production PORT=8787 BIND_HOST=0.0.0.0
 WORKDIR /app
 COPY package.json ./
 RUN npm install --omit=dev --no-audit --no-fund && npm cache clean --force
+RUN mkdir -p /data/settlements && chown -R node:node /data
 COPY --chown=node:node server/ ./server/
 COPY --chown=node:node src/simulation.js ./src/simulation.js
 USER node
