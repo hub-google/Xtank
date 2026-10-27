@@ -40,15 +40,13 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
  const members=r=>[...r.people.values()];
  const roomSummary=r=>({roomId:r.id,mode:r.mode,mapId:r.mapId,phase:r.phase,
    players:members(r).filter(p=>p.ws).length,capacity:8,passwordRequired:!!r.password});
- function passwordDigest(password,salt){return crypto.scryptSync(password,salt,32);}
+ function passwordDigest(password,salt){return new Promise((resolve,reject)=>crypto.scrypt(password,salt,32,(error,key)=>error?reject(error):resolve(key)));}
  async function roomPasswordValid(r,password){
    if(!r.password)return true;
    if(typeof password!=='string'||password.length>64)return false;
    // PBKDF must run off the event loop: synchronous scrypt here stalls every
    // active combat room whenever someone retries a password-protected JOIN.
-   const attempt=await new Promise((resolve,reject)=>{
-     crypto.scrypt(password,r.password.salt,32,(err,buf)=>err?reject(err):resolve(buf));
-   });
+   const attempt=await passwordDigest(password,r.password.salt);
    return crypto.timingSafeEqual(r.password.hash,attempt);
  }
  function broadcast(r,msg){for(const p of members(r))send(p.ws,msg);}
@@ -131,6 +129,8 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
    if(++received>60){ws.close(1008,'rate limit');return;}
    let m;try{m=JSON.parse(raw.toString());}catch{return send(ws,{type:'ERROR',code:'BAD_JSON'});}
    if(!m||typeof m.type!=='string')return;
+   // Creating a password-protected room hashes off-thread. Reject concurrent packets.
+   if(ws._xtankCreatePending)return send(ws,{type:'ERROR',code:'CREATE_PENDING'});
    if(official&&(m.type==='CREATE'||m.type==='JOIN'||m.type==='QUICK_MATCH')&&!p){
       if(ws._xtankAuthPending)return send(ws,{type:'ERROR',code:'AUTH_PENDING'});
       ws._xtankAuthPending=true;
@@ -161,9 +161,17 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
       phase:'lobby',people:new Map(),hostId:null,game:null,inputs:null,roundId:null,events:[],snapCount:0,created:Date.now()};
     if(typeof m.password==='string'&&m.password.length>0){
       if(m.password.length>40)return send(ws,{type:'ERROR',code:'PASSWORD_TOO_LONG'});
-      const salt=crypto.randomBytes(16);r.password={salt,hash:passwordDigest(m.password,salt)};
+      ws._xtankCreatePending=true;
+      try{
+       const salt=crypto.randomBytes(16);
+       r.password={salt,hash:await passwordDigest(m.password,salt)};
+      }catch(error){return send(ws,{type:'ERROR',code:'PASSWORD_CREATE_FAILED'});}
+      finally{ws._xtankCreatePending=false;}
+      if(ws.readyState!==WebSocket.OPEN||p)return;
      }
-     rooms.set(code,r);
+     if(rooms.size>=32)return send(ws,{type:'ERROR',code:'SERVER_FULL'});
+     while(rooms.has(r.id))r.id=crypto.randomBytes(3).toString('hex').toUpperCase();
+     rooms.set(r.id,r);
     p=makePlayer(m,ws);p.team=selectTeam(r,m.team);r.people.set(p.id,p);r.hostId=p.id;
     send(ws,{type:'JOINED',roomId:r.id,playerId:p.id,token:p.token,host:true});lobby(r);
    }else if(m.type==='JOIN'&&!p){
