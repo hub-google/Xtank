@@ -14,7 +14,11 @@ const sanitizeInput=m=>{
   weapon:['hurricane','death_knight','vulcan','plasma','chemical','ion_missile','mine'].includes(m.weapon)?m.weapon:undefined,
   item:[1,2,3,4,5,6].includes(m.item)?m.item:0,ability:m.ability===true};
 };
-async function createHost({port=8787,host='0.0.0.0'}={}){
+async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
+ // Controlled accelerated *full* simulation for automated WSS integration tests only.
+ // Client input cannot change the time limit. Production rejects this option.
+ if(testRoundSeconds!==null && (process.env.NODE_ENV!=='test'||!Number.isFinite(testRoundSeconds)
+   ||testRoundSeconds<0.5||testRoundSeconds>20))throw Error('TEST_ROUND_SECONDS_FORBIDDEN');
  let engine;
  try{engine=require('./engine.cjs');}
  catch(e){if(e.code!=='MODULE_NOT_FOUND')throw e;
@@ -44,6 +48,7 @@ async function createHost({port=8787,host='0.0.0.0'}={}){
   if(members(r).filter(v=>v.ws).length<2)return send(p.ws,{type:'ERROR',code:'NEED_TWO_PLAYERS'});
    if(official&&members(r).some(v=>v.ws&&!v.ready))return send(p.ws,{type:'ERROR',code:'PLAYERS_NOT_READY'});
   const game=new Game({mode:r.mode,mapId:r.mapId,selectedTank:'X',size:8,seed:crypto.randomBytes(4).readUInt32LE()});
+  if(testRoundSeconds!==null)game.time=testRoundSeconds;
   game.humanIds=new Set();
   r.game=game;r.inputs=new Map();r.phase='live';r.roundId=id();r.events=[];
    r.startedAt=Date.now();r.accountBySlot=new Map();r.persistStarted=false;
