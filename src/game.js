@@ -111,6 +111,7 @@ const sparks=[];
 let models=new Map(), bulletModels=new Map(), zoneModels=new Map(), flagGroup=null, match=null;
 let paused=true,resultShown=false,last=performance.now(),accum=0;
 let online=null,networkSlot=null,networkSeq=0,networkAccumulator=0,networkRoomId=null;
+let networkReady=false;
 const keyboard = new Set();
 let fireHeld=false, itemQueue=0, abilityQueue=false, mouseX=innerWidth*.5,mouseY=innerHeight*.53, selectedWeapon=0;
 const raycaster=new THREE.Raycaster(), ground=new THREE.Plane(new THREE.Vector3(0,1,0),-.2), cursor=new THREE.Vector3();
@@ -376,15 +377,36 @@ el('returnButton').addEventListener('click',goHome);
 
 function onlineStatus(message){el('networkStatus').textContent=message;if(match&&online&&message.includes('斷線'))el('statusText').textContent=message;}
 function onlineMessage(msg){
+  if(msg.type==='ROOMS'){
+    const list=el('publicRoomList');list.replaceChildren();list.hidden=false;
+    const title=document.createElement('p');title.textContent='公開房間（點選加入）';list.append(title);
+    const rooms=Array.isArray(msg.rooms)?msg.rooms:[];
+    if(!rooms.length){const empty=document.createElement('p');empty.textContent='沒有開放中的公開房間';list.append(empty);}
+    for(const room of rooms){
+      const button=document.createElement('button');button.type='button';button.className='secondary';
+      button.textContent=room.roomId+' · '+room.mode+' · '+(MAPS[room.mapId]?.name||room.mapId)+' · '+room.players+'/'+room.capacity;
+      button.addEventListener('click',()=>{
+        el('roomCode').value=room.roomId;
+        el('roomPassword').value='';
+        el('publicRoomList').hidden=true;
+        establishNetwork('JOIN');
+      });
+      list.append(button);
+    }
+    onlineStatus('已取得 '+rooms.length+' 間公開房間');return;
+  }
  if(msg.type==='ERROR'){onlineStatus('伺服器拒絕：'+msg.code);return;}
  if(msg.type==='JOINED'){
-  networkRoomId=msg.roomId;onlineStatus('已加入房間 '+msg.roomId);
+  networkRoomId=msg.roomId;networkReady=false;onlineStatus('已加入房間 '+msg.roomId);
   el('roomCode').value=msg.roomId;el('networkLobby').hidden=false;return;
  }
  if(msg.type==='LOBBY'){
   el('networkLobby').hidden=false;
   el('roomDetails').textContent='房間 '+msg.roomId+' · '+msg.mode+' · '+(MAPS[msg.mapId]?.name||'地圖')+' · '+msg.phase;
-  el('roomPeople').textContent=msg.people.map(p=>(p.host?'房主 ':'')+p.name+(p.connected?' ●':' ○')).join('、');
+  el('roomPeople').textContent=msg.people.map(p=>(p.host?'房主 ':'')+p.name+(p.ready?' ✓已準備':' · 未準備')+(p.connected?' ●':' ○')).join('、');
+   networkReady=!!msg.people.find(p=>p.id===online?.playerId)?.ready;
+   el('readyNetworkButton').hidden=msg.phase!=='lobby';
+   el('readyNetworkButton').textContent=networkReady?'取消準備':'準備';
   el('startNetworkButton').hidden=msg.hostId!==online?.playerId||msg.phase!=='lobby';
   if(msg.phase==='lobby'&&match&&resultShown){
     match=null;paused=true;resultShown=false;
@@ -436,12 +458,14 @@ async function establishNetwork(action){
   online.open(el('serverAddress').value.trim(),{
     type:action,name:el('playerName').value.trim()||'Player',accessToken,
     tank:el('tankSelect').value,mode:el('modeSelect').value,mapId:el('mapSelect').value,
-    roomId:el('roomCode').value.trim().toUpperCase()
+    roomId:el('roomCode').value.trim().toUpperCase(),password:el('roomPassword').value
   });
  }catch(e){onlineStatus('設定錯誤：'+e.message);online=null;}
 }
 el('makeRoomButton').addEventListener('click',()=>establishNetwork('CREATE'));
 el('joinRoomButton').addEventListener('click',()=>establishNetwork('JOIN'));
+ el('listRoomsButton').addEventListener('click',()=>establishNetwork('LIST_ROOMS'));
+ el('readyNetworkButton').addEventListener('click',()=>online?.send({type:'READY',ready:!networkReady}));
 el('startNetworkButton').addEventListener('click',()=>online?.send({type:'START'}));
 el('leaveNetworkButton').addEventListener('click',()=>{
  online?.close();online=null;networkSlot=null;el('networkLobby').hidden=true;
