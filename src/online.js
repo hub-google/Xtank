@@ -1,7 +1,7 @@
 // Browser-side connection transport; never trusts client-side damage / hit claims.
 export class OnlineConnection {
- constructor(onMessage,onStatus){
-  this.onMessage=onMessage;this.onStatus=onStatus;
+ constructor(onMessage,onStatus,getResumeAccessToken=null){
+  this.onMessage=onMessage;this.onStatus=onStatus;this.getResumeAccessToken=getResumeAccessToken;
   this.socket=null;this.url='';this.roomId=null;this.playerId=null;this.token=null;
   this.intent=null;this.manual=false;this.disconnectedAt=0;this.reconnectTimer=null;
  }
@@ -14,15 +14,31 @@ export class OnlineConnection {
  _connect(resume){
   this.onStatus(resume?'正在重新連線…':'連接伺服器中…');
   const ws=new WebSocket(this.url);this.socket=ws;
-  ws.addEventListener('open',()=>{
+  ws.addEventListener('open',async()=>{
    if(ws!==this.socket)return;
-   const action=resume?{type:'RESUME',roomId:this.roomId,playerId:this.playerId,token:this.token,accessToken:this.intent?.accessToken}:this.intent;
+   let accessToken=this.intent?.accessToken;
+   if(resume&&accessToken&&this.getResumeAccessToken){
+    try{
+     accessToken=await this.getResumeAccessToken();
+     if(!accessToken)throw Error('LOGIN_REQUIRED');
+    }catch{
+     if(ws===this.socket)this.onStatus('登入已失效，請重新登入後加入房間');
+     this.close();
+     return;
+    }
+   }
+   if(ws!==this.socket||ws.readyState!==WebSocket.OPEN)return;
+   const action=resume?{type:'RESUME',roomId:this.roomId,playerId:this.playerId,token:this.token,accessToken}:this.intent;
    this.send(action);this.onStatus(resume?'已連上，恢復房間中…':'伺服器已連接，正在加入房間…');
   });
   ws.addEventListener('message',e=>{
    if(ws!==this.socket)return;
    let m;try{m=JSON.parse(e.data);}catch{return;}
    if(m.type==='JOINED'){this.roomId=m.roomId;this.playerId=m.playerId;this.token=m.token;this.disconnectedAt=0;}
+   if(resume&&m.type==='ERROR'&&['AUTH_FAILED','INVALID_SESSION','WRONG_ACCOUNT'].includes(m.code)){
+    this.onStatus('房間恢復失敗（'+m.code+'），請重新登入或加入房間');
+    this.close();
+   }
    this.onMessage(m);
   });
   ws.addEventListener('error',()=>{if(ws===this.socket)this.onStatus('無法連接伺服器；確認主機網址與防火牆');});
