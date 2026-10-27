@@ -82,9 +82,9 @@ function authView(){
  <label>密碼<input type="password" name="password" autocomplete="current-password" minlength="6" required></label>
  <div class="xtank-actions"><button type="submit" name="mode" value="login">登入</button><button type="submit" name="mode" value="signup">註冊</button></div>
  </form>
- <p>遊客可直接關閉此視窗，使用既有的單機練習模式；正式資料保存需登入。</p>
+ <button type="button" id="xtankGuestContinue">以遊客身分練習（不保存正式戰績）</button>\n <p>遊客可以單機練習；帳號登入後才會永久保存坦克、金幣、背包資料。</p>
  <p>測試帳號透過 Supabase 私有 QA 資料表查詢，密碼不公開在 GitHub。</p></div>`;
- $('#xtankAuthForm').addEventListener('submit',e=>{
+ $('#xtankGuestContinue').addEventListener('click',hide);\n $('#xtankAuthForm').addEventListener('submit',e=>{
   e.preventDefault();
   const submit=e.submitter; const f=e.target;
   run(async()=>{await signIn(f.elements.email.value.trim(),f.elements.password.value,submit?.value==='signup')});
@@ -175,5 +175,5 @@ async function run(fn){
  if(busy)return;busy=true;msg('處理中…');
  try{await fn()}catch(e){msg('操作失敗：'+(e.message||e))}finally{busy=false}
 }
-if(session?.access_token){getToken().then(()=>rpc('initialize',{})).then(reload).catch(()=>{saveSession(null);dashboard=null;catalog=null})}
+show();\nif(session?.access_token){getToken().then(()=>rpc('initialize',{})).then(reload).catch(()=>{saveSession(null);dashboard=null;catalog=null;draw();msg('登入狀態已過期，請重新登入。')})}
 window.xtankAccount={show,hide,refresh:reload,getSignedInPlayerId:()=>dashboard?.profile?.player_id??null};
