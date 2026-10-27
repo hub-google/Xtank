@@ -171,7 +171,8 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
     send(ws,{type:'JOINED',roomId:r.id,playerId:p.id,token:p.token,host:false});lobby(r);
    }else if(m.type==='RESUME'&&!p){
     const found=rooms.get(String(m.roomId||'').toUpperCase());
-    const old=found&&members(found).find(x=>x.id===m.playerId&&x.token===m.token);
+    const old=found&&members(found).find(x=>x.id===m.playerId&&x.token===m.token
+      &&(x.ws||Date.now()-x.lastSeen<=30000));
     if(!old)return send(ws,{type:'ERROR',code:'INVALID_SESSION'});
      if(official){
        try{
@@ -290,7 +291,9 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
      if(r.phase==='finished')lobby(r);
     }
    }
-   if(!r.people.size&&Date.now()-r.created>20000)rooms.delete(r.id);
+   // Do not discard an active round just because every socket timed out: the
+   // authoritative engine must finish it and persist official results first.
+   if(!r.people.size&&r.phase!=='live'&&Date.now()-r.created>20000)rooms.delete(r.id);
   }
  },25);
  ticking.unref?.();
