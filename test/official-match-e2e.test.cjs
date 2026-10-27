@@ -50,6 +50,8 @@ test('two authenticated WebSocket players naturally finish a short official matc
    if(endpoint.endsWith('/rest/v1/rpc/xtank_record_official_match')){
     const body=JSON.parse(opts.body).p_result;
     settlements.push(body);
+    // Simulate real DB latency so premature next-round requests are exercised.
+    await sleep(250);
     return new Response(JSON.stringify({ok:true,match_id:'synthetic-db-match-e2e',players:2,replayed:false}),{status:200});
    }
    return new Response(JSON.stringify({error:'unexpected mock endpoint'}),{status:404});
@@ -85,6 +87,8 @@ test('two authenticated WebSocket players naturally finish a short official matc
   assert.equal(upgraded.itemsRemaining.repair,2,'equipped item quantity is loaded from verified inventory');
   assert.equal(upgraded.itemsRemaining.smoke,0,'unequipped inventory cannot be used in official matches');
   assert(ended.tick>=1.4,'simulated time advanced through real game ticks');
+  send(b,{type:'BACK_TO_LOBBY'});
+  assert.equal((await waitFor(b,'ERROR',{check:m=>m.code==='MATCH_SETTLEMENT_PENDING'})).code,'MATCH_SETTLEMENT_PENDING');
   const resultA=await waitFor(a,'MATCH_SAVED',{timeout:6000});
   const resultB=await waitFor(b,'MATCH_SAVED',{timeout:6000});
   assert.equal(resultA.matchId,'synthetic-db-match-e2e');
