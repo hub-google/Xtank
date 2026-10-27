@@ -389,6 +389,10 @@ function onlineMessage(msg){
   return;
  }
  if(msg.type==='SNAPSHOT'&&online&&networkSlot&&match){
+  if(msg.mapId&&msg.mapId!==match.mapId&&MAPS[msg.mapId]){
+    match.mapId=msg.mapId;match.obstacles=MAPS[msg.mapId].obstacles;
+    buildLevel(match.mapId,match.obstacles);
+  }
   const alias=id=>id===networkSlot?'player':id==='player'?'remote-host':id;
   match.mode=msg.mode;match.time=msg.time;match.tick=msg.tick;
   match.scores=msg.score;match.target=msg.target;match.ended=msg.ended;

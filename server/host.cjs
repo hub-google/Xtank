@@ -18,7 +18,7 @@ async function createHost({port=8787,host='0.0.0.0'}={}){
  try{engine=require('./engine.cjs');}
  catch(e){if(e.code!=='MODULE_NOT_FOUND')throw e;
   engine=await import(pathToFileURL(path.join(__dirname,'../src/simulation.js')).href);}
- const {Game,TANKS}=engine;
+ const {Game,TANKS,MAPS}=engine;
  const rooms=new Map();
  const httpServer=http.createServer((req,res)=>{
   if(req.url==='/health'){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({ok:true,rooms:rooms.size}));}
@@ -27,12 +27,12 @@ async function createHost({port=8787,host='0.0.0.0'}={}){
  const wss=new WebSocketServer({server:httpServer,maxPayload:4096,perMessageDeflate:false});
  const members=r=>[...r.people.values()];
  function broadcast(r,msg){for(const p of members(r))send(p.ws,msg);}
- function lobby(r){broadcast(r,{type:'LOBBY',roomId:r.id,mode:r.mode,phase:r.phase,hostId:r.hostId,
+ function lobby(r){broadcast(r,{type:'LOBBY',roomId:r.id,mode:r.mode,mapId:r.mapId,phase:r.phase,hostId:r.hostId,
   people:members(r).map(p=>({id:p.id,name:p.name,tank:p.tank,connected:!!p.ws,host:p.id===r.hostId}))});}
  function start(r,p){
   if(p.id!==r.hostId||r.phase!=='lobby')return send(p.ws,{type:'ERROR',code:'NOT_HOST_OR_PHASE'});
   if(members(r).filter(v=>v.ws).length<2)return send(p.ws,{type:'ERROR',code:'NEED_TWO_PLAYERS'});
-  const game=new Game({mode:r.mode,selectedTank:'X',size:8,seed:crypto.randomBytes(4).readUInt32LE()});
+  const game=new Game({mode:r.mode,mapId:r.mapId,selectedTank:'X',size:8,seed:crypto.randomBytes(4).readUInt32LE()});
   game.humanIds=new Set();
   r.game=game;r.inputs=new Map();r.phase='live';r.roundId=id();r.events=[];
   const slots=r.mode==='FFA'?[0,1,2,3,4,5,6,7]:[0,4,1,5,2,6,3,7];
@@ -42,7 +42,7 @@ async function createHost({port=8787,host='0.0.0.0'}={}){
    t.kind=x.tank;t.hp=t.maxHp=cfg.hp;t.shield=t.maxShield=cfg.shield;t.ammo={chemical:18,ion_missile:8,mine:5};
    game.humanIds.add(t.id);
    r.inputs.set(t.id,{dx:0,dz:0,aimYaw:0,fire:false,item:0,ability:false});
-   send(x.ws,{type:'START',mode:r.mode,slotId:t.id,roundId:r.roundId,roomId:r.id});
+   send(x.ws,{type:'START',mode:r.mode,mapId:r.mapId,slotId:t.id,roundId:r.roundId,roomId:r.id});
   });
   lobby(r);
  }
@@ -58,6 +58,7 @@ async function createHost({port=8787,host='0.0.0.0'}={}){
     if(rooms.size>=32)return send(ws,{type:'ERROR',code:'SERVER_FULL'});
     let code;do{code=crypto.randomBytes(3).toString('hex').toUpperCase();}while(rooms.has(code));
     r={id:code,mode:['FFA','TDM','FLAG_HOLD'].includes(m.mode)?m.mode:'FFA',
+      mapId:typeof m.mapId==='string'&&Object.hasOwn(MAPS,m.mapId)?m.mapId:'desk',
       phase:'lobby',people:new Map(),hostId:null,game:null,inputs:null,roundId:null,events:[],snapCount:0,created:Date.now()};
     rooms.set(code,r);
     p=makePlayer(m,ws);r.people.set(p.id,p);r.hostId=p.id;
@@ -76,7 +77,7 @@ async function createHost({port=8787,host='0.0.0.0'}={}){
     if(old.ws?.readyState===WebSocket.OPEN)old.ws.close(4001,'replaced');
     r=found;p=old;p.ws=ws;p.token=id()+id();p.seq=-1;p.lastSeen=Date.now();
     send(ws,{type:'JOINED',roomId:r.id,playerId:p.id,token:p.token,host:p.id===r.hostId});
-    lobby(r);if(r.phase==='live')send(ws,{type:'START',mode:r.mode,slotId:p.slot,roundId:r.roundId,roomId:r.id});
+    lobby(r);if(r.phase==='live')send(ws,{type:'START',mode:r.mode,mapId:r.mapId,slotId:p.slot,roundId:r.roundId,roomId:r.id});
    }else if(!p||p.ws!==ws){send(ws,{type:'ERROR',code:'NOT_JOINED'});}
    else if(m.type==='START')start(r,p);
    else if(m.type==='INPUT'&&r.phase==='live'&&p.slot){
@@ -121,7 +122,7 @@ async function createHost({port=8787,host='0.0.0.0'}={}){
     if(r.game.ended)r.phase='finished';
     if(r.snapCount%2===0||r.phase==='finished'){
      const g=r.game;
-     broadcast(r,{type:'SNAPSHOT',mode:g.mode,roundId:r.roundId,time:g.time,tick:g.tick,
+     broadcast(r,{type:'SNAPSHOT',mode:g.mode,mapId:g.mapId,roundId:r.roundId,time:g.time,tick:g.tick,
       ended:g.ended,score:[...g.scores],target:g.target,flag:{...g.flag},
       tanks:g.tanks.map(x=>({...x,ammo:{...x.ammo}})),
       projectiles:g.projectiles.map(x=>({...x})),smokes:g.smokes.map(x=>({...x})),repairFields:g.repairFields.map(x=>({...x})),events:r.events.splice(0)});

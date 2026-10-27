@@ -89,3 +89,17 @@ test('six numbered consumables apply clamped recovery or create timed zones',()=
  g.update(.05,{},{});
  assert.ok(p.hp>before,'team healing field should recover HP');
 });
+
+test('all three battle maps have walkable initial spawn points and a flag spawn',async()=>{
+ const {Game,MAPS}=await import('./simulation.js');
+ for(const mapId of Object.keys(MAPS)){
+  for(const mode of ['FFA','TDM','FLAG_HOLD']){
+   const g=new Game({mapId,mode,selectedTank:'X',seed:123});
+   assert.equal(g.mapId,mapId);
+   assert.ok(g.tanks.every(t=>g.isWalkable(t.x,t.z)),mapId+' spawn blocked');
+   assert.ok(g.isWalkable(g.flag.x,g.flag.z,.8),mapId+' flag blocked');
+   for(let i=0;i<200;i++)g.update(0.05,{dx:1,dz:0,aimYaw:0,fire:false});
+   assert.ok(g.tanks.every(t=>Number.isFinite(t.x)&&Number.isFinite(t.z)));
+  }
+ }
+});

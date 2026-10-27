@@ -71,3 +71,6 @@ X-TANK 是一款最多 8 人同場的 3D 第三人稱即時坦克射擊遊戲。
 開發者使用 Node.js 22+：
 \`npm install\`、\`npm test\`、\`npm run build\`、\`npm run server\`（獨立伺服器）或 \`npm run desktop\`（Electron）。
 
+
+### 2026-10-27 修正：三地圖實際可選
+最新程式已加入「巨型書桌、棋盤戰場、電路板戰場」三地圖選單，連線房間由主機選定地圖、伺服器統一碰撞物理並同步給所有客戶端。若之前的 EXE 點開始沒有反應，請從最新成功的 Actions Build Windows EXE 重新下載；不要沿用舊壓縮檔。
