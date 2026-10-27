@@ -379,6 +379,14 @@ el('returnButton').addEventListener('click',goHome);
 
 function onlineStatus(message){el('networkStatus').textContent=message;if(match&&online&&message.includes('斷線'))el('statusText').textContent=message;}
 function onlineMessage(msg){
+  if(msg.type==='ROOM_CHAT'){
+    const log=el('roomChatMessages'),entry=document.createElement('p');
+    entry.textContent=(msg.name||'玩家')+': '+String(msg.text||'').slice(0,140);
+    log.append(entry);
+    while(log.childElementCount>30)log.firstElementChild.remove();
+    log.scrollTop=log.scrollHeight;
+    return;
+  }
   if(msg.type==='MATCH_SAVED'){
     onlineStatus('官方戰績及獎勵已寫入永久資料庫 · '+msg.matchId);
     if(resultShown&&el('resultStats'))el('resultStats').textContent+='  /  官方獎勵已入帳';
@@ -405,7 +413,7 @@ function onlineMessage(msg){
   }
  if(msg.type==='ERROR'){onlineStatus('伺服器拒絕：'+msg.code);return;}
  if(msg.type==='JOINED'){
-  networkRoomId=msg.roomId;networkReady=false;onlineStatus('已加入房間 '+msg.roomId);
+  networkRoomId=msg.roomId;networkReady=false;el('roomChatMessages').replaceChildren();onlineStatus('已加入房間 '+msg.roomId);
   el('roomCode').value=msg.roomId;el('networkLobby').hidden=false;return;
  }
  if(msg.type==='LOBBY'){
@@ -477,6 +485,11 @@ el('joinRoomButton').addEventListener('click',()=>establishNetwork('JOIN'));
  el('listRoomsButton').addEventListener('click',()=>establishNetwork('LIST_ROOMS'));
  el('quickMatchButton').addEventListener('click',()=>establishNetwork('QUICK_MATCH'));
  el('readyNetworkButton').addEventListener('click',()=>online?.send({type:'READY',ready:!networkReady}));
+ el('roomChatForm').addEventListener('submit',event=>{
+   event.preventDefault();
+   const input=el('roomChatInput'),text=input.value.trim();
+   if(text&&online?.send({type:'CHAT',text}))input.value='';
+ });
 el('startNetworkButton').addEventListener('click',()=>online?.send({type:'START'}));
 el('leaveNetworkButton').addEventListener('click',()=>{
  online?.close();online=null;networkSlot=null;el('networkLobby').hidden=true;
