@@ -469,6 +469,7 @@ async function establishNetwork(action){
 el('makeRoomButton').addEventListener('click',()=>establishNetwork('CREATE'));
 el('joinRoomButton').addEventListener('click',()=>establishNetwork('JOIN'));
  el('listRoomsButton').addEventListener('click',()=>establishNetwork('LIST_ROOMS'));
+ el('quickMatchButton').addEventListener('click',()=>establishNetwork('QUICK_MATCH'));
  el('readyNetworkButton').addEventListener('click',()=>online?.send({type:'READY',ready:!networkReady}));
 el('startNetworkButton').addEventListener('click',()=>online?.send({type:'START'}));
 el('leaveNetworkButton').addEventListener('click',()=>{
