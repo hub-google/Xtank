@@ -9,6 +9,7 @@ services:
       XTANK_OFFICIAL_MODE: "1"
       PORT: "8787"
       BIND_HOST: 0.0.0.0
+      XTANK_SETTLEMENT_DIR: /data/settlements
       SUPABASE_URL: ${SUPABASE_URL:?Set the HTTPS Supabase URL}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?Set backend-only secret in the server environment}
     ports:
@@ -17,3 +18,8 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+
+    volumes:
+      - xtank-settlements:/data/settlements
+volumes:
+  xtank-settlements:
