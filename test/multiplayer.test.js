@@ -221,3 +221,28 @@ test('room owner resumes as host after being the only connected player',async t=
  assert.equal((await message(resumed,'START')).roomId,created.roomId);
  assert.equal((await message(second,'START')).roomId,created.roomId);
 });
+
+test('authoritative room catches up after a short blocked Node event loop',async t=>{
+ const host=await createHost({host:'127.0.0.1',port:0});
+ t.after(async()=>host.close());
+ const url='ws://127.0.0.1:'+host.port;
+ const a=await connect(url),b=await connect(url);
+ t.after(()=>{a.terminate();b.terminate()});
+ send(a,{type:'CREATE',name:'Timekeeper',tank:'X',mode:'FFA'});
+ const joined=await message(a,'JOINED');await message(a,'LOBBY');
+ send(b,{type:'JOIN',roomId:joined.roomId,name:'ClockObserver',tank:'D'});
+ await message(b,'JOINED');await message(b,'LOBBY');await message(a,'LOBBY');
+ send(a,{type:'START'});
+ await message(a,'START');await message(b,'START');
+ const before=await message(a,'SNAPSHOT');
+ // Deliberate short event-loop pause: a simple setInterval(50) without
+ // catch-up would advance only ~0.10-0.15s after this 250ms stall.
+ const stop=require('node:perf_hooks').performance.now()+250;
+ while(require('node:perf_hooks').performance.now()<stop){}
+ await new Promise(ok=>setTimeout(ok,180));
+ const frames=a.messages.filter(x=>x.type==='SNAPSHOT');
+ assert(frames.length>0,'authoritative snapshots resumed after pause');
+ const latest=frames.at(-1);
+ assert(latest.tick-before.tick>=.2,'simulation must catch up lost ticks; before='+
+   before.tick+', after='+latest.tick);
+});
