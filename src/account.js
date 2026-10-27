@@ -83,7 +83,7 @@ function authView(){
  <div class="xtank-actions"><button type="submit" name="mode" value="login">登入</button><button type="submit" name="mode" value="signup">註冊</button></div>
  </form>
  <p>遊客可直接關閉此視窗，使用既有的單機練習模式；正式資料保存需登入。</p>
- <p>測試帳號透過 Supabase 私有 `xtank.qa_credentials` 查詢，密碼不公開在 GitHub。</p></div>`;
+ <p>測試帳號透過 Supabase 私有 QA 資料表查詢，密碼不公開在 GitHub。</p></div>`;
  $('#xtankAuthForm').addEventListener('submit',e=>{
   e.preventDefault();
   const submit=e.submitter; const f=e.target;
