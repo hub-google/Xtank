@@ -15,7 +15,9 @@ const sanitizeInput=m=>{
   weapon:['hurricane','death_knight','vulcan','plasma','chemical','ion_missile','mine'].includes(m.weapon)?m.weapon:undefined,
   item:[1,2,3,4,5,6].includes(m.item)?m.item:0,ability:m.ability===true};
 };
-async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
+async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxConnections=512,unjoinedTimeoutMs=45000}={}){
+ if(!Number.isSafeInteger(maxConnections)||maxConnections<1||maxConnections>4096)throw Error('INVALID_CONNECTION_CAPACITY');
+ if(!Number.isSafeInteger(unjoinedTimeoutMs)||unjoinedTimeoutMs<40||unjoinedTimeoutMs>300000)throw Error('INVALID_JOIN_TIMEOUT');
  // Controlled accelerated *full* simulation for automated WSS integration tests only.
  // Client input cannot change the time limit. Production rejects this option.
  if(testRoundSeconds!==null && (process.env.NODE_ENV!=='test'||!Number.isFinite(testRoundSeconds)
@@ -122,7 +124,13 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
   lobby(r);
  }
  wss.on('connection',ws=>{
+  // Limit anonymous sockets before they can use game / authentication state.
+  if(wss.clients.size>maxConnections){ws.close(1013,'server full');return;}
   let p=null,r=null,received=0,windowStart=Date.now();
+  const joinTimeout=setTimeout(()=>{
+   if(!p&&ws.readyState===WebSocket.OPEN)ws.close(1008,'join timeout');
+  },unjoinedTimeoutMs);
+  joinTimeout.unref?.();
   ws.isAlive=true;ws.on('pong',()=>{ws.isAlive=true;});
   ws.on('message',async raw=>{
    if(Date.now()-windowStart>1000){received=0;windowStart=Date.now();}
@@ -248,6 +256,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
    }else if(m.type==='PING')send(ws,{type:'PONG',serverTime:Date.now()});
   });
   ws.on('close',()=>{
+   clearTimeout(joinTimeout);
    if(!p||p.ws!==ws)return;
    p.ws=null;p.lastSeen=Date.now();
    if(r.inputs&&p.slot)r.inputs.set(p.slot,{dx:0,dz:0,aimYaw:0,fire:false});

@@ -414,7 +414,15 @@ function updateHUD(){
   if(!p.alive)el('statusText').textContent='重生倒數 '+Math.ceil(p.respawn)+' 秒';
   else if(match.mode==='FLAG_HOLD'&&match.flag.holder===p.id)el('statusText').textContent='持旗中 '+match.flag.holdTime.toFixed(1)+'/15 秒';
   else if(p.abilityTime>0)el('statusText').textContent='技能 '+TANKS[p.kind].ability+' '+p.abilityTime.toFixed(1)+'s';
-  else el('statusText').textContent='F1 修理('+p.repair+')　F2 加速　F3 護盾('+p.shieldCells+')　F4 雷達　F5 煙霧　F6 團隊修復　E 技能';
+  else el('statusText').textContent=[
+   `${displayCode(bindings.item1)} 修理(${p.repair})`,
+   `${displayCode(bindings.item2)} 加速`,
+   `${displayCode(bindings.item3)} 護盾(${p.shieldCells})`,
+   `${displayCode(bindings.item4)} 雷達`,
+   `${displayCode(bindings.item5)} 煙霧`,
+   `${displayCode(bindings.item6)} 團隊修復`,
+   `${displayCode(bindings.ability)} 技能`
+  ].join('　');
   const weapons=weaponKeys.map((k,i)=>{
     const w=WEAPONS[k],ammo=w.ammo<0?'∞':p.ammo[k]||0;
      const locked=officialWeaponAllowlist&&!officialWeaponAllowlist.has(k);
@@ -636,7 +644,7 @@ window.addEventListener('keydown',e=>{
     Object.keys(bindings).some(action=>(action.startsWith('item')||action==='camera')&&bindings[action]===e.code)))return;
   keyboard.add(e.code);
   if(e.code===bindings.pause&&match&&!resultShown){paused=!paused;el('pauseBadge').hidden=!paused;fireHeld=false;}
-  if(e.code==='Escape'&&match&&!resultShown){paused=!paused;el('pauseBadge').hidden=!paused;fireHeld=false;keyboard.clear();itemQueue=0;abilityQueue=false;el('pauseTitle').textContent=online?'選單 · 連線對局持續進行':'暫停中 · 按 P 繼續';}
+  if(e.code==='Escape'&&match&&!resultShown){paused=!paused;el('pauseBadge').hidden=!paused;fireHeld=false;keyboard.clear();itemQueue=0;abilityQueue=false;el('pauseTitle').textContent=online?'選單 · 連線對局持續進行':`暫停中 · 按 ${displayCode(bindings.pause)} 繼續`;}
   if(!match||paused)return;
   if(e.code===bindings.camera)cycleCamera();
   for(let index=1;index<=7;index++)if(e.code===bindings['weapon'+index]){
