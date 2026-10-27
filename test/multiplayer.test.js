@@ -158,3 +158,24 @@ test('quick match joins the busiest compatible public room and creates a new roo
  const third=await message(c,'JOINED');
  assert.notEqual(third.roomId,first.roomId);
 });
+
+test('room lobby chat delivers escaped text to players, refuses invalid content and throttles spam',async t=>{
+ const host=await createHost({host:'127.0.0.1',port:0});
+ t.after(async()=>host.close());
+ const url='ws://127.0.0.1:'+host.port;
+ const a=await connect(url),b=await connect(url);
+ t.after(()=>{a.terminate();b.terminate()});
+ send(a,{type:'CREATE',name:'RoomHost',tank:'X',mode:'FFA'});
+ const joined=await message(a,'JOINED');await message(a,'LOBBY');
+ send(b,{type:'JOIN',roomId:joined.roomId,name:'Guest',tank:'X'});
+ await message(b,'JOINED');await message(b,'LOBBY');await message(a,'LOBBY');
+ const safeText='<script>alert(1)</script>';
+ send(a,{type:'CHAT',text:safeText});
+ const x=await message(a,'ROOM_CHAT'),y=await message(b,'ROOM_CHAT');
+ assert.equal(x.text,safeText);assert.equal(y.text,safeText);
+ assert.equal(x.name,'RoomHost');
+ send(a,{type:'CHAT',text:'quick spam'});
+ assert.equal((await message(a,'ERROR')).code,'CHAT_RATE_LIMIT');
+ send(b,{type:'CHAT',text:'bad\nline'});
+ assert.equal((await message(b,'ERROR')).code,'INVALID_CHAT');
+});
