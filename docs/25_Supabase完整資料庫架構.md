@@ -1,11 +1,12 @@
 # X-TANK｜Supabase 完整資料庫架構（已部署）
 > 2026-10-27 / Supabase **Game** 專案 / 私有 schema: `xtank`  
-> 實際部署 **62 張資料表、62 張 RLS 啟用**。種子資料：8 車、7 武器、6 道具、3 張地圖、3 模式、5 技能、1 種金幣及 1 版規則。  
+> 實際部署 **62 張資料表、62 張 RLS 啟用**。種子資料：8 車、7 武器、6 道具、3 張地圖、3 模式、5 技能、3 項初始商店商品、1 種金幣及 1 版規則。  
 > 此文件代表資料庫已建好，**不代表 EXE 登入、購物或結算 UI 已串接**。
 
 ## 1. 唯一規格與正式 SQL
 - [完整建表 migration：62 表、索引、約束、RLS、初始遊戲資料](../supabase/migrations/20261027_xtank_62_table_game_schema_v1.sql)
 - [交易函式 migration：玩家建檔、金幣、經驗、商店、官方對戰結算](../supabase/migrations/20261027_xtank_secure_economy_procedures_v1.sql)
+- [修正商品同時購買的交易一致性，及新增 3 項初始商品](../supabase/migrations/20261027_xtank_shop_checkout_consistency_v2.sql)
 - 使用順序：Schema → Procedures；既有 Game 專案已部署，不須再次套用。搬遷新專案時按順序執行。
 - 以 migration 為約束、索引、資料型別與預設值的**權威來源**；下表欄位由目前 Supabase `information_schema` 直接查詢後列出。
 
