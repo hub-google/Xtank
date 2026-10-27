@@ -151,6 +151,20 @@ async function testMockedNativeAccount(p){
  const p=await launch(0);
  await step('A-portable-exe-home-WebGL',p,async()=>{assert(await p.isVisible('#startMenu'));const s=await state(p);assert(s.render.triangles>100);});
  await step('A-account-frontend-mocked-backend',p,async()=>testMockedNativeAccount(p));
+ await step('A-five-camera-modes',p,async()=>{
+  await start(p,'X','FFA','desk');
+  const initial=(await state(p)).camera;
+  const positions=[];
+  for(let i=1;i<=5;i++){
+   await p.keyboard.press('c');
+   await delay(400);
+   assert((await p.locator('#cameraModeBadge').textContent()).includes(i+'/5'));
+   positions.push((await state(p)).camera);
+  }
+  assert.equal(new Set(positions.map(x=>JSON.stringify(x))).size,5,'camera transforms must differ');
+  assert.notDeepEqual(initial,positions[0]);
+  await home(p);
+ });
  await step('A-custom-keybindings-persist-reload-reset',p,async()=>{
   await home(p);
   await p.locator('.control-settings summary').click();

@@ -1,4 +1,5 @@
 import {battleAudio} from './audio.js';
+import {CAMERA_VIEWS,cameraPose} from './camera-presets.js';
 import {DEFAULT_BINDINGS,ACTION_LABELS,isAllowedCode,assignBinding,loadBindings,saveBindings,displayCode} from './controls.js';
 import * as THREE from 'three';
 import './style.css';
@@ -178,6 +179,37 @@ renderBindings();
 let fireHeld=false, itemQueue=0, abilityQueue=false, mouseX=innerWidth*.5,mouseY=innerHeight*.53, selectedWeapon=0;
 const raycaster=new THREE.Raycaster(), ground=new THREE.Plane(new THREE.Vector3(0,1,0),-.2), cursor=new THREE.Vector3();
 const cameraTarget=new THREE.Vector3(24,0,16);
+const cameraRaycaster=new THREE.Raycaster();
+let cameraMode=-1; // legacy overview is preserved until the player first switches.
+function cycleCamera(){
+ cameraMode=(cameraMode+1)%CAMERA_VIEWS.length;
+ el('cameraModeBadge').textContent='視角 '+(cameraMode+1)+'/5 · '+CAMERA_VIEWS[cameraMode].name;
+}
+function updateFollowCamera(player,dt){
+ if(cameraMode<0){
+  camera.position.lerp(new THREE.Vector3(player.x,17,player.z+17),Math.min(1,dt*4.7));
+  cameraTarget.lerp(new THREE.Vector3(player.x,.85,player.z),Math.min(1,dt*5.2));
+  camera.lookAt(cameraTarget);
+  return;
+ }
+ const pose=cameraPose(player,cameraMode);
+ const desired=new THREE.Vector3(pose.position.x,pose.position.y,pose.position.z);
+ const target=new THREE.Vector3(pose.target.x,pose.target.y,pose.target.z);
+ cameraTarget.lerp(target,Math.min(1,dt*5.2));
+ if(cameraMode!==4){
+  const direction=desired.clone().sub(cameraTarget);
+  const distance=direction.length();
+  if(distance>.01){
+   cameraRaycaster.set(cameraTarget,direction.normalize());
+   cameraRaycaster.far=distance;
+   const wall=cameraRaycaster.intersectObjects(levelGroup.children,true)
+    .find(hit=>hit.distance>.05&&hit.distance<distance);
+   if(wall)desired.copy(cameraTarget).addScaledVector(direction,Math.max(.55,wall.distance-.4));
+  }
+ }
+ camera.position.lerp(desired,Math.min(1,dt*7));
+ camera.lookAt(cameraTarget);
+}
 const weaponKeys=['hurricane','death_knight','vulcan','plasma','chemical','ion_missile','mine'];
 function tankModel(t){
   const group=new THREE.Group();
@@ -240,7 +272,8 @@ function start(){
     match=new Game({mode:el('modeSelect').value,selectedTank:el('tankSelect').value,mapId:el('mapSelect').value,seed:Date.now()>>>0});
     buildLevel(match.mapId,match.obstacles);
     for(const t of match.tanks)models.set(t.id,tankModel(t));
-    resultShown=false;accum=0;keyboard.clear();fireHeld=false;itemQueue=0;abilityQueue=false;selectedWeapon=0;
+    cameraMode=-1;el('cameraModeBadge').textContent='俯瞰總覽 · C 切換視角';
+   resultShown=false;accum=0;keyboard.clear();fireHeld=false;itemQueue=0;abilityQueue=false;selectedWeapon=0;
     el('startMenu').hidden=true;el('resultMenu').hidden=true;el('hud').hidden=false;el('pauseBadge').hidden=true;
     camera.position.set(4,18,31);cameraTarget.set(4,0,13);
     viewUpdate(0);renderer.render(scene,camera);
@@ -279,7 +312,7 @@ function viewUpdate(dt){
   for(const t of match.tanks){
     let m=models.get(t.id);
     if(!m){m=tankModel(t);models.set(t.id,m);}
-    m.visible=t.alive;m.position.set(t.x,.04,t.z);
+    m.visible=t.alive&&!(cameraMode===4&&t.id==='player');m.position.set(t.x,.04,t.z);
     m.rotation.y=t.yaw;
     m.userData.turret.rotation.y=t.aimYaw-t.yaw;
     m.userData.teamRing.material.color.setHex(match.mode==='FFA'?0x78bdff:(t.team===0?0xff655d:0x65a9fc));
@@ -317,11 +350,7 @@ function viewUpdate(dt){
     flagGroup.position.set(match.flag.x,.03,match.flag.z);
     flagGroup.children[1].rotation.y=Math.sin(performance.now()*.003)*.1;
   }
-  const p=match.tanks[0];
-  const follow=new THREE.Vector3(p.x,17,p.z+17);
-  camera.position.lerp(follow,Math.min(1,dt*4.7));
-  cameraTarget.lerp(new THREE.Vector3(p.x,.85,p.z),Math.min(1,dt*5.2));
-  camera.lookAt(cameraTarget);
+  updateFollowCamera(match.tanks[0],dt);
 }
 function aimYaw(){
   const r=renderer.domElement.getBoundingClientRect();
@@ -604,11 +633,12 @@ window.addEventListener('keydown',e=>{
   if(e.target instanceof HTMLElement&&e.target.closest('input,textarea,select,[contenteditable="true"]'))return;
   if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();
   if(e.repeat&&(e.code==='Escape'||e.code===bindings.pause||e.code===bindings.ability||
-    Object.keys(bindings).some(action=>action.startsWith('item')&&bindings[action]===e.code)))return;
+    Object.keys(bindings).some(action=>(action.startsWith('item')||action==='camera')&&bindings[action]===e.code)))return;
   keyboard.add(e.code);
   if(e.code===bindings.pause&&match&&!resultShown){paused=!paused;el('pauseBadge').hidden=!paused;fireHeld=false;}
   if(e.code==='Escape'&&match&&!resultShown){paused=!paused;el('pauseBadge').hidden=!paused;fireHeld=false;keyboard.clear();itemQueue=0;abilityQueue=false;el('pauseTitle').textContent=online?'選單 · 連線對局持續進行':'暫停中 · 按 P 繼續';}
   if(!match||paused)return;
+  if(e.code===bindings.camera)cycleCamera();
   for(let index=1;index<=7;index++)if(e.code===bindings['weapon'+index]){
     const candidate=index-1;
     if(!officialWeaponAllowlist||officialWeaponAllowlist.has(weaponKeys[candidate])){
