@@ -1,0 +1,9 @@
+.xtank-admin-layer[hidden],#xtankAdminOpen[hidden]{display:none!important}
+.xtank-admin-layer{position:fixed;inset:0;z-index:600;background:#000b;display:flex;align-items:center;justify-content:center;padding:10px}
+.xtank-admin-dialog{background:#152537;color:#f2f5f9;width:min(1000px,96vw);max-height:95vh;overflow:auto;border:1px solid #7292aa;border-radius:12px;padding:20px;font:14px system-ui,'Microsoft JhengHei'}
+.xtank-admin-dialog header{display:flex;align-items:center;justify-content:space-between}
+.xtank-admin-dialog article{margin:8px 0;padding:12px;background:#223c52;border-radius:8px;overflow-wrap:anywhere}
+.xtank-admin-dialog input,.xtank-admin-dialog select{display:block;padding:9px;width:100%;margin:5px 0;color:#fff;background:#102c44;border:1px solid #6b8da5;border-radius:7px}
+.xtank-admin-dialog label{display:block;margin:10px 0}
+.xtank-admin-dialog button,#xtankAdminOpen{padding:10px;background:#fbd17b;border:0;border-radius:7px;cursor:pointer}
+#xtankAdminStatus{color:#fbd17b}
