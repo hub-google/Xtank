@@ -171,3 +171,12 @@ X-TANK 是一款最多 8 人同場的 3D 第三人稱即時坦克射擊遊戲。
 
 - [獨立 Windows QA Run #151](https://github.com/hub-google/Xtank/actions/runs/40506020053)：驗收分支將獨立完成 Node、Docker、EXE、72 組 GUI，不因主線持續開發而取消。
 - 此分支**不是正式版本標籤或已通過證書**；只能在 GitHub Actions job 成功且逐項證據確認後，標示實際 PASS。
+
+
+## 2026-10-27 原生 Windows 72 組矩陣失敗修復（最新）
+- 已檢視失敗的 [Actions #40506020053](https://github.com/hub-google/Xtank/actions/runs/40506020053)：45 項 Node 測試及 EXE 封裝成功，原生 GUI 有 `B-D-FFA-desk`（能力驗證）與 `B-D-FLAG_HOLD-chess`（無法再次找到開始按鈕）失敗，因此該次**整體 FAIL**。
+- [4f61522](https://github.com/hub-google/Xtank/commit/4f61522a777c8fef7fe3a2c2136948036a142811) 修復每次切換地圖與場次未釋放 WebGL 幾何和材質的資源洩漏，包含坦克、子彈、煙霧、修復範圍與命中特效；共享材質保留不做誤釋放。
+- [0b4cc37](https://github.com/hub-google/Xtank/commit/0b4cc374c58e181f9580170fda508c64f09cf534) 增加原生 EXE 的 GPU 幾何數量上界檢查、技能觸發觀察窗口、鍵位重新載入驗證，以及 QA 失敗後對下一場的恢復。
+- **驗收中**：[最新 Windows QA #40510935317](https://github.com/hub-google/Xtank/actions/runs/40510935317)：Node 單元測試、Vite 建置、Portable EXE 封裝及 Docker 健康測試通過；完整 72 組 GUI 結論待定，不能列為 PASS。
+- 為避免取消上述正在執行的完整矩陣，五鏡頭功能先放在獨立 [feat/five-gameplay-cameras-20261027](https://github.com/hub-google/Xtank/tree/feat/five-gameplay-cameras-20261027) 分支，已進行程式語法檢查但仍需實際 Windows EXE 測試，**尚未併入 main**。
+- 尚缺正式公網 WSS 常駐服務、真實跨網 Windows 雙客戶端至 Supabase 持久化結算的完整驗收、正式服務資安/耐久驗收，以及未完成的歷史特色與內容。**正式版仍未完成**。
