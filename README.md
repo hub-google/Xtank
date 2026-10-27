@@ -74,3 +74,11 @@ X-TANK 是一款最多 8 人同場的 3D 第三人稱即時坦克射擊遊戲。
 
 ### 2026-10-27 修正：三地圖實際可選
 最新程式已加入「巨型書桌、棋盤戰場、電路板戰場」三地圖選單，連線房間由主機選定地圖、伺服器統一碰撞物理並同步給所有客戶端。若之前的 EXE 點開始沒有反應，請從最新成功的 Actions Build Windows EXE 重新下載；不要沿用舊壓縮檔。
+
+
+## 完整產品規格、Supabase 永久資料庫及 EXE 全流程 QA（2026-10-27）
+
+- [24｜X-TANK 完整遊戲 PRD](docs/24_完整遊戲PRD.md)：從開 EXE、登入、選坦克、機庫、商店、房間、戰鬥、結算、永久成長到退出的完整產品需求及驗收。
+- [25｜Supabase 完整資料庫架構](docs/25_Supabase完整資料庫架構.md)：Game 專案已部署 `xtank` 62 張資料表、全部 RLS、遊戲內容種子及可信交易程序；尚未把玩家 UI 和後端 API 串接。
+- [26｜完整遊戲端到端測試計畫](docs/26_完整遊戲端到端測試計畫.md)：Windows 原生 EXE、多人體驗、登入、經濟、重連、戰績、作弊、效能及逐項證據的完整 QA 契約。
+- [Supabase Migration SQL](supabase/migrations/20261027_xtank_62_table_game_schema_v1.sql)；[交易程序](supabase/migrations/20261027_xtank_secure_economy_procedures_v1.sql)；[商店一致性修正與初始商品](supabase/migrations/20261027_xtank_shop_checkout_consistency_v2.sql)。
