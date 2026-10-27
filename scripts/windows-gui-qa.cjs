@@ -37,13 +37,25 @@ async function launch(i){
  p.on('console',m=>{if(m.type()==='error')fs.appendFileSync(path.join(out,'console-errors.log'),m.text()+'\n');});
  await wait(p,()=>window.xtankDiagnostics?.().render.frame>1);if(await p.locator('#xtankAccountOverlay').count() && await p.isVisible('#xtankAccountOverlay')) await p.click('#xtankGuestContinue');try{execFileSync('powershell',['-NoProfile','-Command',`Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $b=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $im=New-Object System.Drawing.Bitmap($b.Width,$b.Height); $g=[System.Drawing.Graphics]::FromImage($im); $g.CopyFromScreen($b.Location,[System.Drawing.Point]::Empty,$b.Size); $im.Save('${path.join(out,'desktop-'+i+'.png').replace(/'/g,"''")}'); $g.Dispose(); $im.Dispose();`]);}catch(e){fs.writeFileSync(path.join(out,'desktop-capture-error.txt'),e.message);}return p;
 }
+async function ensureGuestEntry(p){
+ // The previous account test deliberately logs out. A visible auth overlay
+ // intercepts clicks on subsequent scenarios; explicitly choose guest mode.
+ const overlay=p.locator('#xtankAccountOverlay');
+ if(!await overlay.count()||!await overlay.isVisible())return;
+ const guest=p.locator('#xtankGuestContinue');
+ await guest.waitFor({state:'visible',timeout:10000});
+ await guest.click();
+ await overlay.waitFor({state:'hidden',timeout:10000});
+}
 async function home(p){
+ await ensureGuestEntry(p);
  let s;
  try{s=await state(p)}catch(error){
   // Prior scenario remains FAIL. Recover only to test subsequent cases independently.
   console.error('Renderer diagnostics unavailable, attempting reload:',error.message);
   await p.reload({waitUntil:'domcontentloaded'});
   await wait(p,()=>typeof window.xtankDiagnostics==='function');
+  await ensureGuestEntry(p);
   s=await state(p);
  }
  if(s?.match){
@@ -55,6 +67,7 @@ async function home(p){
  }
  await p.waitForSelector('#startMenu:not([hidden])');
  await wait(p,()=>typeof window.xtankDiagnostics==='function');
+ await ensureGuestEntry(p);
 }
 async function start(p,tank='X',mode='FFA',map='desk'){
  await home(p);await p.selectOption('#tankSelect',tank);await p.selectOption('#modeSelect',mode);await p.selectOption('#mapSelect',map);await p.click('#startButton');await wait(p,()=>window.xtankDiagnostics().match?.tick>.2);
@@ -177,6 +190,7 @@ async function testMockedNativeAccount(p){
   assert.equal(JSON.parse(saved).forward,'ArrowUp');
   await p.reload({waitUntil:'domcontentloaded'});
   await wait(p,()=>window.xtankDiagnostics?.().render.frame>1);
+  await ensureGuestEntry(p);
   assert.equal(await p.locator('[aria-label="修改前進的快捷鍵"]').textContent(),'↑');
   await p.locator('.control-settings summary').click();
   await p.click('#resetControlBindings');
