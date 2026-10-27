@@ -112,6 +112,7 @@ let models=new Map(), bulletModels=new Map(), zoneModels=new Map(), flagGroup=nu
 let paused=true,resultShown=false,last=performance.now(),accum=0;
 let online=null,networkSlot=null,networkSeq=0,networkAccumulator=0,networkRoomId=null;
 let networkReady=false;
+let officialWeaponAllowlist=null;
 const keyboard = new Set();
 let fireHeld=false, itemQueue=0, abilityQueue=false, mouseX=innerWidth*.5,mouseY=innerHeight*.53, selectedWeapon=0;
 const raycaster=new THREE.Raycaster(), ground=new THREE.Plane(new THREE.Vector3(0,1,0),-.2), cursor=new THREE.Vector3();
@@ -186,7 +187,7 @@ function start(){
   } catch(e){console.error(e);el('matchInfo').textContent='啟動失敗：'+e.message;}
 }
 function goHome(){
-  online?.close();online=null;networkSlot=null;networkRoomId=null;
+  online?.close();online=null;networkSlot=null;networkRoomId=null;officialWeaponAllowlist=null;
   el('networkLobby').hidden=true;
   paused=true;match=null;clearModels();el('startMenu').hidden=false;el('resultMenu').hidden=true;
   el('hud').hidden=true;el('pauseBadge').hidden=true;el('matchInfo').textContent='未開始';
@@ -314,7 +315,8 @@ function updateHUD(){
   else el('statusText').textContent='F1 修理('+p.repair+')　F2 加速　F3 護盾('+p.shieldCells+')　F4 雷達　F5 煙霧　F6 團隊修復　E 技能';
   const weapons=weaponKeys.map((k,i)=>{
     const w=WEAPONS[k],ammo=w.ammo<0?'∞':p.ammo[k]||0;
-    return '<div class="slot '+(k===p.weapon?'selected':'')+'">'+(i+1)+'. '+w.name+'<small>彈量 '+ammo+'</small></div>';
+     const locked=officialWeaponAllowlist&&!officialWeaponAllowlist.has(k);
+    return '<div class="slot '+(k===p.weapon?'selected':'')+(locked?' locked':'')+'">'+(i+1)+'. '+w.name+'<small>'+(locked?'未配裝':'彈量 '+ammo)+'</small></div>';
   }).join('');
   el('weaponList').innerHTML=weapons;
   drawMap();
@@ -417,6 +419,7 @@ function onlineMessage(msg){
  if(msg.type==='START'){
   qaEvents.length=0;
   networkSlot=msg.slotId;networkSeq=0;networkAccumulator=0;
+   officialWeaponAllowlist=msg.official&&Array.isArray(msg.allowedWeapons)?new Set(msg.allowedWeapons):null;
   clearModels();
   match=new Game({mode:msg.mode||el('modeSelect').value,selectedTank:el('tankSelect').value,mapId:msg.mapId||'desk'});
   buildLevel(match.mapId,match.obstacles);
@@ -424,7 +427,8 @@ function onlineMessage(msg){
   match.tanks=[];match.projectiles=[];
   match.mode=msg.mode||match.mode;
   paused=false;resultShown=false;accum=0;
-  keyboard.clear();fireHeld=false;itemQueue=0;abilityQueue=false;selectedWeapon=0;
+  keyboard.clear();fireHeld=false;itemQueue=0;abilityQueue=false;
+  selectedWeapon=officialWeaponAllowlist?Math.max(0,weaponKeys.findIndex(k=>officialWeaponAllowlist.has(k))):0;
   el('startMenu').hidden=true;el('resultMenu').hidden=true;el('hud').hidden=false;
   el('pauseBadge').hidden=true;
   onlineStatus('已進入真正的連線房間 '+msg.roomId);
@@ -488,7 +492,11 @@ window.addEventListener('keydown',e=>{
   if(e.code==='Escape'&&match&&!resultShown){paused=!paused;el('pauseBadge').hidden=!paused;fireHeld=false;keyboard.clear();itemQueue=0;abilityQueue=false;el('pauseTitle').textContent=online?'選單 · 連線對局持續進行':'暫停中 · 按 P 繼續';}
   if(!match||paused)return;
   if(/^Digit[1-7]$/.test(e.code)){
-    selectedWeapon=Number(e.code.slice(-1))-1;match.tanks[0].weapon=weaponKeys[selectedWeapon];
+    const candidate=Number(e.code.slice(-1))-1;
+     if(!officialWeaponAllowlist||officialWeaponAllowlist.has(weaponKeys[candidate])){
+       selectedWeapon=candidate;
+       if(match.tanks[0])match.tanks[0].weapon=weaponKeys[selectedWeapon];
+     }else el('statusText').textContent='此武器尚未裝備，請到機庫配裝';
   }
   if(e.code==='F1')itemQueue=1;
   if(e.code==='F2')itemQueue=2;
