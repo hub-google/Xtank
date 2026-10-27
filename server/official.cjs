@@ -32,6 +32,10 @@ function officialService(){
       if(!dash.tanks?.some(t=>t.tank_id===tankId))throw Error('TANK_NOT_OWNED');
       const active=dash.loadouts?.find(l=>l.tank_id===tankId&&l.is_selected);
       const equipment=active?dash.slots.filter(s=>s.loadout_id===active.loadout_id&&s.slot_type==='weapon').map(s=>s.weapon_id):['hurricane'];
+      const free=new Set(['hurricane','death_knight','vulcan','plasma']);
+      const owned=new Set((dash.inventory||[]).filter(v=>v.quantity>0&&v.weapon_id).map(v=>v.weapon_id));
+      if(equipment.some(weapon=>!free.has(weapon)&&!owned.has(weapon)))
+        throw Error('LOADOUT_WEAPON_NOT_OWNED');
       const upgrades={speed:0,attack:0,defense:0,energy:0,collision:0};
       for(const v of (dash.upgrades||[])){
         if(v.tank_id===tankId&&Object.hasOwn(upgrades,v.attribute)&&Number.isInteger(v.level))
