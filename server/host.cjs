@@ -176,6 +176,8 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
      }
     if(old.ws?.readyState===WebSocket.OPEN)old.ws.close(4001,'replaced');
     r=found;p=old;p.ws=ws;p.token=id()+id();p.seq=-1;p.lastSeen=Date.now();
+    // If the room was temporarily empty, recover its host when the owner reconnects.
+    if(!r.hostId||!members(r).some(member=>member.id===r.hostId&&member.ws))r.hostId=p.id;
     send(ws,{type:'JOINED',roomId:r.id,playerId:p.id,token:p.token,host:p.id===r.hostId});
     lobby(r);if(r.phase==='live')send(ws,{type:'START',mode:r.mode,mapId:r.mapId,slotId:p.slot,roundId:r.roundId,roomId:r.id,official:!!official,allowedWeapons:official?[...p.allowedWeapons]:null});
    }else if(!p||p.ws!==ws){send(ws,{type:'ERROR',code:'NOT_JOINED'});}
