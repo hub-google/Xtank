@@ -429,7 +429,7 @@ function onlineMessage(msg){
  }
 }
 async function establishNetwork(action){
- const accessToken=await window.xtankAccount?.getAccessToken?.().catch(()=>null);
+ const accessToken=window.xtankAccount?.getAccessToken?await window.xtankAccount.getAccessToken().catch(()=>null):null;
  online?.close();match=null;paused=true;networkSlot=null;
  online=new OnlineConnection(onlineMessage,onlineStatus);
  try{
