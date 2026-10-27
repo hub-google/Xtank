@@ -33,7 +33,18 @@ async function launch(i){
  p.on('console',m=>{if(m.type()==='error')fs.appendFileSync(path.join(out,'console-errors.log'),m.text()+'\n');});
  await wait(p,()=>window.xtankDiagnostics?.().render.frame>1);try{execFileSync('powershell',['-NoProfile','-Command',`Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $b=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $im=New-Object System.Drawing.Bitmap($b.Width,$b.Height); $g=[System.Drawing.Graphics]::FromImage($im); $g.CopyFromScreen($b.Location,[System.Drawing.Point]::Empty,$b.Size); $im.Save('${path.join(out,'desktop-'+i+'.png').replace(/'/g,"''")}'); $g.Dispose(); $im.Dispose();`]);}catch(e){fs.writeFileSync(path.join(out,'desktop-capture-error.txt'),e.message);}return p;
 }
-async function home(p){await p.reload();await wait(p,()=>typeof window.xtankDiagnostics==='function');}
+async function home(p){
+ const s=await state(p);
+ if(s?.match){
+  if(await p.isVisible('#resultMenu'))await p.click('#returnButton');
+  else if(await p.locator('#pauseHomeButton').count()){
+   if(!await p.isVisible('#pauseBadge'))await p.keyboard.press('Escape');
+   await p.click('#pauseHomeButton');
+  }else await p.reload();
+ }
+ await p.waitForSelector('#startMenu:not([hidden])');
+ await wait(p,()=>typeof window.xtankDiagnostics==='function');
+}
 async function start(p,tank='X',mode='FFA',map='desk'){
  await home(p);await p.selectOption('#tankSelect',tank);await p.selectOption('#modeSelect',mode);await p.selectOption('#mapSelect',map);await p.click('#startButton');await wait(p,()=>window.xtankDiagnostics().match?.tick>.2);
 }
