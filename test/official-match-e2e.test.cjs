@@ -40,7 +40,11 @@ test('two authenticated WebSocket players naturally finish a short official matc
    if(endpoint.endsWith('/auth/v1/user'))return new Response(JSON.stringify({id:player}),{status:200});
    if(endpoint.endsWith('/rest/v1/rpc/xtank_player_api'))return new Response(JSON.stringify({
     profile:{player_id:player,display_name:player===UID_A?'QA-A':'QA-B'},
-    tanks:[{tank_id:'X'}],loadouts:[],slots:[],
+    tanks:[{tank_id:'X'}],
+    loadouts:[{loadout_id:'equipped-X',tank_id:'X',is_selected:true}],
+    slots:[{loadout_id:'equipped-X',slot_type:'weapon',weapon_id:'hurricane'},
+      {loadout_id:'equipped-X',slot_type:'item',slot_number:1,item_id:'repair'}],
+    inventory:[{item_id:'repair',quantity:2},{item_id:'smoke',quantity:9}],
     upgrades:player===UID_A?[{tank_id:'X',attribute:'energy',level:5},{tank_id:'X',attribute:'speed',level:6}]:[]
    }),{status:200});
    if(endpoint.endsWith('/rest/v1/rpc/xtank_record_official_match')){
@@ -78,6 +82,8 @@ test('two authenticated WebSocket players naturally finish a short official matc
   const upgraded=ended.tanks.find(t=>t.id===gameA.slotId);
   assert.equal(upgraded.maxShield,Math.round(65*1.10),'energy upgrade comes from verified profile');
   assert.equal(upgraded.upgrades.speed,6,'speed modifier persisted into authoritative snapshot');
+  assert.equal(upgraded.itemsRemaining.repair,2,'equipped item quantity is loaded from verified inventory');
+  assert.equal(upgraded.itemsRemaining.smoke,0,'unequipped inventory cannot be used in official matches');
   assert(ended.tick>=1.4,'simulated time advanced through real game ticks');
   const resultA=await waitFor(a,'MATCH_SAVED',{timeout:6000});
   const resultB=await waitFor(b,'MATCH_SAVED',{timeout:6000});
