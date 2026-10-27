@@ -58,7 +58,7 @@ X-TANK 是一款最多 8 人同場的 3D 第三人稱即時坦克射擊遊戲。
 
 
 
-## 最新可玩版：0.2.0（單機 + LAN 真人對戰）
+## 遊戲程式現行版本：0.2.2（待完整正式驗收）
 
 這個儲存庫已由歷史資料整理進入遊戲實作階段。最新 **Windows Portable EXE** 提供巨型書桌 3D 射擊、8 台車、個人／團隊／持旗對戰、7 種武器、6 種道具與 AI，並可讓最多 8 名真人在同一個 **LAN 房間**連線（未滿房由 AI 補位）。房間中的生命、命中、旗戰計分與物理規則由 WebSocket 伺服器運算。
 
@@ -66,7 +66,7 @@ X-TANK 是一款最多 8 人同場的 3D 第三人稱即時坦克射擊遊戲。
 
 **[多人連線及 EXE 操作教學](docs/22_多人連線與EXE試玩.md)**
 
-注意：目前**沒有公開 24 小時的線上遊戲伺服器**。跨不同網路的玩家需要自行部署可連線的 WSS 主機；只靠 GitHub Pages 不足以支援持續多人對戰。完整歷史地圖、全部官方武器、帳號 DB、商城、經驗成長等仍待後續開發。這不是宣稱已完成全部 X-TANK 復刻。
+注意：目前**沒有公開 24 小時的線上遊戲伺服器**。跨不同網路的玩家需要自行部署可連線的 WSS 主機；只靠 GitHub Pages 不足以支援持續多人對戰。完整歷史地圖、全部官方武器、正式帳號、商城與經驗成長已有資料庫及玩家介面程式，但尚待完整 Windows EXE 端到端驗收。這不是宣稱已完成全部 X-TANK 復刻。
 
 開發者使用 Node.js 22+：
 \`npm install\`、\`npm test\`、\`npm run build\`、\`npm run server\`（獨立伺服器）或 \`npm run desktop\`（Electron）。
@@ -81,7 +81,7 @@ X-TANK 是一款最多 8 人同場的 3D 第三人稱即時坦克射擊遊戲。
 - [27｜3 組已建立並驗證可登入的測試帳號與跨對話使用說明](docs/27_測試帳號與跨對話接續.md)：真實密碼留在 Supabase 私有表，不公開提交至 GitHub。
 
 - [24｜X-TANK 完整遊戲 PRD](docs/24_完整遊戲PRD.md)：從開 EXE、登入、選坦克、機庫、商店、房間、戰鬥、結算、永久成長到退出的完整產品需求及驗收。
-- [25｜Supabase 完整資料庫架構](docs/25_Supabase完整資料庫架構.md)：Game 專案已部署 `xtank` 62 張資料表、全部 RLS、遊戲內容種子及可信交易程序；尚未把玩家 UI 和後端 API 串接。
+- [25｜Supabase 完整資料庫架構](docs/25_Supabase完整資料庫架構.md)：Game 專案文件記錄 `xtank` 共 66 張資料表並開啟 RLS。玩家帳號、商店及社群等介面已存在，仍需正式 EXE 端到端驗收。
 - [26｜完整遊戲端到端測試計畫](docs/26_完整遊戲端到端測試計畫.md)：Windows 原生 EXE、多人體驗、登入、經濟、重連、戰績、作弊、效能及逐項證據的完整 QA 契約。
 - [Supabase Migration SQL](supabase/migrations/20261027_xtank_62_table_game_schema_v1.sql)；[交易程序](supabase/migrations/20261027_xtank_secure_economy_procedures_v1.sql)；[商店一致性修正與初始商品](supabase/migrations/20261027_xtank_shop_checkout_consistency_v2.sql)。
 
@@ -109,3 +109,13 @@ X-TANK 是一款最多 8 人同場的 3D 第三人稱即時坦克射擊遊戲。
 - 新增 `test/multiplayer.test.js` 回歸案例：建房 → 唯一房主離線 → 同 session 恢復 → 確認 `JOINED.host` 與 `LOBBY.hostId` → 第二人加入 → 房主成功開局。
 - 程式 commit：`f67a852`；測試 commit：`6262036`。
 - **驗收狀態：程式與測試已推送，但本環境無法直接存取 GitHub 原始碼以執行本機整合測試，且未取得最新 Actions PASS；未標記正式驗收完成。**
+
+
+### 2026-10-27 本輪整合：玩家道具配裝正式接入戰鬥驗證
+
+- `src/account.js` 已加入 F1–F6 六種道具的配裝欄位（第七槽保留），以 `xtank_save_loadout` 持久化武器及道具欄位；僅列出已擁有的道具。
+- `server/official.cjs` 現在只允許玩家使用**已登入身份、已選用坦克的有效配裝內**且背包持有的消耗品；不再將全部背包道具自動發進官方對局。
+- `test/official-match-e2e.test.cjs` 增加「未裝備的道具即使背包有 9 個仍不能使用」的 WebSocket 正式模式 mock-DB 回歸測試；`scripts/windows-gui-qa.cjs` 增加 Windows EXE 模擬 API 的道具配裝儲存操作。
+- 程式提交：[道具配裝 UI](https://github.com/hub-google/Xtank/commit/93ed990f3dd54ae9d835cfc985553b03a8a750b3) / [正式房間配裝驗證](https://github.com/hub-google/Xtank/commit/4021ff69f2d888c8c8b2b9f6ed1447b9c42bc1bc) / [對戰測試](https://github.com/hub-google/Xtank/commit/eb6b03e8f25cba4f2a59f9b5b05718a86184bb26) / [GUI 測試](https://github.com/hub-google/Xtank/commit/516d309c83825e558f6540319e7075f1bdf26051)。
+- **本輪 Actions 狀態須以最新 [Windows EXE 工作流程](https://github.com/hub-google/Xtank/actions/workflows/windows-exe.yml) 實際結果為準；提交程式不等於 PASS。** 目前仍未有已驗證全天候公網 WSS，也未取得兩台不同網路原生 EXE 真實全流程證據。
+
