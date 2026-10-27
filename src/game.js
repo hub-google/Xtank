@@ -50,8 +50,29 @@ box(.65,1.6,33,steel,-.2,.50,16); box(.65,1.6,33,steel,48.2,.50,16);
 const levelGroup=new THREE.Group();scene.add(levelGroup);
 const squareMaterials=[mat(0xe2d6bb),mat(0x576978)];
 const circuitFloor=mat(0x214a4b,.5,.2);
+// Keep materials reused by the static arena and shared projectile definitions alive.
+const permanentMaterials=new Set([wood,paper,bluePaper,steel,pencilMat,dark,...squareMaterials,circuitFloor]);
+function releaseRenderResources(root){
+  if(!root)return;
+  const geometry=new Set(),materials=new Set();
+  root.traverse(object=>{
+    if(!object.isMesh)return;
+    if(object.geometry)geometry.add(object.geometry);
+    for(const material of Array.isArray(object.material)?object.material:[object.material]){
+      if(material&&!permanentMaterials.has(material))materials.add(material);
+    }
+  });
+  for(const item of geometry)item.dispose();
+  for(const item of materials)item.dispose();
+}
+function removeAndRelease(root){
+  if(!root)return;
+  root.parent?.remove(root);
+  releaseRenderResources(root);
+}
 function buildLevel(mapId,obstacles){
-  levelGroup.traverse(o=>{if(o.isMesh)o.geometry?.dispose();});
+  // Disposing geometry alone leaks WebGL programs/materials over repeated matches.
+  releaseRenderResources(levelGroup);
   levelGroup.clear();
   desk.material=mapId==='chess'?squareMaterials[0]:mapId==='circuit'?circuitFloor:wood;
   grid.visible=mapId==='desk';
@@ -188,6 +209,7 @@ function tankModel(t){
   scene.add(group);return group;
 }
 const materialBullets={hurricane:mat(0xffbe61,.3,.1),vulcan:mat(0xe9efff,.2,.2),chemical:mat(0x5de8b6,.24,.12),death_knight:mat(0xff5476),plasma:mat(0x82a9ff),ion_missile:mat(0x62fff5),mine:mat(0xc3bb4d)};
+for(const shared of Object.values(materialBullets))permanentMaterials.add(shared);
 function bulletModel(b){
   const radius=WEAPONS[b.kind].radius*1.5;
   const mesh=new THREE.Mesh(new THREE.SphereGeometry(radius,9,8),materialBullets[b.kind]);
@@ -204,10 +226,10 @@ function makeFlag(){
 }
 makeFlag();
 function clearModels(){
-  for(const m of models.values())scene.remove(m);
-  for(const m of bulletModels.values())scene.remove(m);
-  for(const m of zoneModels.values())scene.remove(m);
-  for(const p of sparks)scene.remove(p.mesh);
+  for(const m of models.values())removeAndRelease(m);
+  for(const m of bulletModels.values())removeAndRelease(m);
+  for(const m of zoneModels.values())removeAndRelease(m);
+  for(const p of sparks)removeAndRelease(p.mesh);
   models=new Map();bulletModels=new Map();zoneModels=new Map();sparks.length=0;
 }
 function start(){
@@ -252,7 +274,7 @@ function handleEvents(events){
 }
 function viewUpdate(dt){
   for(const s of sparks){s.life-=dt;s.mesh.material.opacity=Math.max(0,s.life/s.total);s.mesh.scale.setScalar(1+(1-s.life/s.total)*2);}
-  for(let i=sparks.length-1;i>=0;i--){if(sparks[i].life<=0){scene.remove(sparks[i].mesh);sparks.splice(i,1);}}
+  for(let i=sparks.length-1;i>=0;i--){if(sparks[i].life<=0){removeAndRelease(sparks[i].mesh);sparks.splice(i,1);}}
   if(!match||!match.tanks.length)return;
   for(const t of match.tanks){
     let m=models.get(t.id);
@@ -265,7 +287,7 @@ function viewUpdate(dt){
     if(t.kind==='S'&&t.abilityTime>0&&!ownTeam)m.visible=false;
   }
   const live=new Set(match.projectiles.map(b=>b.id));
-  for(const [id,m] of bulletModels)if(!live.has(id)){scene.remove(m);bulletModels.delete(id);}
+  for(const [id,m] of bulletModels)if(!live.has(id)){removeAndRelease(m);bulletModels.delete(id);}
   for(const b of match.projectiles){
     let mesh=bulletModels.get(b.id);
     if(!mesh){mesh=bulletModel(b);bulletModels.set(b.id,mesh);}
@@ -274,7 +296,7 @@ function viewUpdate(dt){
   const zones=[...(match.smokes||[]).map(z=>({...z,zone:'smoke'})),
     ...(match.repairFields||[]).map(z=>({...z,zone:'repair'}))];
   const liveZones=new Set(zones.map(z=>z.zone+'-'+z.id));
-  for(const [key,obj] of zoneModels)if(!liveZones.has(key)){scene.remove(obj);zoneModels.delete(key);}
+  for(const [key,obj] of zoneModels)if(!liveZones.has(key)){removeAndRelease(obj);zoneModels.delete(key);}
   for(const zone of zones){
     const key=zone.zone+'-'+zone.id;
     let mesh=zoneModels.get(key);
@@ -622,7 +644,7 @@ Object.defineProperty(window,'xtankDiagnostics',{value:()=>JSON.parse(JSON.strin
  tanks:match.tanks,projectiles:match.projectiles,scores:match.scores,flag:match.flag,
  smokes:match.smokes,repairFields:match.repairFields}:null,
  events:qaEvents,networkFrames:qaNetworkFrames,networkStatus:el('networkStatus').textContent,screen:match?.tanks.map(t=>{const v=new THREE.Vector3(t.x,.84,t.z).project(camera);return {id:t.id,x:(v.x+1)*innerWidth/2,y:(1-v.y)*innerHeight/2,visible:v.z<1};}),render:{calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,
- frame:renderer.info.render.frame},camera:camera.position.toArray()
+ frame:renderer.info.render.frame,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures},camera:camera.position.toArray()
 })),writable:false});
 
 el('resumeButton').addEventListener('click',()=>{paused=false;el('pauseBadge').hidden=true;});
