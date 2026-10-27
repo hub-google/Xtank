@@ -113,7 +113,8 @@ export class Game {
     if(!t.alive)return;
     let [vx,vz]=norm(ax,az);
     if(Math.abs(ax)+Math.abs(az)<.001){vx=0;vz=0;}
-    let speed=TANKS[t.kind].speed*(t.boostTime>0?1.25:1);
+    // Progression bonuses are server-provided, never accepted in client INPUT packets.
+    let speed=TANKS[t.kind].speed*(1+.015*(t.upgrades?.speed||0))*(t.boostTime>0?1.25:1);
     if(t.abilityTime>0&&TANKS[t.kind].ability==='accel')speed*=1.3;
     // The flag speed reduction is a prototype rule, not original historical data.
     if(this.mode==='FLAG_HOLD'&&this.flag.holder===t.id)speed*=.9;
@@ -144,9 +145,9 @@ export class Game {
       this.collisionTimes.set(key,this.tick);
       this.events.push({type:'ram',x:(a.x+b.x)/2,z:(a.z+b.z)/2});
       if(this.mode==='FFA'||a.team!==b.team){
-        const damageA=Math.min(35,(speed-2)*4*TANKS[b.kind].collision);
-        const damageB=Math.min(35,(speed-2)*4*TANKS[a.kind].collision);
-        this.hit(a,damageA,b.id);this.hit(b,damageB,a.id);
+        const damageA=Math.min(35,(speed-2)*4*TANKS[b.kind].collision*(1+.02*(b.upgrades?.collision||0)));
+        const damageB=Math.min(35,(speed-2)*4*TANKS[a.kind].collision*(1+.02*(a.upgrades?.collision||0)));
+        this.hit(a,damageA,b.id,'collision');this.hit(b,damageB,a.id,'collision');
       }
     }
   }
@@ -172,7 +173,9 @@ export class Game {
     if(!t.alive||this.ended||damage<=0)return;
     const source=this.tanks.find(x=>x.id===owner);
     if(this.mode!=='FFA'&&source&&source.team===t.team)return;
+    if(source&&weapon&&weapon!=='collision')damage*=1+.02*(source.upgrades?.attack||0);
     if(t.abilityTime>0&&TANKS[t.kind].ability==='defense')damage*=.75;
+    damage*=Math.max(.5,1-.015*(t.upgrades?.defense||0));
     const absorb=Math.min(t.shield,damage);
     t.shield-=absorb;t.hp=Math.max(0,t.hp-(damage-absorb));t.lastDamage=this.tick;
     if(source)source.damage+=damage;
