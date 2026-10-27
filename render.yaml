@@ -1,0 +1,32 @@
+# Deployment-ready single-instance official X-TANK WebSocket server.
+# Creating this file does NOT deploy the service or incur charges.
+# A connected Render account and paid service with a persistent disk are required.
+services:
+  - type: web
+    name: xtank-official
+    repo: https://github.com/hub-google/Xtank
+    branch: main
+    runtime: docker
+    plan: 0.5c-512mb
+    region: singapore
+    numInstances: 1
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "8787"
+      - key: BIND_HOST
+        value: 0.0.0.0
+      - key: XTANK_OFFICIAL_MODE
+        value: "1"
+      - key: SUPABASE_URL
+        value: https://fanffwnhkxpfhttylntw.supabase.co
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: XTANK_SETTLEMENT_DIR
+        value: /data/settlements
+    disk:
+      name: xtank-settlement-outbox
+      mountPath: /data/settlements
+      sizeGB: 1
