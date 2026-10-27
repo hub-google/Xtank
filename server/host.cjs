@@ -64,7 +64,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
        return send(p.ws,{type:'ERROR',code:'NEED_BOTH_TEAMS'});
    }
   if(official){
-   r.phase='countdown';r.countdownDeadline=Date.now()+2100;
+   r.phase='countdown';r.countdownDeadline=Date.now()+3000;r.lastCountdownSecond=3;
    broadcast(r,{type:'COUNTDOWN',seconds:3});lobby(r);
    return;
   }
