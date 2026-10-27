@@ -375,10 +375,10 @@ document.addEventListener('keydown',()=>battleAudio.unlock(),{passive:true});
 el('startButton').addEventListener('click',start);
 el('againButton').addEventListener('click',()=>{
  if(!online)return start();
- online.send({type:'BACK_TO_LOBBY'});
- match=null;paused=true;resultShown=false;clearModels();
- el('resultMenu').hidden=true;el('startMenu').hidden=false;el('hud').hidden=true;
- el('networkLobby').hidden=false;
+ // The authoritative room must accept the transition before UI leaves results.
+ // Official rewards may still be settling; keeping the result visible prevents
+ // a false appearance that the next round is ready.
+ if(online.send({type:'BACK_TO_LOBBY'}))onlineStatus('正在返回房間，等待伺服器確認結算…');
 });
 el('returnButton').addEventListener('click',goHome);
 
