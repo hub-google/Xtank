@@ -48,9 +48,13 @@ test('official rooms require signed-in players, ready flags and server-approved 
   const second=await take(b,'JOINED');await take(b,'LOBBY');
   send(a,{type:'START'});
   assert.equal((await take(a,'ERROR')).code,'PLAYERS_NOT_READY');
-  send(a,{type:'READY',ready:true});send(b,{type:'READY',ready:true});
+  // Consume the room-membership broadcast before asserting readiness.
+  const joinedRoom=await take(a,'LOBBY');
+  assert.equal(joinedRoom.people.length,2);
+  send(a,{type:'READY',ready:true});
   const ready=await take(a,'LOBBY');
   assert(ready.people.some(x=>x.name==='QA-A'&&x.ready));
+  send(b,{type:'READY',ready:true});
   const more=await take(a,'LOBBY');
   assert(more.people.some(x=>x.name==='QA-B'&&x.ready));
   send(a,{type:'START'});
