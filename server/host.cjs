@@ -24,8 +24,13 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
  catch(e){if(e.code!=='MODULE_NOT_FOUND')throw e;
   engine=await import(pathToFileURL(path.join(__dirname,'../src/simulation.js')).href);}
  const {Game,TANKS,MAPS}=engine;
- const official=officialService();
  const rooms=new Map();
+ const official=officialService({onSettlement:(payload,saved)=>{
+   const room=[...rooms.values()].find(r=>r.roundId===payload.round_id);
+   if(!room||room.officialMatchId||!saved?.match_id)return;
+   room.officialMatchId=saved.match_id;
+   broadcast(room,{type:'MATCH_SAVED',matchId:saved.match_id,players:saved.players});
+ }});
  const httpServer=http.createServer((req,res)=>{
   if(req.url==='/health'){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({ok:true,rooms:rooms.size}));}
   else{res.writeHead(404);res.end();}
@@ -264,8 +269,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
          r.persistStarted=true;
          (async()=>{
            for(let attempt=1;attempt<=4;attempt++){
-             try{const saved=await official.settle(r);r.officialMatchId=saved.match_id;
-              broadcast(r,{type:'MATCH_SAVED',matchId:saved.match_id,players:saved.players});return}
+             try{await official.settle(r);return}
              catch(error){console.error('Official settlement attempt',attempt,error.message);await new Promise(ok=>setTimeout(ok,attempt*700))}
            }
            console.error('X-TANK official settlement requires recovery',r.roundId);
