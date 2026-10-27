@@ -28,12 +28,21 @@ async function createHost({port=8787,host='0.0.0.0'}={}){
  });
  const wss=new WebSocketServer({server:httpServer,maxPayload:4096,perMessageDeflate:false});
  const members=r=>[...r.people.values()];
+ const roomSummary=r=>({roomId:r.id,mode:r.mode,mapId:r.mapId,phase:r.phase,
+   players:members(r).filter(p=>p.ws).length,capacity:8,passwordRequired:!!r.password});
+ function passwordDigest(password,salt){return crypto.scryptSync(password,salt,32);}
+ function roomPasswordValid(r,password){
+   if(!r.password)return true;
+   if(typeof password!=='string'||password.length>64)return false;
+   return crypto.timingSafeEqual(r.password.hash,passwordDigest(password,r.password.salt));
+ }
  function broadcast(r,msg){for(const p of members(r))send(p.ws,msg);}
  function lobby(r){broadcast(r,{type:'LOBBY',roomId:r.id,mode:r.mode,mapId:r.mapId,phase:r.phase,hostId:r.hostId,
-  people:members(r).map(p=>({id:p.id,name:p.name,tank:p.tank,connected:!!p.ws,host:p.id===r.hostId}))});}
+  people:members(r).map(p=>({id:p.id,name:p.name,tank:p.tank,connected:!!p.ws,ready:!!p.ready,host:p.id===r.hostId}))});}
  function start(r,p){
   if(p.id!==r.hostId||r.phase!=='lobby')return send(p.ws,{type:'ERROR',code:'NOT_HOST_OR_PHASE'});
   if(members(r).filter(v=>v.ws).length<2)return send(p.ws,{type:'ERROR',code:'NEED_TWO_PLAYERS'});
+   if(official&&members(r).some(v=>v.ws&&!v.ready))return send(p.ws,{type:'ERROR',code:'PLAYERS_NOT_READY'});
   const game=new Game({mode:r.mode,mapId:r.mapId,selectedTank:'X',size:8,seed:crypto.randomBytes(4).readUInt32LE()});
   game.humanIds=new Set();
   r.game=game;r.inputs=new Map();r.phase='live';r.roundId=id();r.events=[];
@@ -68,19 +77,26 @@ async function createHost({port=8787,host='0.0.0.0'}={}){
       ws._xtankAuthPending=false;
       if(ws.readyState!==WebSocket.OPEN)return;
     }
-    if(m.type==='CREATE'&&!p){
+    if(m.type==='LIST_ROOMS'&&!p){
+      send(ws,{type:'ROOMS',rooms:[...rooms.values()].filter(room=>room.phase==='lobby'&&!room.password).map(roomSummary).slice(0,32)});
+    }else if(m.type==='CREATE'&&!p){
     if(rooms.size>=32)return send(ws,{type:'ERROR',code:'SERVER_FULL'});
     let code;do{code=crypto.randomBytes(3).toString('hex').toUpperCase();}while(rooms.has(code));
     r={id:code,mode:['FFA','TDM','FLAG_HOLD'].includes(m.mode)?m.mode:'FFA',
       mapId:typeof m.mapId==='string'&&Object.hasOwn(MAPS,m.mapId)?m.mapId:'desk',
       phase:'lobby',people:new Map(),hostId:null,game:null,inputs:null,roundId:null,events:[],snapCount:0,created:Date.now()};
-    rooms.set(code,r);
+    if(typeof m.password==='string'&&m.password.length>0){
+      if(m.password.length>40)return send(ws,{type:'ERROR',code:'PASSWORD_TOO_LONG'});
+      const salt=crypto.randomBytes(16);r.password={salt,hash:passwordDigest(m.password,salt)};
+     }
+     rooms.set(code,r);
     p=makePlayer(m,ws);r.people.set(p.id,p);r.hostId=p.id;
     send(ws,{type:'JOINED',roomId:r.id,playerId:p.id,token:p.token,host:true});lobby(r);
    }else if(m.type==='JOIN'&&!p){
     const found=rooms.get(String(m.roomId||'').toUpperCase());
     if(!found)return send(ws,{type:'ERROR',code:'ROOM_NOT_FOUND'});
     if(found.phase!=='lobby')return send(ws,{type:'ERROR',code:'ROUND_RUNNING'});
+     if(!roomPasswordValid(found,m.password))return send(ws,{type:'ERROR',code:'BAD_ROOM_PASSWORD'});
     if(found.people.size>=8)return send(ws,{type:'ERROR',code:'ROOM_FULL'});
     r=found;p=makePlayer(m,ws);r.people.set(p.id,p);
     send(ws,{type:'JOINED',roomId:r.id,playerId:p.id,token:p.token,host:false});lobby(r);
@@ -94,6 +110,7 @@ async function createHost({port=8787,host='0.0.0.0'}={}){
     lobby(r);if(r.phase==='live')send(ws,{type:'START',mode:r.mode,mapId:r.mapId,slotId:p.slot,roundId:r.roundId,roomId:r.id});
    }else if(!p||p.ws!==ws){send(ws,{type:'ERROR',code:'NOT_JOINED'});}
    else if(m.type==='START')start(r,p);
+    else if(m.type==='READY'&&r.phase==='lobby'){p.ready=m.ready===true;lobby(r);}
    else if(m.type==='INPUT'&&r.phase==='live'&&p.slot){
     if(!Number.isSafeInteger(m.seq)||m.seq<=p.seq)return;
     const input=sanitizeInput(m);
@@ -102,7 +119,7 @@ async function createHost({port=8787,host='0.0.0.0'}={}){
      p.seq=m.seq;r.inputs.set(p.slot,input);
    }else if(m.type==='BACK_TO_LOBBY'&&p.id===r.hostId&&r.phase==='finished'){
     r.phase='lobby';r.game=null;r.inputs=null;
-    for(const other of members(r))if(!other.ws)r.people.delete(other.id);else other.slot=null;
+    for(const other of members(r))if(!other.ws)r.people.delete(other.id);else{other.slot=null;other.ready=false;}
     lobby(r);
    }else if(m.type==='PING')send(ws,{type:'PONG',serverTime:Date.now()});
   });
@@ -118,7 +135,7 @@ async function createHost({port=8787,host='0.0.0.0'}={}){
  function makePlayer(m,ws){
   const tank=TANKS[m.tank]?m.tank:'X';
   return {id:id(),token:id()+id(),name:String(m.name||'Player').replace(/[<>]/g,'').slice(0,20),
-   tank,ws,seq:-1,slot:null,lastSeen:Date.now(),accountUserId:m.accountUserId||null,allowedWeapons:m.allowedWeapons||null};
+   tank,ready:false,ws,seq:-1,slot:null,lastSeen:Date.now(),accountUserId:m.accountUserId||null,allowedWeapons:m.allowedWeapons||null};
  }
  const ticking=setInterval(()=>{
   for(const r of rooms.values()){
