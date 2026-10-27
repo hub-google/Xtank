@@ -23,7 +23,7 @@ test('official server authenticates player and submits only authoritative match 
    calls.push({path,payload,header:opts.headers.authorization});
    if(path.endsWith('/auth/v1/user'))return new Response(JSON.stringify({id:playerA}),{status:200});
    if(path.endsWith('/rest/v1/rpc/xtank_player_api'))return new Response(JSON.stringify({profile:{player_id:playerA,display_name:'QA'},tanks:[{tank_id:'X'}],
-    loadouts:[{loadout_id:'11',tank_id:'X',is_selected:true}],slots:[{loadout_id:'11',slot_type:'weapon',weapon_id:'mine'}]}),{status:200});
+    loadouts:[{loadout_id:'11',tank_id:'X',is_selected:true}],slots:[{loadout_id:'11',slot_type:'weapon',weapon_id:'mine'}],inventory:[{weapon_id:'mine',quantity:1}]}),{status:200});
    if(path.endsWith('/rest/v1/rpc/xtank_record_official_match'))return new Response(JSON.stringify({ok:true,match_id:'match-qa'}),{status:200});
    return new Response('{}',{status:404});
   };
