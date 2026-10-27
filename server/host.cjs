@@ -4,6 +4,7 @@ const crypto=require('node:crypto');
 const path=require('node:path');
 const {pathToFileURL}=require('node:url');
 const {WebSocketServer,WebSocket}=require('ws');
+const {officialService}=require('./official.cjs');
 const id=()=>crypto.randomBytes(8).toString('hex');
 const send=(ws,msg)=>{if(ws?.readyState===WebSocket.OPEN)ws.send(JSON.stringify(msg));};
 const sanitizeInput=m=>{
@@ -19,6 +20,7 @@ async function createHost({port=8787,host='0.0.0.0'}={}){
  catch(e){if(e.code!=='MODULE_NOT_FOUND')throw e;
   engine=await import(pathToFileURL(path.join(__dirname,'../src/simulation.js')).href);}
  const {Game,TANKS,MAPS}=engine;
+ const official=officialService();
  const rooms=new Map();
  const httpServer=http.createServer((req,res)=>{
   if(req.url==='/health'){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({ok:true,rooms:rooms.size}));}
@@ -35,12 +37,14 @@ async function createHost({port=8787,host='0.0.0.0'}={}){
   const game=new Game({mode:r.mode,mapId:r.mapId,selectedTank:'X',size:8,seed:crypto.randomBytes(4).readUInt32LE()});
   game.humanIds=new Set();
   r.game=game;r.inputs=new Map();r.phase='live';r.roundId=id();r.events=[];
+   r.startedAt=Date.now();r.accountBySlot=new Map();r.persistStarted=false;
   const slots=r.mode==='FFA'?[0,1,2,3,4,5,6,7]:[0,4,1,5,2,6,3,7];
   members(r).filter(x=>x.ws).forEach((x,i)=>{
    const t=game.tanks[slots[i]],cfg=TANKS[x.tank];
    x.slot=t.id;x.seq=-1;
    t.kind=x.tank;t.hp=t.maxHp=cfg.hp;t.shield=t.maxShield=cfg.shield;t.ammo={chemical:18,ion_missile:8,mine:5};
    game.humanIds.add(t.id);
+    if(official&&x.accountUserId)r.accountBySlot.set(t.id,x.accountUserId);
    r.inputs.set(t.id,{dx:0,dz:0,aimYaw:0,fire:false,item:0,ability:false});
    send(x.ws,{type:'START',mode:r.mode,mapId:r.mapId,slotId:t.id,roundId:r.roundId,roomId:r.id});
   });
@@ -49,12 +53,22 @@ async function createHost({port=8787,host='0.0.0.0'}={}){
  wss.on('connection',ws=>{
   let p=null,r=null,received=0,windowStart=Date.now();
   ws.isAlive=true;ws.on('pong',()=>{ws.isAlive=true;});
-  ws.on('message',raw=>{
+  ws.on('message',async raw=>{
    if(Date.now()-windowStart>1000){received=0;windowStart=Date.now();}
    if(++received>60){ws.close(1008,'rate limit');return;}
    let m;try{m=JSON.parse(raw.toString());}catch{return send(ws,{type:'ERROR',code:'BAD_JSON'});}
    if(!m||typeof m.type!=='string')return;
-   if(m.type==='CREATE'&&!p){
+   if(official&&(m.type==='CREATE'||m.type==='JOIN')&&!p){
+      if(ws._xtankAuthPending)return send(ws,{type:'ERROR',code:'AUTH_PENDING'});
+      ws._xtankAuthPending=true;
+      try{
+        const verified=await official.authenticate(m.accessToken,m.tank);
+        m.name=verified.name;m.accountUserId=verified.player_id;m.allowedWeapons=verified.allowedWeapons;
+      }catch(err){ws._xtankAuthPending=false;return send(ws,{type:'ERROR',code:'AUTH_FAILED',message:err.message});}
+      ws._xtankAuthPending=false;
+      if(ws.readyState!==WebSocket.OPEN)return;
+    }
+    if(m.type==='CREATE'&&!p){
     if(rooms.size>=32)return send(ws,{type:'ERROR',code:'SERVER_FULL'});
     let code;do{code=crypto.randomBytes(3).toString('hex').toUpperCase();}while(rooms.has(code));
     r={id:code,mode:['FFA','TDM','FLAG_HOLD'].includes(m.mode)?m.mode:'FFA',
@@ -84,7 +98,8 @@ async function createHost({port=8787,host='0.0.0.0'}={}){
     if(!Number.isSafeInteger(m.seq)||m.seq<=p.seq)return;
     const input=sanitizeInput(m);
     if(!input)return send(ws,{type:'ERROR',code:'INVALID_INPUT'});
-    p.seq=m.seq;r.inputs.set(p.slot,input);
+    if(official&&input.weapon&&!p.allowedWeapons?.has(input.weapon))return send(ws,{type:'ERROR',code:'WEAPON_NOT_OWNED'});
+     p.seq=m.seq;r.inputs.set(p.slot,input);
    }else if(m.type==='BACK_TO_LOBBY'&&p.id===r.hostId&&r.phase==='finished'){
     r.phase='lobby';r.game=null;r.inputs=null;
     for(const other of members(r))if(!other.ws)r.people.delete(other.id);else other.slot=null;
@@ -103,7 +118,7 @@ async function createHost({port=8787,host='0.0.0.0'}={}){
  function makePlayer(m,ws){
   const tank=TANKS[m.tank]?m.tank:'X';
   return {id:id(),token:id()+id(),name:String(m.name||'Player').replace(/[<>]/g,'').slice(0,20),
-   tank,ws,seq:-1,slot:null,lastSeen:Date.now()};
+   tank,ws,seq:-1,slot:null,lastSeen:Date.now(),accountUserId:m.accountUserId||null,allowedWeapons:m.allowedWeapons||null};
  }
  const ticking=setInterval(()=>{
   for(const r of rooms.values()){
@@ -119,7 +134,19 @@ async function createHost({port=8787,host='0.0.0.0'}={}){
     catch(err){console.error('X-TANK room tick:',err);r.phase='finished';}
     for(const v of r.inputs.values()){v.item=0;v.ability=false;}
     r.snapCount++;
-    if(r.game.ended)r.phase='finished';
+    if(r.game.ended){
+       r.phase='finished';
+       if(official&&!r.persistStarted){
+         r.persistStarted=true;
+         (async()=>{
+           for(let attempt=1;attempt<=4;attempt++){
+             try{const saved=await official.settle(r);r.officialMatchId=saved.match_id;return}
+             catch(error){console.error('Official settlement attempt',attempt,error.message);await new Promise(ok=>setTimeout(ok,attempt*700))}
+           }
+           console.error('X-TANK official settlement requires recovery',r.roundId);
+         })();
+       }
+     }
     if(r.snapCount%2===0||r.phase==='finished'){
      const g=r.game;
      broadcast(r,{type:'SNAPSHOT',mode:g.mode,mapId:g.mapId,roundId:r.roundId,time:g.time,tick:g.tick,
