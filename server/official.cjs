@@ -32,7 +32,13 @@ function officialService(){
       if(!dash.tanks?.some(t=>t.tank_id===tankId))throw Error('TANK_NOT_OWNED');
       const active=dash.loadouts?.find(l=>l.tank_id===tankId&&l.is_selected);
       const equipment=active?dash.slots.filter(s=>s.loadout_id===active.loadout_id&&s.slot_type==='weapon').map(s=>s.weapon_id):['hurricane'];
-      return {player_id:u.id,name:dash.profile.display_name,allowedWeapons:new Set(equipment.length?equipment:['hurricane'])};
+      const upgrades={speed:0,attack:0,defense:0,energy:0,collision:0};
+      for(const v of (dash.upgrades||[])){
+        if(v.tank_id===tankId&&Object.hasOwn(upgrades,v.attribute)&&Number.isInteger(v.level))
+          upgrades[v.attribute]=Math.max(0,Math.min(10,v.level));
+      }
+      return {player_id:u.id,name:dash.profile.display_name,
+        allowedWeapons:new Set(equipment.length?equipment:['hurricane']),upgrades};
     },
     async settle(room){
       const g=room.game;
