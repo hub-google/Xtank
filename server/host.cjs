@@ -55,7 +55,7 @@ async function createHost({port=8787,host='0.0.0.0'}={}){
    game.humanIds.add(t.id);
     if(official&&x.accountUserId)r.accountBySlot.set(t.id,x.accountUserId);
    r.inputs.set(t.id,{dx:0,dz:0,aimYaw:0,fire:false,item:0,ability:false});
-   send(x.ws,{type:'START',mode:r.mode,mapId:r.mapId,slotId:t.id,roundId:r.roundId,roomId:r.id});
+   send(x.ws,{type:'START',mode:r.mode,mapId:r.mapId,slotId:t.id,roundId:r.roundId,roomId:r.id,official:!!official,allowedWeapons:official?[...x.allowedWeapons]:null});
   });
   lobby(r);
  }
@@ -114,7 +114,7 @@ async function createHost({port=8787,host='0.0.0.0'}={}){
     if(old.ws?.readyState===WebSocket.OPEN)old.ws.close(4001,'replaced');
     r=found;p=old;p.ws=ws;p.token=id()+id();p.seq=-1;p.lastSeen=Date.now();
     send(ws,{type:'JOINED',roomId:r.id,playerId:p.id,token:p.token,host:p.id===r.hostId});
-    lobby(r);if(r.phase==='live')send(ws,{type:'START',mode:r.mode,mapId:r.mapId,slotId:p.slot,roundId:r.roundId,roomId:r.id});
+    lobby(r);if(r.phase==='live')send(ws,{type:'START',mode:r.mode,mapId:r.mapId,slotId:p.slot,roundId:r.roundId,roomId:r.id,official:!!official,allowedWeapons:official?[...p.allowedWeapons]:null});
    }else if(!p||p.ws!==ws){send(ws,{type:'ERROR',code:'NOT_JOINED'});}
    else if(m.type==='START')start(r,p);
     else if(m.type==='READY'&&r.phase==='lobby'){p.ready=m.ready===true;lobby(r);}
