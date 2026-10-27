@@ -104,6 +104,13 @@ async function createHost({port=8787,host='0.0.0.0'}={}){
     const found=rooms.get(String(m.roomId||'').toUpperCase());
     const old=found&&members(found).find(x=>x.id===m.playerId&&x.token===m.token);
     if(!old)return send(ws,{type:'ERROR',code:'INVALID_SESSION'});
+     if(official){
+       try{
+         const verified=await official.authenticate(m.accessToken,old.tank);
+         if(verified.player_id!==old.accountUserId)return send(ws,{type:'ERROR',code:'WRONG_ACCOUNT'});
+         old.allowedWeapons=verified.allowedWeapons;
+       }catch(error){return send(ws,{type:'ERROR',code:'AUTH_FAILED'});}
+     }
     if(old.ws?.readyState===WebSocket.OPEN)old.ws.close(4001,'replaced');
     r=found;p=old;p.ws=ws;p.token=id()+id();p.seq=-1;p.lastSeen=Date.now();
     send(ws,{type:'JOINED',roomId:r.id,playerId:p.id,token:p.token,host:p.id===r.hostId});
