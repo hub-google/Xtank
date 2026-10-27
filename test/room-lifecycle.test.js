@@ -70,6 +70,11 @@ test('an expired reconnection token is rejected instead of reviving a stale sess
   await new Promise(resolve=>{first.once('close',resolve);first.close()});
   const room=host.rooms.get(joined.roomId);
   assert.ok(room);
+  // ws.close() resolves at the client before the host has processed 'close'.
+  // Wait for the authoritative session to become disconnected first.
+  const deadline=Date.now()+1500;
+  while(room.people.get(joined.playerId)?.ws&&Date.now()<deadline)await sleep(10);
+  assert.equal(room.people.get(joined.playerId)?.ws,null,'server must observe disconnect');
   room.people.get(joined.playerId).lastSeen=Date.now()-31000;
   const retry=await dial(host.port);
   t.after(()=>retry.terminate());
