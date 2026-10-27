@@ -46,6 +46,9 @@ test('official rooms require signed-in players, ready flags and server-approved 
   const owner=await take(a,'JOINED');await take(a,'LOBBY');
   send(b,{type:'JOIN',accessToken:B,roomId:owner.roomId,tank:'X'});
   const second=await take(b,'JOINED');await take(b,'LOBBY');
+  const duplicate=await dial(url);sockets.push(duplicate);
+  send(duplicate,{type:'QUICK_MATCH',accessToken:A,name:'SecondSession',mode:'FFA',tank:'X'});
+  assert.equal((await take(duplicate,'ERROR')).code,'ACCOUNT_ALREADY_IN_ROOM');
   send(a,{type:'START'});
   assert.equal((await take(a,'ERROR')).code,'PLAYERS_NOT_READY');
   // Consume the room-membership broadcast before asserting readiness.
