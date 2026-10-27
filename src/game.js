@@ -379,6 +379,12 @@ el('returnButton').addEventListener('click',goHome);
 
 function onlineStatus(message){el('networkStatus').textContent=message;if(match&&online&&message.includes('斷線'))el('statusText').textContent=message;}
 function onlineMessage(msg){
+  if(msg.type==='MATCH_SAVED'){
+    onlineStatus('官方戰績及獎勵已寫入永久資料庫 · '+msg.matchId);
+    if(resultShown&&el('resultStats'))el('resultStats').textContent+='  /  官方獎勵已入帳';
+    window.xtankAccount?.refresh?.().catch(e=>console.warn('Profile refresh after match:',e.message));
+    return;
+  }
   if(msg.type==='ROOMS'){
     const list=el('publicRoomList');list.replaceChildren();list.hidden=false;
     const title=document.createElement('p');title.textContent='公開房間（點選加入）';list.append(title);
