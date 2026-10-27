@@ -131,3 +131,12 @@ X-TANK 是一款最多 8 人同場的 3D 第三人稱即時坦克射擊遊戲。
 - 本次核心程式提交：`bf9b881`、`a9b0396`、`e8c2f67`、`3fe8b05`、`0c06f31`、`eed5dea`、`3a5e13e`。依 [Windows EXE Actions](https://github.com/hub-google/Xtank/actions/workflows/windows-exe.yml) 的最新成功 Run 判定是否通過單元測試、建置和 scoped GUI；**scoped GUI 不等於完整發行驗收**。
 
 **仍未具備正式版交付證據：** 持續營運的公開 WSS 主機、跨不同網路的兩台 Windows EXE 真實玩家端到端驗收、全部 A–H 情境與長時間安全壓力測試。在完成前版本維持 0.2.2 開發中，不標記正式發行。
+
+
+### 2026-10-27 斷線與未完成賽事保護（附實際測試）
+
+- 修復 WebSocket 房間清理：最後一位玩家逾時離線時，若權威引擎仍在 `live` 階段，不得直接刪除房間並中斷該局。引擎自然結束後才可清除無人的房間。
+- `RESUME` 重新加入現在會檢查伺服器端的 30 秒斷線寬限期；超時 session 不可復活。
+- 新增 `test/room-lifecycle.test.js`，涵蓋中途無人離線與過期 session；初次 Windows CI 發現新測試事件時序競態，已於 [e89feb5](https://github.com/hub-google/Xtank/commit/e89feb58510d8aa2d3845a04f30a9c46f9e0a891) 修正。
+- 程式碼提交 [ab5dd50](https://github.com/hub-google/Xtank/commit/ab5dd500876cae0b41080f7ca05f0345d8be6801)，測試提交 [a78e500](https://github.com/hub-google/Xtank/commit/a78e5006bfd7f2484f237038d00d8d288f61401b)。**是否通過測試以對應 GitHub Actions 最終結果為準**。
+- 尚未完成的交付門檻不變：官方持續公網 WSS 部署、兩台不同網路原生 Windows EXE 完整真人驗收、真實 Supabase 結算與重啟、72 組完整 GUI／耐久性／安全測試。此項修復不代表正式版已完成。
