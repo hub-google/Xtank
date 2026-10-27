@@ -4,7 +4,7 @@ const URL='https://fanffwnhkxpfhttylntw.supabase.co';
 const KEY='sb_publishable_fsrieSLUXlq-_WDpPY9K_w_eO-dN_jT';
 const storeKey='xtank_auth_session_v1';
 const $=(selector,root=document)=>root.querySelector(selector);
-let session=null, dashboard=null, catalog=null, tab='home',busy=false;
+let session=null, dashboard=null, catalog=null, tab='home',busy=false,rankMode='FFA';
 try{session=JSON.parse(localStorage.getItem(storeKey)||'null')}catch{session=null}
 const launch=$('#startMenu .panel');
 if(!launch)throw Error('Missing start menu for account hub');
@@ -127,7 +127,9 @@ function panel(){
  const item=catalog.weapons.find(x=>x.weapon_id===o.weapon_id)||catalog.items.find(x=>x.item_id===o.item_id);
  return `<article><h3>${escaped(item?.display_name||o.offer_key)}</h3><p>${o.unit_price} ${escaped(o.currency_code)} / ${o.quantity} 個</p>
  ${button('購買','buy:'+o.offer_id)}</article>`;}).join('')||'<p>商店暫無上架商品</p>'}</div>`;
- if(tab==='rank')return '<h2>玩家排行榜</h2><div id="xtankRankContent">讀取排行榜中…</div>';
+ if(tab==='rank')return `<h2>2026 賽季排行榜</h2>
+ <label>模式 <select id="xtankRankMode"><option value="FFA">個人混戰</option><option value="TDM">團隊戰</option><option value="FLAG_HOLD">搶旗戰</option></select></label>
+ <div id="xtankRankContent">讀取賽季排行榜中…</div>`;
  if(tab==='friends')return `<h2>好友</h2><div id="xtankFriendsList">讀取好友中…</div>
  <form id="xtankFriendForm"><label>玩家 UUID <input name="player_id" placeholder="輸入好友玩家 ID" required></label>
  <button type="submit">送出好友邀請</button></form>`;
@@ -156,9 +158,20 @@ function draw(){
   await reload();msg('配裝已儲存：'+saved);
  });
  });
- if(tab==='rank')rpc('leaderboard').then(data=>{
-  const target=$('#xtankRankContent');if(target)target.innerHTML=`<ol>${(data.players||[]).map(x=>`<li>${escaped(x.display_name)}　Lv.${x.level}　勝場 ${x.wins}　擊殺 ${x.kills}</li>`).join('')}</ol>`;
- }).catch(e=>msg(e.message));
+ if(tab==='rank'){
+   const select=$('#xtankRankMode');
+   select.value=rankMode;
+   async function loadRank(){
+     rankMode=select.value;
+     try{
+       const data=await rpcNamed('xtank_season_leaderboard',{p_mode_id:rankMode});
+       const root=$('#xtankRankContent');if(!root)return;
+       root.innerHTML=`<p>${escaped(data.season?.name||'尚無當前賽季')}</p><ol>${(data.players||[]).map(x=>`<li>第 ${x.rank} 名　${escaped(x.display_name)}　積分 ${x.rating}　MMR ${x.mmr}　勝場 ${x.wins}</li>`).join('')}</ol>`;
+     }catch(e){msg(e.message)}
+   }
+   select.onchange=loadRank;
+   loadRank();
+ }
  $('#xtankSettingsForm')?.addEventListener('submit',e=>{e.preventDefault();run(async()=>{
   const f=e.target;await rpc('rename',{name:f.elements.name.value});
   await rpc('settings',{master_volume:Number(f.elements.master_volume.value),mouse_sensitivity:Number(f.elements.mouse_sensitivity.value)});
