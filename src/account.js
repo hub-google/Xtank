@@ -130,6 +130,16 @@ function panel(){
  <div class="xtank-slot-grid">${Array.from({length:7},(_,i)=>`<label>武器 ${i+1}<select name="weapon_${i+1}">
  <option value="">— 空槽 —</option>${catalog.weapons.filter(w=>['hurricane','death_knight','vulcan','plasma'].includes(w.weapon_id)||dashboard.inventory.some(v=>v.weapon_id===w.weapon_id)).map(w=>`<option value="${escaped(w.weapon_id)}">${escaped(w.display_name)}</option>`).join('')}
  </select></label>`).join('')}</div>
+
+ <p>道具欄與 F1–F6 快捷鍵按道具類型固定對應。只會在正式對戰使用已裝備且持有的道具；第 7 欄保留給新增道具。</p>
+ <div class="xtank-slot-grid">${[
+ ['repair','F1 維修'],['speed_boost','F2 加速'],['shield_cell','F3 補盾'],
+ ['radar_ping','F4 雷達'],['smoke','F5 煙霧'],['team_repair','F6 團隊維修']
+ ].map(([itemId,label],i)=>`<label>道具 ${i+1} · ${label}<select name="item_${i+1}">
+ <option value="">— 不裝備 —</option>${dashboard.inventory.some(v=>v.item_id===itemId&&v.quantity>0)?
+ `<option value="${itemId}">${escaped(catalog.items.find(x=>x.item_id===itemId)?.display_name||itemId)}</option>`:''}
+ </select></label>`).join('')}
+ <label>道具 7 · 保留<select disabled><option>尚未開放</option></select></label></div>
  <button type="submit">儲存為使用中的配裝</button></form>`;
  if(tab==='shop')return `<h2>坦克軍火商店</h2><div class="xtank-card-grid">${catalog.offers.map(o=>{
  const item=catalog.weapons.find(x=>x.weapon_id===o.weapon_id)||catalog.items.find(x=>x.item_id===o.item_id);
@@ -162,7 +172,8 @@ function draw(){
  $('#xtankFriendForm')?.addEventListener('submit',e=>{e.preventDefault();const f=e.target;run(async()=>{await rpcNamed('xtank_social_api',{p_action:'invite',p_target:f.elements.player_id.value.trim()});draw();msg('已送出邀請')})});
  $('#xtankLoadoutForm')?.addEventListener('submit',e=>{e.preventDefault();const f=e.target;
  run(async()=>{
-  const slots=Array.from({length:7},(_,i)=>({slot_type:'weapon',slot_number:i+1,ref:f.elements['weapon_'+(i+1)].value})).filter(v=>v.ref);
+  const slots=[...Array.from({length:7},(_,i)=>({slot_type:'weapon',slot_number:i+1,ref:f.elements['weapon_'+(i+1)].value})),
+   ...Array.from({length:6},(_,i)=>({slot_type:'item',slot_number:i+1,ref:f.elements['item_'+(i+1)].value}))].filter(v=>v.ref);
   const saved=await rpcNamed('xtank_save_loadout',{p_tank_id:f.elements.tank_id.value,p_name:f.elements.name.value.trim(),p_slots:slots});
   await reload();msg('配裝已儲存：'+saved);
  });
