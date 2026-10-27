@@ -20,3 +20,11 @@
 #networkLobby button{margin-top:8px;font-size:14px}
 
 #weaponList{max-width:min(96vw,900px);flex-wrap:wrap}.weapons{width:min(96vw,900px);white-space:normal}.weapons .slot{min-width:92px}.weapons .slot small{white-space:nowrap}
+
+/* Keyboard shortcut editor stays collapsed until requested. */
+.control-settings{margin:12px 0;text-align:left;border:1px solid #415878;border-radius:10px;padding:10px 14px}
+.control-settings summary{cursor:pointer;font-size:14px;color:#d2e8ff;font-weight:700}
+.controls-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin:12px 0}
+.control-binding{display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:12px;color:#ccd9ee}
+.control-binding button{min-width:76px;margin:0!important;padding:6px 8px!important;font-size:12px!important}
+@media(max-width:700px){.controls-grid{grid-template-columns:1fr}}
