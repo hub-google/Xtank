@@ -1,3 +1,4 @@
+# Pinned native Windows 72-case validation for 2026-10-27; do not cancel with main pushes.
 name: Windows EXE build and 72-case GUI QA
 on:
   push:
