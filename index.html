@@ -10,7 +10,7 @@
   <main id="app">
     <div id="viewport" aria-label="3D 坦克戰場"></div>
     <header id="topbar">
-      <div class="brand"><span class="brand-mark">X</span> X-TANK <b>REVIVAL</b> <small>ALPHA 0.2 / 單機 + LAN 連線</small></div>
+      <div class="brand"><span class="brand-mark">X</span> X-TANK <b>REVIVAL</b> <small>ALPHA 0.2.1 / 單機 + LAN 連線</small></div>
       <div id="matchInfo" class="top-info">未開始</div>
     </header>
     <section id="hud" hidden>
@@ -77,7 +77,7 @@
         <button id="returnButton" class="secondary">返回主畫面</button>
       </div>
     </section>
-    <div id="pauseBadge" hidden>暫停中 · 按 P 繼續</div>
+    <div id="pauseBadge" hidden><p id="pauseTitle">暫停中 · 按 P 繼續</p><button id="resumeButton" class="primary">繼續對戰</button><button id="pauseHomeButton" class="secondary">返回主畫面</button></div>
     <div id="hitMarker" hidden>✕</div>
   </main>
   <script type="module" src="/src/game.js"></script>

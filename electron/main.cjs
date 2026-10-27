@@ -19,6 +19,7 @@ function makeWindow() {
     webPreferences: {
       preload:path.join(__dirname,'preload.cjs'),
       contextIsolation: true,
+      backgroundThrottling: false,
       nodeIntegration: false,
       sandbox: true,
       webSecurity: true,

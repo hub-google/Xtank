@@ -166,6 +166,7 @@ function clearModels(){
   models=new Map();bulletModels=new Map();zoneModels=new Map();sparks.length=0;
 }
 function start(){
+  qaEvents.length=0;
   online?.close();online=null;networkSlot=null;
   try {
     clearModels();
@@ -260,13 +261,13 @@ function aimYaw(){
   return Math.atan2(-(cursor.x-t.x),-(cursor.z-t.z));
 }
 function tick(dt){
-  const dx=Number(keyboard.has('KeyD'))-Number(keyboard.has('KeyA'));
-  const dz=Number(keyboard.has('KeyS'))-Number(keyboard.has('KeyW'));
+  const dx=paused?0:Number(keyboard.has('KeyD'))-Number(keyboard.has('KeyA'));
+  const dz=paused?0:Number(keyboard.has('KeyS'))-Number(keyboard.has('KeyW'));
   if(online){
     networkAccumulator+=dt;
     if(networkAccumulator>=.05){
       networkAccumulator=0;
-      online.send({type:'INPUT',seq:++networkSeq,dx,dz,aimYaw:aimYaw(),fire:fireHeld,
+      online.send({type:'INPUT',seq:++networkSeq,dx,dz,aimYaw:aimYaw(),fire:!paused&&fireHeld,
         weapon:weaponKeys[selectedWeapon],item:itemQueue,ability:abilityQueue});
       itemQueue=0;abilityQueue=false;
     }
@@ -278,6 +279,7 @@ function tick(dt){
 }
 function showResult(){
   if(!match||resultShown)return;
+  el('pauseBadge').hidden=true;
   resultShown=true;paused=true;
   const info=match.summary();
   el('resultTitle').textContent=info.title;
@@ -332,14 +334,22 @@ function drawMap(){
     ctx.beginPath();ctx.arc(t.x*sx,t.z*sz,t.id==='player'?4:2.6,0,2*Math.PI);ctx.fill();
   }
 }
-let hudAccumulator=0;
+let hudAccumulator=0,slowFrames=0,qualityReduced=sessionStorage.getItem('xtankLowPower')==='1';
+if(qualityReduced){renderer.shadowMap.enabled=false;renderer.setPixelRatio(1);renderer.setSize(innerWidth,innerHeight);}
 function animate(now){
   requestAnimationFrame(animate);
-  const dt=Math.min(.06,(now-last)/1000||0);last=now;
-  if(match&&!paused){
-    accum+=dt;
+  const elapsed=Math.max(0,(now-last)/1000||0);
+  const dt=Math.min(.06,elapsed);last=now;
+  // Keep simulation time independent of slow GPU frames. Visual interpolation is bounded separately.
+  if(elapsed>.08)slowFrames+=elapsed;else slowFrames=Math.max(0,slowFrames-elapsed);
+  if(!qualityReduced&&slowFrames>2){
+    qualityReduced=true;sessionStorage.setItem('xtankLowPower','1');renderer.shadowMap.enabled=false;
+    renderer.setPixelRatio(1);renderer.setSize(innerWidth,innerHeight);
+  }
+  if(match&&(!paused||online)){
+    accum+=Math.min(1,elapsed);
     let steps=0;
-    while(accum>=1/60&&steps++<4){tick(1/60);accum-=1/60;if(paused)break;}
+    while(accum>=1/60&&steps++<60){tick(1/60);accum-=1/60;if(paused)break;}
   }
   viewUpdate(dt);
   if(match&&!el('hud').hidden){hudAccumulator+=dt;if(hudAccumulator>=.1){updateHUD();hudAccumulator=0;}}
@@ -374,6 +384,7 @@ function onlineMessage(msg){
   return;
  }
  if(msg.type==='START'){
+  qaEvents.length=0;
   networkSlot=msg.slotId;networkSeq=0;networkAccumulator=0;
   clearModels();
   match=new Game({mode:msg.mode||el('modeSelect').value,selectedTank:el('tankSelect').value,mapId:msg.mapId||'desk'});
@@ -389,6 +400,7 @@ function onlineMessage(msg){
   return;
  }
  if(msg.type==='SNAPSHOT'&&online&&networkSlot&&match){
+  qaNetworkFrames.push(msg);if(qaNetworkFrames.length>10)qaNetworkFrames.shift();
   if(msg.mapId&&msg.mapId!==match.mapId&&MAPS[msg.mapId]){
     match.mapId=msg.mapId;match.obstacles=MAPS[msg.mapId].obstacles;
     buildLevel(match.mapId,match.obstacles);
@@ -439,7 +451,7 @@ window.addEventListener('keydown',e=>{
   if(e.repeat&&['KeyP','KeyE','F1','F2','F3','F4','F5','F6','Escape'].includes(e.code))return;
   keyboard.add(e.code);
   if(e.code==='KeyP'&&match&&!resultShown){paused=!paused;el('pauseBadge').hidden=!paused;fireHeld=false;}
-  if(e.code==='Escape'&&match&&!resultShown){paused=true;el('pauseBadge').hidden=false;fireHeld=false;}
+  if(e.code==='Escape'&&match&&!resultShown){paused=!paused;el('pauseBadge').hidden=!paused;fireHeld=false;keyboard.clear();itemQueue=0;abilityQueue=false;el('pauseTitle').textContent=online?'選單 · 連線對局持續進行':'暫停中 · 按 P 繼續';}
   if(!match||paused)return;
   if(/^Digit[1-7]$/.test(e.code)){
     selectedWeapon=Number(e.code.slice(-1))-1;match.tanks[0].weapon=weaponKeys[selectedWeapon];
@@ -464,6 +476,7 @@ requestAnimationFrame(animate);
 
 // Read-only diagnostics: real inputs still pass through normal DOM handlers.
 const qaEvents=[];
+const qaNetworkFrames=[];
 const qaHandle=handleEvents;
 handleEvents=function(events){
  qaEvents.push(...events.map(e=>({...e,tick:match?.tick})));
@@ -471,10 +484,13 @@ handleEvents=function(events){
  return qaHandle(events);
 };
 Object.defineProperty(window,'xtankDiagnostics',{value:()=>JSON.parse(JSON.stringify({
- paused,online:!!online,networkSlot,networkRoomId,
+ now:performance.now()/1000,viewport:{width:innerWidth,height:innerHeight},qualityReduced,paused,online:!!online,networkSlot,networkRoomId,
  match:match?{mode:match.mode,mapId:match.mapId,time:match.time,tick:match.tick,ended:match.ended,
  tanks:match.tanks,projectiles:match.projectiles,scores:match.scores,flag:match.flag,
  smokes:match.smokes,repairFields:match.repairFields}:null,
- events:qaEvents,render:{calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,
+ events:qaEvents,networkFrames:qaNetworkFrames,networkStatus:el('networkStatus').textContent,screen:match?.tanks.map(t=>{const v=new THREE.Vector3(t.x,.84,t.z).project(camera);return {id:t.id,x:(v.x+1)*innerWidth/2,y:(1-v.y)*innerHeight/2,visible:v.z<1};}),render:{calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,
  frame:renderer.info.render.frame},camera:camera.position.toArray()
 })),writable:false});
+
+el('resumeButton').addEventListener('click',()=>{paused=false;el('pauseBadge').hidden=true;});
+el('pauseHomeButton').addEventListener('click',goHome);

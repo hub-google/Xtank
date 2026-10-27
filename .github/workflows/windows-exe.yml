@@ -1,4 +1,4 @@
-name: Build Windows EXE
+name: Windows EXE build and GUI QA
 
 on:
   push:
@@ -20,7 +20,6 @@ permissions:
 
 jobs:
   build-windows:
-    if: github.event.head_commit.message != 'qa-probe-only'
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
@@ -57,51 +56,3 @@ jobs:
           path: qa-evidence/
           if-no-files-found: error
           retention-days: 30
-
-  gui-probe:
-    if: github.event.head_commit.message == 'qa-probe-only'
-    runs-on: windows-latest
-    timeout-minutes: 7
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - uses: actions/download-artifact@v4
-        with:
-          name: XTANK-Windows-Portable-EXE
-          path: release
-          run-id: 40434230333
-          github-token: ${{ github.token }}
-      - run: npm install --no-save --ignore-scripts --no-audit --no-fund playwright@1.56.1
-      - name: Probe actual portable EXE
-        shell: pwsh
-        run: |
-          @'
-          const {chromium}=require('playwright');
-          const fs=require('fs'),path=require('path'),{spawn,execFileSync}=require('child_process');
-          fs.mkdirSync('probe',{recursive:true});
-          (async()=>{let b,proc;try{
-            const exe=path.resolve('release',fs.readdirSync('release').find(x=>x.endsWith('.exe')));
-            proc=spawn(exe,['--remote-debugging-port=9222','--disable-renderer-backgrounding','--disable-background-timer-throttling']);
-            proc.stdout.on('data',x=>console.log(String(x)));proc.stderr.on('data',x=>console.log(String(x)));
-            for(let i=0;i<90;i++){try{b=await chromium.connectOverCDP('http://127.0.0.1:9222');break;}catch{await new Promise(r=>setTimeout(r,1000));}}
-            if(!b)throw Error('EXE did not start CDP');
-            const p=b.contexts()[0].pages()[0];p.on('pageerror',e=>console.log('PAGEERROR',e.stack));
-            await p.waitForFunction(()=>typeof window.xtankDiagnostics==='function');
-            for(const label of ['home','started','after-5s','escape']){
-              if(label==='started')await p.click('#startButton',{timeout:15000});
-              if(label==='after-5s')await p.waitForTimeout(5000);
-              if(label==='escape')await p.keyboard.press('Escape');
-              const data=await p.evaluate(()=>({diagnostics:window.xtankDiagnostics(),pauseHomeExists:!!document.querySelector('#pauseHomeButton'),body:document.body.innerText}));
-              console.log(label,JSON.stringify(data).slice(0,2500));
-              fs.writeFileSync('probe/'+label+'.json',JSON.stringify(data,null,2));await p.screenshot({path:'probe/'+label+'.png'});
-            }
-          }catch(e){console.error(e);fs.writeFileSync('probe/error.txt',e.stack);process.exitCode=1;}finally{try{await b?.close();}catch{}if(proc)try{execFileSync('taskkill',['/pid',String(proc.pid),'/t','/f']);}catch{}}})();
-          '@ | Set-Content probe.cjs
-          node probe.cjs
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: XTANK-Short-GUI-Probe
-          path: probe/

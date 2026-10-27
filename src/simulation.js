@@ -168,7 +168,7 @@ export class Game {
     this.events.push({type:'fire',x:t.x,z:t.z,owner:t.id,weapon:t.weapon});
     return true;
   }
-  hit(t,damage,owner){
+  hit(t,damage,owner,weapon=null){
     if(!t.alive||this.ended||damage<=0)return;
     const source=this.tanks.find(x=>x.id===owner);
     if(this.mode!=='FFA'&&source&&source.team===t.team)return;
@@ -176,7 +176,7 @@ export class Game {
     const absorb=Math.min(t.shield,damage);
     t.shield-=absorb;t.hp=Math.max(0,t.hp-(damage-absorb));t.lastDamage=this.tick;
     if(source)source.damage+=damage;
-    this.events.push({type:'hit',x:t.x,z:t.z,id:t.id,damage});
+    this.events.push({type:'hit',x:t.x,z:t.z,id:t.id,damage,owner,weapon});
     if(t.hp<=0){
       t.alive=false;t.respawn=4;t.deaths++;
       if(source&&source.id!==t.id){source.kills++;source.score++;if(this.mode==='FFA'){if(source.score>=this.target)this.ended=true;}
@@ -190,7 +190,7 @@ export class Game {
     if(w.splash>0){
       for(const t of this.tanks){
         const d=Math.hypot(t.x-b.x,t.z-b.z);
-        if(t.alive&&t.id!==b.directHit&&d<w.splash+RADIUS)this.hit(t,w.damage*clamp(1-d/(w.splash+RADIUS),.2,1),b.owner);
+        if(t.alive&&t.id!==b.directHit&&d<w.splash+RADIUS)this.hit(t,w.damage*clamp(1-d/(w.splash+RADIUS),.2,1),b.owner,b.kind);
       }
     }
   }
@@ -325,7 +325,7 @@ export class Game {
           b.alive=false;this.detonate(b);break;
         }
         const hit=this.tanks.find(t=>t.alive&&t.id!==b.owner&&(this.mode==='FFA'||t.team!==b.team)&&Math.hypot(b.x-t.x,b.z-t.z)<RADIUS+w.radius);
-        if(hit){b.directHit=hit.id;this.hit(hit,w.damage*TANKS[this.tanks.find(t=>t.id===b.owner)?.kind||'X'].power*(this.tanks.find(t=>t.id===b.owner)?.abilityTime>0&&TANKS[this.tanks.find(t=>t.id===b.owner)?.kind||'X'].ability==='nitro'?1.2:1),b.owner);
+        if(hit){b.directHit=hit.id;this.hit(hit,w.damage*TANKS[this.tanks.find(t=>t.id===b.owner)?.kind||'X'].power*(this.tanks.find(t=>t.id===b.owner)?.abilityTime>0&&TANKS[this.tanks.find(t=>t.id===b.owner)?.kind||'X'].ability==='nitro'?1.2:1),b.owner,b.kind);
           b.alive=false;this.detonate(b);break;}
       }
     }
