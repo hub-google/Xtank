@@ -246,3 +246,22 @@ test('authoritative room catches up after a short blocked Node event loop',async
  assert(latest.tick-before.tick>=.2,'simulation must catch up lost ticks; before='+
    before.tick+', after='+latest.tick);
 });
+
+test('password-protected room serializes concurrent JOIN checks and remains usable',async t=>{
+ const host=await createHost({host:'127.0.0.1',port:0});
+ t.after(async()=>await host.close());
+ const url='ws://127.0.0.1:'+host.port;
+ const owner=await connect(url),candidate=await connect(url);
+ t.after(()=>{owner.terminate();candidate.terminate()});
+ send(owner,{type:'CREATE',mode:'FFA',name:'PrivateHost',password:'not-a-public-secret'});
+ const created=await message(owner,'JOINED');await message(owner,'LOBBY');
+ send(candidate,{type:'JOIN',roomId:created.roomId,name:'Candidate',password:'incorrect'});
+ send(candidate,{type:'JOIN',roomId:created.roomId,name:'Candidate',password:'not-a-public-secret'});
+ const errors=[(await message(candidate,'ERROR')).code,(await message(candidate,'ERROR')).code];
+ assert.deepEqual(new Set(errors),new Set(['JOIN_PENDING','BAD_ROOM_PASSWORD']));
+ send(candidate,{type:'JOIN',roomId:created.roomId,name:'Candidate',password:'not-a-public-secret'});
+ assert.equal((await message(candidate,'JOINED')).roomId,created.roomId);
+ const lobby=await message(candidate,'LOBBY');
+ assert.equal(lobby.people.length,2);
+ assert.equal(JSON.stringify(lobby).includes('not-a-public-secret'),false);
+});
