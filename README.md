@@ -154,3 +154,12 @@ X-TANK 是一款最多 8 人同場的 3D 第三人稱即時坦克射擊遊戲。
 - **公網部署藍圖**：新增 `render.yaml`、[正式公網 WSS 部署與交付驗收](docs/28_正式公網部署與交付驗收.md)。已具備 Docker/Render 單一節點、持久化結算 outbox 和 server-only Supabase secret 的部署規格；**尚未在 Render 實際建立或驗收公開服務**。
 
 建置與測試：[Windows EXE Actions](https://github.com/hub-google/Xtank/actions/workflows/windows-exe.yml)。GitHub 原始碼更新與 Windows CI 通過只代表各自的項目通過，**完整正式版仍以真實兩網 Windows EXE、正式 WSS、永久結算、防作弊、長時間測試皆具證據才算完成**。
+
+
+### 2026-10-27 自訂遊戲鍵位（程式已提交，待最新 Windows EXE QA）
+
+- 主畫面展開「**自訂鍵位（儲存於本機）**」，即可逐一指定前後左右移動、射擊、技能、暫停、7 個武器槽及 6 個道具槽（共 20 個動作），或按「恢復預設鍵位」。
+- 快捷鍵使用實體按鍵碼（`KeyboardEvent.code`）而不是字元，重複指定會自動交換兩個動作，避免某個操作變得無法使用。Esc 保留給選單。
+- 本機 `localStorage` 保存按鍵設定；目前尚未同步至 Supabase 帳號，換另一台 Windows 裝置需重新設定。
+- 新增 `src/controls.js` 與 `test/controls.test.js`，並修改 `src/game.js`、`index.html`、`src/style.css`。程式提交：[c5accb3](https://github.com/hub-google/Xtank/commit/c5accb3e8e7f4e60e6a3c5aa82045022cb158dd0)、[424a677](https://github.com/hub-google/Xtank/commit/424a677095ad4371158d5511a61f91679e31342a)、[a00af46](https://github.com/hub-google/Xtank/commit/a00af4660d6912a3cf877530851e98e353c37e78)、[2521d91](https://github.com/hub-google/Xtank/commit/2521d91a319b683155011b33c3b21d31ddfa0186)。
+- 版本仍為開發版；鍵位功能應以**含此 commit 的 GitHub Actions**編譯、單元測試及 Windows 原生 EXE GUI 驗證後，再標記正式完成。
