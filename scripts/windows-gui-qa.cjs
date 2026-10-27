@@ -59,7 +59,7 @@ async function testMockedNativeAccount(p){
  // This is NOT a test of genuine Supabase authorization or database writes.
  const tanks=['X','D','M','R','H','A','O','S'];
  const wallet={balance:1000};
- const data={name:'QA-UI',volume:1,inventory:[],loadouts:[],slots:[],points:1};
+ const data={name:'QA-UI',volume:1,inventory:[{item_id:'repair',quantity:2}],loadouts:[],slots:[],points:1};
  const offer='00000000-0000-4000-8000-000000000333';
  const calls=[];
  const backend='https://fanffwnhkxpfhttylntw.supabase.co/**';
@@ -85,8 +85,8 @@ async function testMockedNativeAccount(p){
    if(action==='catalog')return ok({
     tanks:tanks.map(tank_id=>({tank_id,base_hp:100,base_shield:40,speed:7})),
     weapons:['hurricane','vulcan','plasma','death_knight','mine'].map(weapon_id=>({weapon_id,display_name:weapon_id})),
-    items:[],offers:[{offer_id:offer,offer_key:'test-mine',weapon_id:'mine',unit_price:100,quantity:1,currency_code:'COIN'}]});
-   if(action==='buy'){assert.equal(input.p_payload.offer_id,offer);wallet.balance-=100;data.inventory=[{weapon_id:'mine',quantity:1}];return ok({ok:true,order_id:'mock-order'});}
+    items:[{item_id:'repair',display_name:'維修工具'}],offers:[{offer_id:offer,offer_key:'test-mine',weapon_id:'mine',unit_price:100,quantity:1,currency_code:'COIN'}]});
+   if(action==='buy'){assert.equal(input.p_payload.offer_id,offer);wallet.balance-=100;data.inventory.push({weapon_id:'mine',quantity:1});return ok({ok:true,order_id:'mock-order'});}
    if(action==='rename'){data.name=input.p_payload.name;return ok({ok:true});}
    if(action==='settings'){data.volume=input.p_payload.master_volume;return ok({ok:true});}
    if(action==='leaderboard')return ok({players:[]});
@@ -94,7 +94,7 @@ async function testMockedNativeAccount(p){
   }
   if(url.pathname.endsWith('/xtank_save_loadout')){
    data.loadouts=[{loadout_id:'mock-loadout',tank_id:input.p_tank_id,name:input.p_name,is_selected:true}];
-   data.slots=(input.p_slots||[]).map(s=>({slot_type:s.slot_type,slot_number:s.slot_number,weapon_id:s.ref,loadout_id:'mock-loadout'}));
+   data.slots=(input.p_slots||[]).map(s=>({slot_type:s.slot_type,slot_number:s.slot_number,weapon_id:s.slot_type==='weapon'?s.ref:null,item_id:s.slot_type==='item'?s.ref:null,loadout_id:'mock-loadout'}));
    return ok('mock-loadout');
   }
   if(url.pathname.endsWith('/xtank_social_api'))return ok({friends:[]});
@@ -117,9 +117,11 @@ async function testMockedNativeAccount(p){
   assert((await p.locator('.xtank-inventory').innerText()).includes('mine'));
   await p.fill('#xtankLoadoutForm input[name=name]','QA preset');
   await p.selectOption('#xtankLoadoutForm select[name=weapon_1]','mine');
+  await p.selectOption('#xtankLoadoutForm select[name=item_1]','repair');
   await p.click('#xtankLoadoutForm button[type=submit]');
   await p.waitForFunction(()=>document.querySelector('#xtankAccountStatus')?.textContent?.includes('配裝已儲存'));
   assert.equal(data.slots[0].weapon_id,'mine');
+  assert(data.slots.some(s=>s.slot_type==='item'&&s.slot_number===1&&s.item_id==='repair'),'equipped repair reaches loadout RPC');
   await p.click('[data-action="tab:settings"]');
   await p.fill('#xtankSettingsForm input[name=name]','QA-UI-NEW');
   await p.fill('#xtankSettingsForm input[name=master_volume]','0.7');
