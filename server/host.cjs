@@ -41,10 +41,15 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
  const roomSummary=r=>({roomId:r.id,mode:r.mode,mapId:r.mapId,phase:r.phase,
    players:members(r).filter(p=>p.ws).length,capacity:8,passwordRequired:!!r.password});
  function passwordDigest(password,salt){return crypto.scryptSync(password,salt,32);}
- function roomPasswordValid(r,password){
+ async function roomPasswordValid(r,password){
    if(!r.password)return true;
    if(typeof password!=='string'||password.length>64)return false;
-   return crypto.timingSafeEqual(r.password.hash,passwordDigest(password,r.password.salt));
+   // PBKDF must run off the event loop: synchronous scrypt here stalls every
+   // active combat room whenever someone retries a password-protected JOIN.
+   const attempt=await new Promise((resolve,reject)=>{
+     crypto.scrypt(password,r.password.salt,32,(err,buf)=>err?reject(err):resolve(buf));
+   });
+   return crypto.timingSafeEqual(r.password.hash,attempt);
  }
  function broadcast(r,msg){for(const p of members(r))send(p.ws,msg);}
  function lobby(r){broadcast(r,{type:'LOBBY',roomId:r.id,mode:r.mode,mapId:r.mapId,phase:r.phase,hostId:r.hostId,
@@ -162,10 +167,20 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
     p=makePlayer(m,ws);p.team=selectTeam(r,m.team);r.people.set(p.id,p);r.hostId=p.id;
     send(ws,{type:'JOINED',roomId:r.id,playerId:p.id,token:p.token,host:true});lobby(r);
    }else if(m.type==='JOIN'&&!p){
+    if(ws._xtankJoinPending)return send(ws,{type:'ERROR',code:'JOIN_PENDING'});
     const found=rooms.get(String(m.roomId||'').toUpperCase());
     if(!found)return send(ws,{type:'ERROR',code:'ROOM_NOT_FOUND'});
     if(found.phase!=='lobby')return send(ws,{type:'ERROR',code:'ROUND_RUNNING'});
-     if(!roomPasswordValid(found,m.password))return send(ws,{type:'ERROR',code:'BAD_ROOM_PASSWORD'});
+    if(found.people.size>=8)return send(ws,{type:'ERROR',code:'ROOM_FULL'});
+    ws._xtankJoinPending=true;
+    let correct;
+    try{correct=await roomPasswordValid(found,m.password);}
+    catch(error){ws._xtankJoinPending=false;return send(ws,{type:'ERROR',code:'PASSWORD_CHECK_FAILED'});}
+    ws._xtankJoinPending=false;
+    if(ws.readyState!==WebSocket.OPEN||p)return;
+    if(!correct)return send(ws,{type:'ERROR',code:'BAD_ROOM_PASSWORD'});
+    // Verify mutable room state again after asynchronous password checking.
+    if(found.phase!=='lobby')return send(ws,{type:'ERROR',code:'ROUND_RUNNING'});
     if(found.people.size>=8)return send(ws,{type:'ERROR',code:'ROOM_FULL'});
     r=found;p=makePlayer(m,ws);p.team=selectTeam(r,m.team);r.people.set(p.id,p);
     send(ws,{type:'JOINED',roomId:r.id,playerId:p.id,token:p.token,host:false});lobby(r);
