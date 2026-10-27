@@ -137,6 +137,15 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
    }else if(!p||p.ws!==ws){send(ws,{type:'ERROR',code:'NOT_JOINED'});}
    else if(m.type==='START')start(r,p);
     else if(m.type==='READY'&&r.phase==='lobby'){p.ready=m.ready===true;lobby(r);}
+    else if(m.type==='CHAT'&&r.phase==='lobby'){
+      const text=typeof m.text==='string'?m.text.trim():'';
+      if(text.length<1||text.length>140||/[\u0000-\u001f\u007f]/.test(text))
+        return send(ws,{type:'ERROR',code:'INVALID_CHAT'});
+      if(Date.now()-(p.lastChatAt||0)<950)
+        return send(ws,{type:'ERROR',code:'CHAT_RATE_LIMIT'});
+      p.lastChatAt=Date.now();
+      broadcast(r,{type:'ROOM_CHAT',playerId:p.id,name:p.name,text,at:Date.now()});
+    }
    else if(m.type==='INPUT'&&r.phase==='live'&&p.slot){
     if(!Number.isSafeInteger(m.seq)||m.seq<=p.seq)return;
     const input=sanitizeInput(m);
