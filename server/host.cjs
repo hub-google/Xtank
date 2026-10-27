@@ -5,6 +5,7 @@ const path=require('node:path');
 const {pathToFileURL}=require('node:url');
 const {WebSocketServer,WebSocket}=require('ws');
 const {officialService}=require('./official.cjs');
+const {createFixedStepClock}=require('./fixed-step-clock.cjs');
 const id=()=>crypto.randomBytes(8).toString('hex');
 const send=(ws,msg)=>{if(ws?.readyState===WebSocket.OPEN)ws.send(JSON.stringify(msg));};
 const sanitizeInput=m=>{
@@ -237,8 +238,12 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
   return {id:id(),token:id()+id(),name:String(m.name||'Player').replace(/[<>]/g,'').slice(0,20),
    tank,ready:false,ws,seq:-1,slot:null,lastSeen:Date.now(),accountUserId:m.accountUserId||null,allowedWeapons:m.allowedWeapons||null,upgrades:m.upgrades||null,itemsAvailable:m.itemsAvailable||null};
  }
+ // Drive exactly 50 ms of simulation per fixed step, including catch-up after
+ // short scheduler stalls. Poll at 25 ms to reduce jitter without doubling ticks.
+ const elapsedSteps=createFixedStepClock({periodMs:50,maxCatchUpSteps:5});
  const ticking=setInterval(()=>{
-  for(const r of rooms.values()){
+  const steps=elapsedSteps();
+  for(let step=0;step<steps;step++)for(const r of rooms.values()){
    if(r.phase==='countdown'){
      const live=members(r).filter(member=>member.ws);
      if(live.length<2||live.some(member=>!member.ready))cancelCountdown(r);
@@ -287,7 +292,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
    }
    if(!r.people.size&&Date.now()-r.created>20000)rooms.delete(r.id);
   }
- },50);
+ },25);
  ticking.unref?.();
  const heartbeat=setInterval(()=>{
   for(const ws of wss.clients){if(!ws.isAlive)ws.terminate();else{ws.isAlive=false;ws.ping();}}
