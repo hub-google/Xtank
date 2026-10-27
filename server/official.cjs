@@ -42,8 +42,14 @@ function officialService(){
           upgrades[v.attribute]=Math.max(0,Math.min(10,v.level));
       }
       const itemsAvailable={repair:0,speed_boost:0,shield_cell:0,radar_ping:0,smoke:0,team_repair:0};
+      // Only the authenticated player's selected tank loadout may supply battle consumables.
+      // Owning an item in inventory alone does not mean it is equipped.
+      const equippedItems=new Set(active?(dash.slots||[])
+        .filter(slot=>slot.loadout_id===active.loadout_id&&slot.slot_type==='item')
+        .map(slot=>slot.item_id):[]);
       for(const item of (dash.inventory||[])){
-        if(Object.hasOwn(itemsAvailable,item.item_id)&&Number.isSafeInteger(Number(item.quantity))&&Number(item.quantity)>0)
+        if(equippedItems.has(item.item_id)&&Object.hasOwn(itemsAvailable,item.item_id)
+          &&Number.isSafeInteger(Number(item.quantity))&&Number(item.quantity)>0)
           itemsAvailable[item.item_id]=Math.min(30,itemsAvailable[item.item_id]+Number(item.quantity));
       }
       return {player_id:u.id,name:dash.profile.display_name,
