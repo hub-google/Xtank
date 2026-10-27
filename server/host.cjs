@@ -67,7 +67,7 @@ async function createHost({port=8787,host='0.0.0.0'}={}){
    if(++received>60){ws.close(1008,'rate limit');return;}
    let m;try{m=JSON.parse(raw.toString());}catch{return send(ws,{type:'ERROR',code:'BAD_JSON'});}
    if(!m||typeof m.type!=='string')return;
-   if(official&&(m.type==='CREATE'||m.type==='JOIN')&&!p){
+   if(official&&(m.type==='CREATE'||m.type==='JOIN'||m.type==='QUICK_MATCH')&&!p){
       if(ws._xtankAuthPending)return send(ws,{type:'ERROR',code:'AUTH_PENDING'});
       ws._xtankAuthPending=true;
       try{
@@ -76,6 +76,16 @@ async function createHost({port=8787,host='0.0.0.0'}={}){
       }catch(err){ws._xtankAuthPending=false;return send(ws,{type:'ERROR',code:'AUTH_FAILED',message:err.message});}
       ws._xtankAuthPending=false;
       if(ws.readyState!==WebSocket.OPEN)return;
+       if([...rooms.values()].some(room=>members(room).some(member=>member.accountUserId===m.accountUserId))){
+         return send(ws,{type:'ERROR',code:'ACCOUNT_ALREADY_IN_ROOM'});
+       }
+    }
+    if(m.type==='QUICK_MATCH'&&!p){
+      const candidates=[...rooms.values()].filter(room=>room.phase==='lobby'&&!room.password&&members(room).length<8&&room.mode===m.mode
+        &&(m.mapId==null||room.mapId===m.mapId));
+      candidates.sort((a,b)=>members(b).length-members(a).length);
+      if(candidates.length){m.type='JOIN';m.roomId=candidates[0].id;}
+      else m.type='CREATE';
     }
     if(m.type==='LIST_ROOMS'&&!p){
       send(ws,{type:'ROOMS',rooms:[...rooms.values()].filter(room=>room.phase==='lobby'&&!room.password).map(roomSummary).slice(0,32)});
