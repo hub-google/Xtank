@@ -163,3 +163,11 @@ X-TANK 是一款最多 8 人同場的 3D 第三人稱即時坦克射擊遊戲。
 - 本機 `localStorage` 保存按鍵設定；目前尚未同步至 Supabase 帳號，換另一台 Windows 裝置需重新設定。
 - 新增 `src/controls.js` 與 `test/controls.test.js`，並修改 `src/game.js`、`index.html`、`src/style.css`。程式提交：[c5accb3](https://github.com/hub-google/Xtank/commit/c5accb3e8e7f4e60e6a3c5aa82045022cb158dd0)、[424a677](https://github.com/hub-google/Xtank/commit/424a677095ad4371158d5511a61f91679e31342a)、[a00af46](https://github.com/hub-google/Xtank/commit/a00af4660d6912a3cf877530851e98e353c37e78)、[2521d91](https://github.com/hub-google/Xtank/commit/2521d91a319b683155011b33c3b21d31ddfa0186)。
 - 版本仍為開發版；鍵位功能應以**含此 commit 的 GitHub Actions**編譯、單元測試及 Windows 原生 EXE GUI 驗證後，再標記正式完成。
+
+
+### 2026-10-27 防止並行開發中斷正式 Windows QA
+
+由於多個開發工作持續向 `main` push，原本單一 `cancel-in-progress` 會令所有耗時 Windows GUI 測試在 EXE 打包或 72-case 執行前不斷取消。現在 `.github/workflows/windows-exe.yml` 以 Git 分支 ref 分組，主線仍維持「同分支只跑最新」，並新增固定版本的 [release-validation/20261027-full-gui](https://github.com/hub-google/Xtank/tree/release-validation/20261027-full-gui) 驗收分支。
+
+- [獨立 Windows QA Run #151](https://github.com/hub-google/Xtank/actions/runs/40506020053)：驗收分支將獨立完成 Node、Docker、EXE、72 組 GUI，不因主線持續開發而取消。
+- 此分支**不是正式版本標籤或已通過證書**；只能在 GitHub Actions job 成功且逐項證據確認後，標示實際 PASS。
