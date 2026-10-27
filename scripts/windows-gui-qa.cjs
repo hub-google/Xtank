@@ -53,10 +53,92 @@ async function start(p,tank='X',mode='FFA',map='desk'){
  await home(p);await p.selectOption('#tankSelect',tank);await p.selectOption('#modeSelect',mode);await p.selectOption('#mapSelect',map);await p.click('#startButton');await wait(p,()=>window.xtankDiagnostics().match?.tick>.2);
 }
 async function key(p,k,ms){await p.keyboard.down(k);await delay(ms);await p.keyboard.up(k);}
+
+async function testMockedNativeAccount(p){
+ // UI integration through the real packaged EXE, with isolated HTTP mocks.
+ // This is NOT a test of genuine Supabase authorization or database writes.
+ const tanks=['X','D','M','R','H','A','O','S'];
+ const wallet={balance:1000};
+ const data={name:'QA-UI',volume:1,inventory:[],loadouts:[],slots:[],points:1};
+ const offer='00000000-0000-4000-8000-000000000333';
+ const calls=[];
+ const backend='https://fanffwnhkxpfhttylntw.supabase.co/**';
+ await p.route(backend,async route=>{
+  const request=route.request(),url=new URL(request.url());
+  let input={};try{input=request.postDataJSON()||{}}catch{}
+  const action=input.p_action||url.pathname;
+  calls.push(action);
+  const ok=value=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(value)});
+  if(url.pathname.startsWith('/auth/v1/token'))return ok({access_token:'mocked-gui-jwt',refresh_token:'mocked-gui-refresh',expires_in:3600});
+  if(url.pathname.endsWith('/xtank_player_api')){
+   if(action==='initialize')return ok({ok:true});
+   if(action==='dashboard')return ok({
+    profile:{player_id:'00000000-0000-4000-8000-000000000111',display_name:data.name},
+    progress:{level:1,total_xp:0,unspent_points:data.points},stats:{matches_played:0,wins:0,kills:0},
+    settings:{master_volume:data.volume,mouse_sensitivity:1},
+    wallet:[{currency_code:'COIN',balance:wallet.balance}],
+    tanks:tanks.map(tank_id=>({tank_id,level:1})),inventory:data.inventory,upgrades:[],
+    loadouts:data.loadouts,slots:data.slots,history:[]});
+   if(action==='catalog')return ok({
+    tanks:tanks.map(tank_id=>({tank_id,base_hp:100,base_shield:40,speed:7})),
+    weapons:['hurricane','vulcan','plasma','death_knight','mine'].map(weapon_id=>({weapon_id,display_name:weapon_id})),
+    items:[],offers:[{offer_id:offer,offer_key:'test-mine',weapon_id:'mine',unit_price:100,quantity:1,currency_code:'COIN'}]});
+   if(action==='buy'){assert.equal(input.p_payload.offer_id,offer);wallet.balance-=100;data.inventory=[{weapon_id:'mine',quantity:1}];return ok({ok:true,order_id:'mock-order'});}
+   if(action==='rename'){data.name=input.p_payload.name;return ok({ok:true});}
+   if(action==='settings'){data.volume=input.p_payload.master_volume;return ok({ok:true});}
+   if(action==='leaderboard')return ok({players:[]});
+   if(action==='upgrade'){data.points--;return ok({ok:true});}
+  }
+  if(url.pathname.endsWith('/xtank_save_loadout')){
+   data.loadouts=[{loadout_id:'mock-loadout',tank_id:input.p_tank_id,name:input.p_name,is_selected:true}];
+   data.slots=(input.p_slots||[]).map(s=>({slot_type:s.slot_type,slot_number:s.slot_number,weapon_id:s.ref,loadout_id:'mock-loadout'}));
+   return ok('mock-loadout');
+  }
+  if(url.pathname.endsWith('/xtank_social_api'))return ok({friends:[]});
+  return route.fulfill({status:404,body:'Unmocked API endpoint'});
+ });
+ try{
+  await p.click('#xtankAccountOpen');
+  await p.fill('#xtankAuthForm input[name=email]','mock-user@example.test');
+  await p.fill('#xtankAuthForm input[name=password]','mock-password-only');
+  await p.click('#xtankAuthForm button[value=login]');
+  await p.waitForFunction(()=>document.querySelector('#xtankAccountContent')?.textContent?.includes('QA-UI'));
+  assert((await p.locator('#xtankAccountContent').innerText()).includes('1000'),'starting balance');
+  await p.click('[data-action="tab:garage"]');
+  assert.equal(await p.locator('.xtank-card-grid article').count(),8);
+  await p.click('[data-action="tab:shop"]');
+  await p.click('[data-action="buy:'+offer+'"]');
+  await p.waitForFunction(()=>document.querySelector('#xtankAccountStatus')?.textContent?.includes('購買成功'));
+  assert.equal(wallet.balance,900);
+  await p.click('[data-action="tab:inventory"]');
+  assert((await p.locator('.xtank-inventory').innerText()).includes('mine'));
+  await p.fill('#xtankLoadoutForm input[name=name]','QA preset');
+  await p.selectOption('#xtankLoadoutForm select[name=weapon_1]','mine');
+  await p.click('#xtankLoadoutForm button[type=submit]');
+  await p.waitForFunction(()=>document.querySelector('#xtankAccountStatus')?.textContent?.includes('配裝已儲存'));
+  assert.equal(data.slots[0].weapon_id,'mine');
+  await p.click('[data-action="tab:settings"]');
+  await p.fill('#xtankSettingsForm input[name=name]','QA-UI-NEW');
+  await p.fill('#xtankSettingsForm input[name=master_volume]','0.7');
+  await p.click('#xtankSettingsForm button[type=submit]');
+  await p.waitForFunction(()=>document.querySelector('#xtankAccountStatus')?.textContent?.includes('設定已儲存'));
+  assert.equal(data.name,'QA-UI-NEW');assert.equal(data.volume,0.7);
+  await p.click('[data-action=logout]');
+  assert(await p.isVisible('#xtankAuthForm'));
+  await p.click('#xtankGuestContinue');
+  assert(await p.isVisible('#startMenu'));
+  for(const action of ['initialize','dashboard','catalog','buy','settings'])assert(calls.includes(action),'missing '+action);
+  metrics.accountGui={type:'REAL_EXE_MOCK_BACKEND',actions:calls,remainingBalance:wallet.balance};
+ }finally{
+  await p.unroute(backend);
+ }
+}
+
 (async()=>{try{
  assert.equal(process.platform,'win32','Windows GUI tests require native Windows');
  const p=await launch(0);
  await step('A-portable-exe-home-WebGL',p,async()=>{assert(await p.isVisible('#startMenu'));const s=await state(p);assert(s.render.triangles>100);});
+ await step('A-account-frontend-mocked-backend',p,async()=>testMockedNativeAccount(p));
  for(const tank of ['X','D','M','R','H','A','O','S'])for(const mode of ['FFA','TDM','FLAG_HOLD'])for(const map of ['desk','chess','circuit']){
   await step(`B-${tank}-${mode}-${map}`,p,async()=>{await start(p,tank,mode,map);const s=await state(p);assert.equal(s.match.tanks[0].kind,tank);assert.equal(s.match.mode,mode);assert.equal(s.match.mapId,map);assert(s.render.calls>0);assert(await p.isVisible('#hud'));if(mode==='FFA'&&map==='desk'){await p.keyboard.press('e');await delay(250);const a=await state(p);assert(a.match.tanks[0].abilityTime>0,'tank ability '+tank);}});
  }
