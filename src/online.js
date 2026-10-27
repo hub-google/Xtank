@@ -16,7 +16,7 @@ export class OnlineConnection {
   const ws=new WebSocket(this.url);this.socket=ws;
   ws.addEventListener('open',()=>{
    if(ws!==this.socket)return;
-   const action=resume?{type:'RESUME',roomId:this.roomId,playerId:this.playerId,token:this.token}:this.intent;
+   const action=resume?{type:'RESUME',roomId:this.roomId,playerId:this.playerId,token:this.token,accessToken:this.intent?.accessToken}:this.intent;
    this.send(action);this.onStatus(resume?'已連上，恢復房間中…':'伺服器已連接，正在加入房間…');
   });
   ws.addEventListener('message',e=>{
