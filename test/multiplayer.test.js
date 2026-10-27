@@ -106,3 +106,36 @@ test('eight real WebSocket clients occupy unique slots; ninth denied; session re
  const latest=await message(replacement,'SNAPSHOT');
  assert.equal(latest.tanks.length,8);
 });
+
+test('public room directory hides password rooms and ready state broadcasts without exposing passwords',async t=>{
+ const host=await createHost({host:'127.0.0.1',port:0});
+ t.after(async()=>host.close());
+ const url='ws://127.0.0.1:'+host.port;
+ const sockets=[];
+ const dial=async()=>{const s=await connect(url);sockets.push(s);return s;};
+ t.after(()=>sockets.forEach(s=>s.terminate()));
+ const pub=await dial(),priv=await dial(),viewer=await dial(),joiner=await dial();
+ send(pub,{type:'CREATE',name:'Open',tank:'X',mode:'FFA',mapId:'desk'});
+ const publicRoom=await message(pub,'JOINED');await message(pub,'LOBBY');
+ send(priv,{type:'CREATE',name:'Private',tank:'D',mode:'TDM',mapId:'chess',password:'very-secret-phrase'});
+ const privateRoom=await message(priv,'JOINED');
+ const privateLobby=await message(priv,'LOBBY');
+ assert.equal(JSON.stringify(privateLobby).includes('very-secret-phrase'),false);
+ send(viewer,{type:'LIST_ROOMS'});
+ const directory=await message(viewer,'ROOMS');
+ assert(directory.rooms.some(r=>r.roomId===publicRoom.roomId),'public room is listed');
+ assert(!directory.rooms.some(r=>r.roomId===privateRoom.roomId),'password-protected room is hidden');
+ send(joiner,{type:'JOIN',roomId:privateRoom.roomId,password:'wrong-password',name:'Guest'});
+ assert.equal((await message(joiner,'ERROR')).code,'BAD_ROOM_PASSWORD');
+ send(joiner,{type:'JOIN',roomId:privateRoom.roomId,password:'very-secret-phrase',name:'Guest'});
+ assert.equal((await message(joiner,'JOINED')).roomId,privateRoom.roomId);
+ const lobby=await message(joiner,'LOBBY');
+ assert(lobby.people.some(x=>x.name==='Guest'&&!x.ready));
+ send(joiner,{type:'READY',ready:true});
+ const ready=await message(joiner,'LOBBY');
+ assert(ready.people.some(x=>x.name==='Guest'&&x.ready));
+ assert.equal(JSON.stringify(ready).includes('very-secret-phrase'),false);
+ send(joiner,{type:'READY',ready:false});
+ const unready=await message(joiner,'LOBBY');
+ assert(unready.people.some(x=>x.name==='Guest'&&!x.ready));
+});
