@@ -55,15 +55,19 @@
             <label>你的名稱 <input id="playerName" maxlength="20" value="Player" autocomplete="off"></label>
             <label>伺服器 WebSocket 網址 <input id="serverAddress" value="ws://127.0.0.1:8787" spellcheck="false"></label>
             <label>房間代碼（加入時填寫） <input id="roomCode" maxlength="6" placeholder="例如 A1B2C3" spellcheck="false"></label>
+            <label>房間密碼（選填） <input id="roomPassword" type="password" maxlength="40" autocomplete="off" placeholder="公開房間留空"></label>
           </div>
           <div class="network-buttons">
             <button id="hostServerButton" class="secondary" type="button">在本機開啟 LAN 伺服器</button>
             <button id="makeRoomButton" class="secondary" type="button">建立多人房間</button>
             <button id="joinRoomButton" class="secondary" type="button">加入房間</button>
+            <button id="listRoomsButton" class="secondary" type="button">公開房間列表</button>
           </div>
           <p class="net-status" id="networkStatus" role="status" aria-live="polite">先開啟 LAN 伺服器，或輸入可連線的其他伺服器網址。</p>
+          <div id="publicRoomList" role="region" aria-label="公開房間列表" hidden></div>
           <div id="networkLobby" hidden>
             <p id="roomDetails"></p><p id="roomPeople"></p>
+            <button id="readyNetworkButton" class="secondary" type="button">準備</button>
             <button id="startNetworkButton" class="primary" type="button" hidden>房主：開始連線對戰</button>
             <button id="leaveNetworkButton" class="secondary" type="button">離開線上房間</button>
           </div>
