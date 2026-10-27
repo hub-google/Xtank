@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DEFAULT_BINDINGS,assignBinding,normalizeBindings,loadBindings,saveBindings,isAllowedCode} from '../src/controls.js';
 test('unique defaults for movement, skills, weapons, consumables',()=>{
- assert.equal(Object.keys(DEFAULT_BINDINGS).length,20);
+ assert.equal(Object.keys(DEFAULT_BINDINGS).length,21);
  assert.equal(new Set(Object.values(DEFAULT_BINDINGS)).size,20);
 });
 test('already-bound keys exchange actions instead of losing a command',()=>{

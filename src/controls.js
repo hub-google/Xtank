@@ -1,5 +1,5 @@
-export const DEFAULT_BINDINGS=Object.freeze({forward:'KeyW',backward:'KeyS',left:'KeyA',right:'KeyD',fire:'Space',ability:'KeyE',pause:'KeyP',weapon1:'Digit1',weapon2:'Digit2',weapon3:'Digit3',weapon4:'Digit4',weapon5:'Digit5',weapon6:'Digit6',weapon7:'Digit7',item1:'F1',item2:'F2',item3:'F3',item4:'F4',item5:'F5',item6:'F6'});
-export const ACTION_LABELS=Object.freeze({forward:'前進',backward:'後退',left:'向左',right:'向右',fire:'射擊',ability:'特殊技能',pause:'暫停',weapon1:'武器 1',weapon2:'武器 2',weapon3:'武器 3',weapon4:'武器 4',weapon5:'武器 5',weapon6:'武器 6',weapon7:'武器 7',item1:'道具 1',item2:'道具 2',item3:'道具 3',item4:'道具 4',item5:'道具 5',item6:'道具 6'});
+export const DEFAULT_BINDINGS=Object.freeze({forward:'KeyW',backward:'KeyS',left:'KeyA',right:'KeyD',fire:'Space',ability:'KeyE',pause:'KeyP',camera:'KeyC',weapon1:'Digit1',weapon2:'Digit2',weapon3:'Digit3',weapon4:'Digit4',weapon5:'Digit5',weapon6:'Digit6',weapon7:'Digit7',item1:'F1',item2:'F2',item3:'F3',item4:'F4',item5:'F5',item6:'F6'});
+export const ACTION_LABELS=Object.freeze({forward:'前進',backward:'後退',left:'向左',right:'向右',fire:'射擊',ability:'特殊技能',pause:'暫停',camera:'切換視角',weapon1:'武器 1',weapon2:'武器 2',weapon3:'武器 3',weapon4:'武器 4',weapon5:'武器 5',weapon6:'武器 6',weapon7:'武器 7',item1:'道具 1',item2:'道具 2',item3:'道具 3',item4:'道具 4',item5:'道具 5',item6:'道具 6'});
 const STORAGE_KEY='xtankKeyboardBindingsV1';
 export function isAllowedCode(code){return typeof code==='string'&&/^(?:Key[A-Z]|Digit[0-9]|F(?:[1-9]|1[0-2])|Arrow(?:Up|Down|Left|Right)|Space)$/.test(code)}
 export function assignBinding(previous,action,code){
