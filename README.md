@@ -140,3 +140,17 @@ X-TANK 是一款最多 8 人同場的 3D 第三人稱即時坦克射擊遊戲。
 - 新增 `test/room-lifecycle.test.js`，涵蓋中途無人離線與過期 session；初次 Windows CI 發現新測試事件時序競態，已於 [e89feb5](https://github.com/hub-google/Xtank/commit/e89feb58510d8aa2d3845a04f30a9c46f9e0a891) 修正。
 - 程式碼提交 [ab5dd50](https://github.com/hub-google/Xtank/commit/ab5dd500876cae0b41080f7ca05f0345d8be6801)，測試提交 [a78e500](https://github.com/hub-google/Xtank/commit/a78e5006bfd7f2484f237038d00d8d288f61401b)。**是否通過測試以對應 GitHub Actions 最終結果為準**。
 - 尚未完成的交付門檻不變：官方持續公網 WSS 部署、兩台不同網路原生 Windows EXE 完整真人驗收、真實 Supabase 結算與重啟、72 組完整 GUI／耐久性／安全測試。此項修復不代表正式版已完成。
+
+
+## 2026-10-27 本輪繼續開發：戰鬥時鐘、重連安全與 72 組 Windows GUI
+
+本輪新增與修復以下**實際程式碼**，已直接推送 `main`：
+
+- **正式對戰結算介面**：`src/game.js` 會顯示「官方獎勵入帳中」，直到伺服器發出 `MATCH_SAVED` 才允許返回房間；避免玩家在尚未確認入帳時誤以為已完成。
+- **權威伺服器 20Hz 固定時間步**：`server/fixed-step-clock.cjs` 以單調時鐘補算短暫 event-loop 停頓後錯過的 tick，最多一次追趕 5 步，避免跑到無界迴圈；`test/fixed-step-clock.test.cjs` 及多人 socket 測試覆蓋此行為。
+- **密碼房安全效能**：`server/host.cjs` 使用非同步 scrypt 驗證加入密碼，另阻擋同一 WebSocket 並行 `JOIN`；其他房間不應因惡意密碼嘗試而卡頓。
+- **官方帳號斷線續連**：`src/online.js` 每次 `RESUME` 前向 `xtankAccount` 要求最新 Supabase access token；登入被撤銷時停止重試並顯示重新登入訊息，LAN 遊客仍可不帶 JWT 續連。回歸測試見 `test/online-resume.test.js`。
+- **Windows 72 組 GUI QA**：同一份 `.github/workflows/windows-exe.yml` 現在於程式 push 時額外執行 8 車 × 3 模式 × 3 地圖 GUI 測試；手動 `qa_filter=^` 可進行整份 GUI QA。尚需使用各次 Actions 的 `REPORT.md` 區分 PASS、FAIL、BLOCKED，不能因為程式存在便宣稱完整驗收。
+- **公網部署藍圖**：新增 `render.yaml`、[正式公網 WSS 部署與交付驗收](docs/28_正式公網部署與交付驗收.md)。已具備 Docker/Render 單一節點、持久化結算 outbox 和 server-only Supabase secret 的部署規格；**尚未在 Render 實際建立或驗收公開服務**。
+
+建置與測試：[Windows EXE Actions](https://github.com/hub-google/Xtank/actions/workflows/windows-exe.yml)。GitHub 原始碼更新與 Windows CI 通過只代表各自的項目通過，**完整正式版仍以真實兩網 Windows EXE、正式 WSS、永久結算、防作弊、長時間測試皆具證據才算完成**。
