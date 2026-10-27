@@ -51,13 +51,13 @@ if(menu){
       main.innerHTML='<h2>我的公會</h2>'+(own.map(c=>'<article><strong>'+safe(c.name)+'</strong> ['+safe(c.tag)+'] ('+safe(c.role)+') <button data-clan-chat="'+safe(c.clan_id)+'">公會聊天</button><button data-leave="'+safe(c.clan_id)+'">退出／解散</button></article>').join('')||'<p>尚未加入公會</p>')
       +'<h2>公開公會</h2>'+list.map(c=>'<article>'+safe(c.name)+' ['+safe(c.tag)+'] <button data-join="'+safe(c.id)+'">加入</button></article>').join('')
       +form('xtankCreateClan','<label>公會名稱 <input name="name" required minlength="3" maxlength="40"></label><label>公會標籤 <input name="tag" required minlength="2" maxlength="6"></label>','建立公會')
-      +'<h3>公會訊息</h3><div id="xtankClanMessages"></div>'+form('xtankClanChat','<label>訊息 <input name="body" required maxlength="500"></label>','發送公會訊息');
+      +'<h3>公會成員及幹部管理</h3><div id="xtankClanMembers"></div><h3>公會訊息</h3><div id="xtankClanMessages"></div>'+form('xtankClanChat','<label>訊息 <input name="body" required maxlength="500"></label>','發送公會訊息');
       main.querySelector('#xtankCreateClan').onsubmit=e=>{e.preventDefault();run(()=>api('create_clan',{name:e.target.elements.name.value,tag:e.target.elements.tag.value}))};
       main.querySelectorAll('[data-join]').forEach(b=>b.onclick=()=>run(()=>api('join_clan',{clan_id:b.dataset.join})));
       main.querySelectorAll('[data-leave]').forEach(b=>b.onclick=()=>run(()=>api('leave_clan',{clan_id:b.dataset.leave})));
-      main.querySelectorAll('[data-clan-chat]').forEach(b=>b.onclick=()=>{selectedClan=b.dataset.clanChat;loadConversation()});
+      main.querySelectorAll('[data-clan-chat]').forEach(b=>b.onclick=()=>{selectedClan=b.dataset.clanChat;loadConversation();loadMembers()});
       main.querySelector('#xtankClanChat').onsubmit=e=>{e.preventDefault();if(!selectedClan)return status('請先選擇公會聊天');run(()=>api('send_clan_chat',{clan_id:selectedClan,body:e.target.elements.body.value}))};
-      if(selectedClan)loadConversation();
+      if(selectedClan){loadConversation();loadMembers()}
     }else if(tab==='chat'){
       main.innerHTML='<h2>好友私訊</h2><label>對象 <select id="xtankDmTarget">'+friends().map(f=>'<option value="'+safe(f.id)+'">'+safe(f.name)+'</option>').join('')+'</select></label><div id="xtankDmMessages"></div>'
        +form('xtankDmForm','<label>訊息 <input name="body" required maxlength="500"></label>','送出訊息');
@@ -79,6 +79,34 @@ if(menu){
       main.innerHTML='<h2>玩家檢舉</h2>'+form('xtankReportForm','<label>玩家 UUID <input name="reported_id" required></label><label>理由<input name="reason" minlength="5" maxlength="200" required></label><label>補充說明<textarea name="details" maxlength="1000"></textarea></label>','送出檢舉');
       qs('#xtankReportForm').onsubmit=e=>{e.preventDefault();const f=e.target;run(()=>api('report',{reported_id:f.elements.reported_id.value,reason:f.elements.reason.value,details:f.elements.details.value}))};
     }
+  }
+  async function loadMembers(){
+    const root=qs('#xtankClanMembers');
+    if(!root)return;
+    if(!selectedClan){root.textContent='請選擇公會';return}
+    root.textContent='讀取公會成員中…';
+    try{
+      const data=await rpc('xtank_clan_admin_api',{p_action:'members',p_clan_id:selectedClan});
+      if(!root.isConnected)return;
+      const ownRole=(data?.clans||[]).find(x=>x.clan_id===selectedClan)?.role||
+         (await api('overview')).clans?.find(x=>x.clan_id===selectedClan)?.role;
+      const me=window.xtankAccount?.getSignedInPlayerId?.();
+      root.innerHTML=(data.members||[]).map(member=>{
+        const id=safe(member.player_id),canManage=member.player_id!==me&&
+          (ownRole==='leader'||ownRole==='officer'&&member.role==='member');
+        const actions=!canManage?'':(ownRole==='leader'?
+          (member.role==='officer'?'<button data-clan-action="demote" data-target="'+id+'">撤銷幹部</button>':
+           '<button data-clan-action="promote" data-target="'+id+'">升為幹部</button>')+
+          '<button data-clan-action="transfer" data-target="'+id+'">移交會長</button>':'')+
+          '<button data-clan-action="kick" data-target="'+id+'">移除成員</button>';
+        return '<article>'+safe(member.name)+'（'+safe(member.role)+'） '+actions+'</article>';
+      }).join('')||'<p>公會沒有成員</p>';
+      root.querySelectorAll('[data-clan-action]').forEach(button=>button.onclick=()=>{
+        const action=button.dataset.clanAction,target=button.dataset.target;
+        if(['transfer','kick'].includes(action)&&!confirm(action==='transfer'?'確定移交會長？':'確定移除這名成員？'))return;
+        run(()=>rpc('xtank_clan_admin_api',{p_action:action,p_clan_id:selectedClan,p_target:target}));
+      });
+    }catch(e){if(root.isConnected)root.textContent=e.message;}
   }
   async function loadConversation(){
     const root=tab==='clans'?qs('#xtankClanMessages'):qs('#xtankDmMessages');
