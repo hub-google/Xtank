@@ -61,7 +61,24 @@ async function key(p,k,ms){await p.keyboard.down(k);await delay(ms);await p.keyb
   await step(`B-${tank}-${mode}-${map}`,p,async()=>{await start(p,tank,mode,map);const s=await state(p);assert.equal(s.match.tanks[0].kind,tank);assert.equal(s.match.mode,mode);assert.equal(s.match.mapId,map);assert(s.render.calls>0);assert(await p.isVisible('#hud'));if(mode==='FFA'&&map==='desk'){await p.keyboard.press('e');await delay(250);const a=await state(p);assert(a.match.tanks[0].abilityTime>0,'tank ability '+tank);}});
  }
  await step('C-wall-clock-simulation-rate',p,async()=>{await start(p);await delay(2500);const a=await state(p);await delay(5000);const b=await state(p);const ratio=(b.match.tick-a.match.tick)/(b.now-a.now);metrics.clock={ratio,simulationSeconds:b.match.tick-a.match.tick,wallSeconds:b.now-a.now,frameMs:b.frameMs,gpu:b.gpuRenderer};assert(ratio>.7&&ratio<1.3,'simulation / real time = '+ratio);});
- await step('C-WASD-camera',p,async()=>{await start(p);for(const [k,axis,sign] of [['w','z',-1],['s','z',1],['a','x',-1],['d','x',1]]){const a=await state(p);await key(p,k,350);const b=await state(p);assert((b.match.tanks[0][axis]-a.match.tanks[0][axis])*sign>.2,k+' direction');} });
+ await step('C-WASD-camera',p,async()=>{
+ metrics.movement=[];
+ for(const [k,axis,sign] of [['w','z',-1],['s','z',1],['a','x',-1],['d','x',1]]){
+   // Every direction begins from a fresh known spawn. Otherwise previous input may
+   // have moved the player against a wall, AI, or an obstacle.
+   await start(p);
+   const a=await state(p);
+   await key(p,k,500);
+   const b=await state(p);
+   const before=a.match.tanks[0],after=b.match.tanks[0];
+   const delta=(after[axis]-before[axis])*sign;
+   metrics.movement.push({key:k,axis,expectedSign:sign,before:{x:before.x,z:before.z,alive:before.alive},
+     after:{x:after.x,z:after.z,alive:after.alive},delta,tickAdvance:b.match.tick-a.match.tick,paused:b.paused});
+   assert(after.alive,'tank died during '+k+' move');
+   assert(b.match.tick>a.match.tick,'simulation did not advance for '+k);
+   assert(delta>.2,k+' direction: before='+before[axis]+' after='+after[axis]+' delta='+delta);
+ }
+});
  await step('C-wall-boundary-blocking',p,async()=>{await start(p);await key(p,'a',1500);const a=await state(p);await key(p,'a',500);const b=await state(p);assert(a.match.tanks[0].x>=1.49);assert(Math.abs(b.match.tanks[0].x-a.match.tanks[0].x)<.1);});
  await step('C-mine-trigger-splash',p,async()=>{await start(p);await p.keyboard.press('7');await p.mouse.move(700,350);await p.mouse.down();await delay(150);await p.mouse.up();await key(p,'w',750);await p.waitForFunction(()=>window.xtankDiagnostics().events.some(e=>e.type==='explosion'&&e.weapon==='mine'),null,{timeout:45000});const s=await state(p);const boom=s.events.find(e=>e.type==='explosion'&&e.weapon==='mine');assert(s.events.some(e=>e.type==='hit'&&e.tick===boom.tick),'mine splash damage');});
  await step('C-seven-weapons-mouse-fire',p,async()=>{await start(p);await p.mouse.move(700,350);const weapons=['hurricane','death_knight','vulcan','plasma','chemical','ion_missile','mine'];for(let i=0;i<7;i++){await p.keyboard.press(''+(i+1));await p.mouse.down();await delay(2800);await p.mouse.up();const s=await state(p);assert(s.events.some(e=>e.type==='fire'&&e.owner==='player'&&e.weapon===weapons[i]),weapons[i]);await snap(p,'weapon-'+weapons[i]);}});
