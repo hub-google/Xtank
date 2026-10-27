@@ -70,6 +70,7 @@ async function reload(){
  dashboard=await rpc('dashboard');
  const nick=$('#playerName');if(nick&&nick.value==='Player')nick.value=dashboard.profile.display_name;
  catalog=await rpc('catalog');
+ window.xtankAudio?.setMasterVolume?.(dashboard.settings?.master_volume??0.7);
  draw();
 }
 function button(label,action,klass=''){
@@ -83,10 +84,17 @@ function authView(){
  <label>密碼<input type="password" name="password" autocomplete="current-password" minlength="6" required></label>
  <div class="xtank-actions"><button type="submit" name="mode" value="login">登入</button><button type="submit" name="mode" value="signup">註冊</button></div>
  </form>
- <button type="button" id="xtankGuestContinue">以遊客身分練習（不保存正式戰績）</button>
+ <button type="button" id="xtankRecoverPassword">忘記密碼（寄送重設郵件）</button>
+  <button type="button" id="xtankGuestContinue">以遊客身分練習（不保存正式戰績）</button>
  <p>遊客可以單機練習；帳號登入後才會永久保存坦克、金幣、背包資料。</p>
  <p>測試帳號透過 Supabase 私有 QA 資料表查詢，密碼不公開在 GitHub。</p></div>`;
  $('#xtankGuestContinue').addEventListener('click',hide);
+ $('#xtankRecoverPassword').addEventListener('click',()=>run(async()=>{
+  const email=$('#xtankAuthForm input[name=email]').value.trim();
+  if(!email||!email.includes('@'))throw Error('請先輸入電子郵件');
+  await rest('/auth/v1/recover',{body:{email}});
+  msg('若帳號存在，密碼重設郵件已寄出。');
+ }));
  $('#xtankAuthForm').addEventListener('submit',e=>{
   e.preventDefault();
   const submit=e.submitter; const f=e.target;
@@ -137,7 +145,8 @@ function panel(){
  <label>玩家名稱<input name="name" minlength="3" maxlength="24" value="${escaped(dashboard.profile.display_name)}"></label>
  <label>主音量 (0–1)<input name="master_volume" type="number" min="0" max="1" step=".1" value="${dashboard.settings.master_volume}"></label>
  <label>滑鼠靈敏度<input name="mouse_sensitivity" type="number" min=".1" max="10" step=".1" value="${dashboard.settings.mouse_sensitivity}"></label>
- <button type="submit">儲存設定</button></form>`;
+ <button type="submit">儲存設定</button></form>
+ <form id="xtankChangePassword"><label>新密碼（至少 8 字）<input name="password" type="password" required minlength="8" autocomplete="new-password"></label><button type="submit">變更密碼</button></form>`;
  return '';
 }
 function draw(){
@@ -172,6 +181,11 @@ function draw(){
    select.onchange=loadRank;
    loadRank();
  }
+ $('#xtankChangePassword')?.addEventListener('submit',e=>{e.preventDefault();run(async()=>{
+   const token=await getToken();
+   await rest('/auth/v1/user',{method:'PUT',token,body:{password:e.target.elements.password.value}});
+   e.target.reset();msg('密碼已更新');
+ })});
  $('#xtankSettingsForm')?.addEventListener('submit',e=>{e.preventDefault();run(async()=>{
   const f=e.target;await rpc('rename',{name:f.elements.name.value});
   await rpc('settings',{master_volume:Number(f.elements.master_volume.value),mouse_sensitivity:Number(f.elements.mouse_sensitivity.value)});
