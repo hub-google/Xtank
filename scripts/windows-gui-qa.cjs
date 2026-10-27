@@ -35,7 +35,7 @@ async function launch(i){
  const c=clients[clients.length-1];Object.assign(c,{browser,context,p});
  p.on('pageerror',e=>fs.appendFileSync(path.join(out,'renderer-errors.log'),e.stack+'\n'));
  p.on('console',m=>{if(m.type()==='error')fs.appendFileSync(path.join(out,'console-errors.log'),m.text()+'\n');});
- await wait(p,()=>window.xtankDiagnostics?.().render.frame>1);try{execFileSync('powershell',['-NoProfile','-Command',`Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $b=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $im=New-Object System.Drawing.Bitmap($b.Width,$b.Height); $g=[System.Drawing.Graphics]::FromImage($im); $g.CopyFromScreen($b.Location,[System.Drawing.Point]::Empty,$b.Size); $im.Save('${path.join(out,'desktop-'+i+'.png').replace(/'/g,"''")}'); $g.Dispose(); $im.Dispose();`]);}catch(e){fs.writeFileSync(path.join(out,'desktop-capture-error.txt'),e.message);}return p;
+ await wait(p,()=>window.xtankDiagnostics?.().render.frame>1);if(await p.locator('#xtankAccountOverlay').count() && await p.isVisible('#xtankAccountOverlay')) await p.click('#xtankGuestContinue');try{execFileSync('powershell',['-NoProfile','-Command',`Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $b=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $im=New-Object System.Drawing.Bitmap($b.Width,$b.Height); $g=[System.Drawing.Graphics]::FromImage($im); $g.CopyFromScreen($b.Location,[System.Drawing.Point]::Empty,$b.Size); $im.Save('${path.join(out,'desktop-'+i+'.png').replace(/'/g,"''")}'); $g.Dispose(); $im.Dispose();`]);}catch(e){fs.writeFileSync(path.join(out,'desktop-capture-error.txt'),e.message);}return p;
 }
 async function home(p){
  const s=await state(p);
