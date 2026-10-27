@@ -76,7 +76,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
   if(testRoundSeconds!==null)game.time=testRoundSeconds;
   game.humanIds=new Set();
   r.game=game;r.inputs=new Map();r.phase='live';r.roundId=id();r.events=[];
-   r.startedAt=Date.now();r.accountBySlot=new Map();r.persistStarted=false;
+   r.startedAt=Date.now();r.accountBySlot=new Map();r.persistStarted=false;r.officialMatchId=null;
   const slots=r.mode==='FFA'?[0,1,2,3,4,5,6,7]:[0,4,1,5,2,6,3,7];
   const chosen=new Set();
   members(r).filter(x=>x.ws).forEach((x,i)=>{
@@ -208,8 +208,11 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
     if(!input)return send(ws,{type:'ERROR',code:'INVALID_INPUT'});
     if(official&&input.weapon&&!p.allowedWeapons?.has(input.weapon))return send(ws,{type:'ERROR',code:'WEAPON_NOT_OWNED'});
      p.seq=m.seq;r.inputs.set(p.slot,input);
-   }else if(m.type==='BACK_TO_LOBBY'&&p.id===r.hostId&&r.phase==='finished'){
-    r.phase='lobby';r.game=null;r.inputs=null;
+   }else if(m.type==='BACK_TO_LOBBY'&&r.phase==='finished'){
+    // Any player may return the finished room to lobby. Do not discard an
+    // official round until the durable settlement has been acknowledged.
+    if(official&&!r.officialMatchId)return send(ws,{type:'ERROR',code:'MATCH_SETTLEMENT_PENDING'});
+    r.phase='lobby';r.game=null;r.inputs=null;r.events=[];
     for(const other of members(r))if(!other.ws)r.people.delete(other.id);else{other.slot=null;other.ready=false;}
     lobby(r);
    }else if(m.type==='PING')send(ws,{type:'PONG',serverTime:Date.now()});
