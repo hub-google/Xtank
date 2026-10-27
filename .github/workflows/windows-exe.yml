@@ -38,6 +38,14 @@ jobs:
           path: release/*.exe
           if-no-files-found: error
           retention-days: 30
+      - name: Upload independent Electron binary for dual-client acceptance
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/heads/release-validation/')
+        uses: actions/upload-artifact@v4
+        with:
+          name: XTANK-Windows-Unpacked
+          path: release/win-unpacked/
+          if-no-files-found: error
+          retention-days: 10
 
   windows-gui-shards:
     name: Real EXE - ${{ matrix.group }}
@@ -101,6 +109,11 @@ jobs:
         with:
           name: XTANK-Windows-Portable-EXE
           path: release
+      - name: Fetch unpacked Windows EXE as independent second process
+        uses: actions/download-artifact@v4
+        with:
+          name: XTANK-Windows-Unpacked
+          path: release/win-unpacked
       - run: npm install --no-save --ignore-scripts --no-audit --no-fund playwright@1.56.1
       - name: Extended native EXE QA
         run: node scripts/windows-gui-qa.cjs

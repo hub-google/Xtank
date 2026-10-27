@@ -1,6 +1,7 @@
 // Executes the actual portable Windows EXE, never a development web server.
 const {chromium}=require('playwright');
 const {needsNetworkClient}=require('./qa-scope.cjs');
+const {resolveExecutable}=require('./qa-executable.cjs');
 const fs=require('node:fs');
 const path=require('node:path');
 const {spawn,execFileSync}=require('node:child_process');
@@ -24,13 +25,20 @@ async function wait(p,fn,timeout=15000){await p.waitForFunction(fn,null,{timeout
 async function step(name,p,fn){if(filter&&!filter.test(name))return;current=name;try{await fn();await snap(p,name);results.push({name,status:'PASS'});console.log('PASS',name);}catch(e){await snap(p,name+'-FAIL').catch(()=>{});results.push({name,status:'FAIL',error:e.stack});console.error('FAIL',name,e.message);}save();}
 function save(){fs.writeFileSync(path.join(out,'results.json'),JSON.stringify({mode:filter?'TARGETED':'FULL',filter:process.env.XTANK_QA_FILTER,platform:process.platform,exe:executablePath,exeSha256,os:require('node:os').version(),osRelease:require('node:os').release(),metrics,sha:process.env.GITHUB_SHA,results},null,2));}
 async function launch(i){
- const exe=path.resolve(process.env.XTANK_EXE||fs.readdirSync('release').filter(x=>x.endsWith('.exe'))[0]&&'release/'+fs.readdirSync('release').find(x=>x.endsWith('.exe')));
+ const exe=resolveExecutable({
+  releaseDir:path.resolve('release'),clientIndex:i,
+  portableOverride:process.env.XTANK_EXE,unpackedOverride:process.env.XTANK_SECONDARY_EXE
+ });
  executablePath=exe;exeSha256=require('node:crypto').createHash('sha256').update(fs.readFileSync(exe)).digest('hex');
  const log=fs.openSync(path.join(out,'client-'+i+'.log'),'w');
  const proc=spawn(exe,[`--remote-debugging-port=${9222+i}`,`--user-data-dir=${path.join(require('node:os').tmpdir(),'xtank-qa-profile-'+process.pid+'-'+i)}`,'--no-first-run','--disable-features=CalculateNativeWinOcclusion','--disable-renderer-backgrounding','--disable-background-timer-throttling','--disable-backgrounding-occluded-windows'],{stdio:['ignore',log,log]});
  clients.push({proc});let browser;
  for(let n=0;n<90;n++){try{browser=await chromium.connectOverCDP('http://127.0.0.1:'+(9222+i));break;}catch{await delay(1000);}}
- if(!browser)throw Error('Portable EXE failed to expose a running Electron renderer');
+ if(!browser){
+  const status={client:i,exe,exists:fs.existsSync(exe),pid:proc.pid,exitCode:proc.exitCode,signalCode:proc.signalCode,failedCDP:'127.0.0.1:'+(9222+i)};
+  fs.writeFileSync(path.join(out,'client-'+i+'-launch-failure.json'),JSON.stringify(status,null,2));
+  throw Error('Independent native EXE client failed to expose CDP: '+JSON.stringify(status));
+ }
  const context=browser.contexts()[0];await context.tracing.start({screenshots:true,snapshots:true,sources:true});
  const p=context.pages()[0]||await context.waitForEvent('page');p.setDefaultTimeout(30000);
  const c=clients[clients.length-1];Object.assign(c,{browser,context,p});

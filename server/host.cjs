@@ -7,7 +7,18 @@ const {WebSocketServer,WebSocket}=require('ws');
 const {officialService}=require('./official.cjs');
 const {createFixedStepClock}=require('./fixed-step-clock.cjs');
 const id=()=>crypto.randomBytes(8).toString('hex');
-const send=(ws,msg)=>{if(ws?.readyState===WebSocket.OPEN)ws.send(JSON.stringify(msg));};
+const MAX_BUFFERED_BYTES=1024*1024;
+const send=(ws,msg)=>{
+ if(ws?.readyState!==WebSocket.OPEN)return false;
+ // A client reading too slowly must not accumulate unbounded queued snapshots,
+ // which would otherwise exhaust the always-on authoritative host memory.
+ if(ws.bufferedAmount>MAX_BUFFERED_BYTES){
+  ws.close(1013,'slow consumer');
+  return false;
+ }
+ ws.send(JSON.stringify(msg));
+ return true;
+};
 const sanitizeInput=m=>{
  if(!['dx','dz','aimYaw'].every((k)=>typeof m[k]==='number'&&Number.isFinite(m[k])))return null;
  if(Math.abs(m.dx)>1||Math.abs(m.dz)>1||Math.abs(m.aimYaw)>Math.PI*2)return null;
@@ -35,7 +46,14 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
    broadcast(room,{type:'MATCH_SAVED',matchId:saved.match_id,players:saved.players});
  }});
  const httpServer=http.createServer((req,res)=>{
-  if(req.url==='/health'){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({ok:true,rooms:rooms.size}));}
+  if(req.url==='/health'){
+    const states=[...rooms.values()];
+    res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'});
+    res.end(JSON.stringify({ok:true,rooms:rooms.size,connectedClients:[...wss.clients].filter(ws=>ws.readyState===WebSocket.OPEN).length,
+      liveMatches:states.filter(room=>room.phase==='live').length,
+      pendingSettlements:official?states.filter(room=>room.phase==='finished'&&!room.officialMatchId).length:0,
+      uptimeSeconds:Math.floor(process.uptime()),rssMb:Math.round(process.memoryUsage().rss/1048576)}));
+   }
   else{res.writeHead(404);res.end();}
  });
  const wss=new WebSocketServer({server:httpServer,maxPayload:4096,perMessageDeflate:false});
@@ -137,6 +155,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
    if(++received>60){ws.close(1008,'rate limit');return;}
    let m;try{m=JSON.parse(raw.toString());}catch{return send(ws,{type:'ERROR',code:'BAD_JSON'});}
    if(!m||typeof m.type!=='string')return;
+   if(ws._xtankResumePending)return send(ws,{type:'ERROR',code:'RESUME_PENDING'});
    // Creating a password-protected room hashes off-thread. Reject concurrent packets.
    if(ws._xtankCreatePending)return send(ws,{type:'ERROR',code:'CREATE_PENDING'});
    if(official&&(m.type==='CREATE'||m.type==='JOIN'||m.type==='QUICK_MATCH')&&!p){
@@ -205,19 +224,37 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
     const old=found&&members(found).find(x=>x.id===m.playerId&&x.token===m.token
       &&(x.ws||Date.now()-x.lastSeen<=30000));
     if(!old)return send(ws,{type:'ERROR',code:'INVALID_SESSION'});
+    if(old.resumePending)return send(ws,{type:'ERROR',code:'RESUME_PENDING'});
+    // Hold this authoritative slot during network auth; two simultaneous
+    // reconnect attempts cannot consume the same resumption token.
+    old.resumePending=true;
+    ws._xtankResumePending=true;
+    try{
+     let verified;
      if(official){
-       try{
-         const verified=await official.authenticate(m.accessToken,old.tank);
-         if(verified.player_id!==old.accountUserId)return send(ws,{type:'ERROR',code:'WRONG_ACCOUNT'});
-         if(found.phase==='lobby'){old.allowedWeapons=verified.allowedWeapons;old.upgrades=verified.upgrades;old.itemsAvailable=verified.itemsAvailable;}
-       }catch(error){return send(ws,{type:'ERROR',code:'AUTH_FAILED'});}
+      try{verified=await official.authenticate(m.accessToken,old.tank);}
+      catch(error){return send(ws,{type:'ERROR',code:'AUTH_FAILED'});}
+      if(verified.player_id!==old.accountUserId)return send(ws,{type:'ERROR',code:'WRONG_ACCOUNT'});
      }
-    if(old.ws?.readyState===WebSocket.OPEN)old.ws.close(4001,'replaced');
-    r=found;p=old;p.ws=ws;p.token=id()+id();p.seq=-1;p.lastSeen=Date.now();
-    // If the room was temporarily empty, recover its host when the owner reconnects.
-    if(!r.hostId||!members(r).some(member=>member.id===r.hostId&&member.ws))r.hostId=p.id;
-    send(ws,{type:'JOINED',roomId:r.id,playerId:p.id,token:p.token,host:p.id===r.hostId});
-    lobby(r);if(r.phase==='live')send(ws,{type:'START',mode:r.mode,mapId:r.mapId,slotId:p.slot,roundId:r.roundId,roomId:r.id,official:!!official,allowedWeapons:official?[...p.allowedWeapons]:null});
+     if(ws.readyState!==WebSocket.OPEN||p)return;
+     if(rooms.get(found.id)!==found||found.people.get(old.id)!==old||old.token!==m.token
+       ||(!old.ws&&Date.now()-old.lastSeen>30000))
+      return send(ws,{type:'ERROR',code:'INVALID_SESSION'});
+     if(verified&&found.phase==='lobby'){
+      old.allowedWeapons=verified.allowedWeapons;
+      old.upgrades=verified.upgrades;
+      old.itemsAvailable=verified.itemsAvailable;
+     }
+     if(old.ws?.readyState===WebSocket.OPEN)old.ws.close(4001,'replaced');
+     r=found;p=old;p.ws=ws;p.token=id()+id();p.seq=-1;p.lastSeen=Date.now();
+     if(!r.hostId||!members(r).some(member=>member.id===r.hostId&&member.ws))r.hostId=p.id;
+     send(ws,{type:'JOINED',roomId:r.id,playerId:p.id,token:p.token,host:p.id===r.hostId});
+     lobby(r);
+     if(r.phase==='live')send(ws,{type:'START',mode:r.mode,mapId:r.mapId,slotId:p.slot,roundId:r.roundId,roomId:r.id,official:!!official,allowedWeapons:official?[...p.allowedWeapons]:null});
+    }finally{
+     old.resumePending=false;
+     ws._xtankResumePending=false;
+    }
    }else if(!p||p.ws!==ws){send(ws,{type:'ERROR',code:'NOT_JOINED'});}
    else if(m.type==='START')start(r,p);
     else if(m.type==='READY'&&(r.phase==='lobby'||r.phase==='countdown')){
@@ -342,4 +379,4 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
   await new Promise(ok=>wss.close(()=>httpServer.close(ok)));
  }};
 }
-module.exports={createHost,sanitizeInput};
+module.exports={createHost,sanitizeInput,send,MAX_BUFFERED_BYTES};

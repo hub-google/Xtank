@@ -19,10 +19,23 @@ function createSettlementOutbox({directory,deliver,intervalMs=10000}){
  function queue(payload){
   const filenameOnDisk=filename(payload?.round_id);
   if(fs.existsSync(filenameOnDisk))return filenameOnDisk;
-  const tmp=filenameOnDisk+'.'+process.pid+'.tmp';
+  const tmp=filenameOnDisk+'.'+process.pid+'.'+crypto.randomBytes(4).toString('hex')+'.tmp';
+  // A completed official match must be durable BEFORE attempting network delivery.
+  // Otherwise a successful write held only in OS buffers may disappear on a
+  // sudden server shutdown, losing the match's sole recovery record.
   try{
-   fs.writeFileSync(tmp,JSON.stringify(payload),{flag:'wx',mode:0o600});
+   const fd=fs.openSync(tmp,'wx',0o600);
+   try{
+    fs.writeFileSync(fd,JSON.stringify(payload));
+    fs.fsyncSync(fd);
+   }finally{fs.closeSync(fd);}
    fs.renameSync(tmp,filenameOnDisk);
+   // Linux containers and persistent volumes support syncing the containing
+   // directory. On Windows the underlying handle cannot reliably be synced.
+   if(process.platform!=='win32'){
+    const dfd=fs.openSync(directory,'r');
+    try{fs.fsyncSync(dfd)}finally{fs.closeSync(dfd);}
+   }
   }finally{try{fs.unlinkSync(tmp)}catch{}}
   return filenameOnDisk;
  }
