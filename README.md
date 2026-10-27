@@ -119,3 +119,15 @@ X-TANK 是一款最多 8 人同場的 3D 第三人稱即時坦克射擊遊戲。
 - 程式提交：[道具配裝 UI](https://github.com/hub-google/Xtank/commit/93ed990f3dd54ae9d835cfc985553b03a8a750b3) / [正式房間配裝驗證](https://github.com/hub-google/Xtank/commit/4021ff69f2d888c8c8b2b9f6ed1447b9c42bc1bc) / [對戰測試](https://github.com/hub-google/Xtank/commit/eb6b03e8f25cba4f2a59f9b5b05718a86184bb26) / [GUI 測試](https://github.com/hub-google/Xtank/commit/516d309c83825e558f6540319e7075f1bdf26051)。
 - **本輪 Actions 狀態須以最新 [Windows EXE 工作流程](https://github.com/hub-google/Xtank/actions/workflows/windows-exe.yml) 實際結果為準；提交程式不等於 PASS。** 目前仍未有已驗證全天候公網 WSS，也未取得兩台不同網路原生 EXE 真實全流程證據。
 
+
+
+### 2026-10-27 對戰結算與再戰流程可靠性修正
+
+- 正式賽事在 Supabase 獎勵確認前**不能重設房間**；收到 `MATCH_SETTLEMENT_PENDING` 會保持結算畫面，不假裝下一局已準備完成。
+- 玩家（包含非房主）在賽事完成且確認入帳後可以要求回到房間；伺服器以 `LOBBY` 確認後客戶端才切換畫面，不會自行預先切換而造成狀態分歧。
+- 每局開始重設對應的 `officialMatchId`，避免沿用上一場成功結果解除下一場的入帳鎖。
+- 持久化 outbox 即使在最初數次儲存失敗、稍後自動重送成功，也會回報 `MATCH_SAVED`，避免玩家永久卡在「結算等待」。
+- 已新增多玩家及 Supabase 模擬故障的自動回歸測試：`test/official-match-e2e.test.cjs`、`test/official-recovery.test.cjs`。
+- 本次核心程式提交：`bf9b881`、`a9b0396`、`e8c2f67`、`3fe8b05`、`0c06f31`、`eed5dea`、`3a5e13e`。依 [Windows EXE Actions](https://github.com/hub-google/Xtank/actions/workflows/windows-exe.yml) 的最新成功 Run 判定是否通過單元測試、建置和 scoped GUI；**scoped GUI 不等於完整發行驗收**。
+
+**仍未具備正式版交付證據：** 持續營運的公開 WSS 主機、跨不同網路的兩台 Windows EXE 真實玩家端到端驗收、全部 A–H 情境與長時間安全壓力測試。在完成前版本維持 0.2.2 開發中，不標記正式發行。
