@@ -3,7 +3,7 @@ const path=require('node:path');
 const {createSettlementOutbox}=require('./settlement-outbox.cjs');
 // Optional trusted public-server adapter. Never enable this on a player's bundled LAN host.
 // Requires SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, XTANK_OFFICIAL_MODE=1 on a secured server.
-function officialService(){
+function officialService({onSettlement}={}){
   if(process.env.XTANK_OFFICIAL_MODE!=='1')return null;
   const origin=String(process.env.SUPABASE_URL||'').replace(/\/$/,'');
   const secret=process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -17,7 +17,12 @@ function officialService(){
   }
   const outbox=createSettlementOutbox({
     directory:process.env.XTANK_SETTLEMENT_DIR||path.join(process.cwd(),'xtank-settlement-outbox'),
-    deliver:payload=>request('/rest/v1/rpc/xtank_record_official_match',{body:{p_result:payload}})
+    deliver:async payload=>{
+      const saved=await request('/rest/v1/rpc/xtank_record_official_match',{body:{p_result:payload}});
+      // Also reports background outbox recovery, not just the immediate settle call.
+      if(typeof onSettlement==='function')onSettlement(payload,saved);
+      return saved;
+    }
   });
   outbox.retry().catch(e=>console.error('Recover official match outbox:',e.message));
   return {
