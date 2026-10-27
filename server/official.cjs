@@ -1,4 +1,6 @@
 'use strict';
+const path=require('node:path');
+const {createSettlementOutbox}=require('./settlement-outbox.cjs');
 // Optional trusted public-server adapter. Never enable this on a player's bundled LAN host.
 // Requires SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, XTANK_OFFICIAL_MODE=1 on a secured server.
 function officialService(){
@@ -13,7 +15,14 @@ function officialService(){
     if(!r.ok)throw Error((v?.message||v?.error_description||'Supabase request failed')+' ('+r.status+')');
     return v;
   }
+  const outbox=createSettlementOutbox({
+    directory:process.env.XTANK_SETTLEMENT_DIR||path.join(process.cwd(),'xtank-settlement-outbox'),
+    deliver:payload=>request('/rest/v1/rpc/xtank_record_official_match',{body:{p_result:payload}})
+  });
+  outbox.retry().catch(e=>console.error('Recover official match outbox:',e.message));
   return {
+    close:()=>outbox.close(),
+    recover:()=>outbox.retry(),
     async authenticate(token,tankId){
       if(typeof token!=='string'||token.length<80)throw Error('LOGIN_REQUIRED');
       const u=await request('/auth/v1/user',{token,method:'GET'});
@@ -41,7 +50,7 @@ function officialService(){
       const payload={round_id:room.roundId,mode_id:g.mode,map_id:g.mapId,
         elapsed_s:Math.min(600,Math.round((Date.now()-(room.startedAt||Date.now()))/1000)),
         winning_team:winner,participants:players};
-      return request('/rest/v1/rpc/xtank_record_official_match',{body:{p_result:payload}});
+      return outbox.settle(payload);
     }
   };
 }
