@@ -32,7 +32,7 @@ open.addEventListener('click',show);
 $('#xtankAccountClose').addEventListener('click',hide);
 overlay.addEventListener('click',e=>{if(e.target===overlay)hide()});
 window.addEventListener('keydown',e=>{if(e.code==='Escape'&&!overlay.hidden){hide();e.stopPropagation()}} ,true);
-function saveSession(v){session=v; if(v)localStorage.setItem(storeKey,JSON.stringify(v));else localStorage.removeItem(storeKey)}
+function saveSession(v){session=v; if(v)localStorage.setItem(storeKey,JSON.stringify(v));else localStorage.removeItem(storeKey);document.dispatchEvent(new CustomEvent('xtank-auth-changed'));}
 function validSession(){return session&&session.access_token&&session.expires_at>Date.now()/1000+50}
 async function rest(path,{method='POST',body,token}={}){
  const headers={'Content-Type':'application/json','apikey':KEY};
