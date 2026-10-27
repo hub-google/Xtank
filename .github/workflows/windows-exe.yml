@@ -14,12 +14,22 @@ on:
       - 'vite.config.js'
       - '.github/workflows/windows-exe.yml'
   workflow_dispatch:
+    inputs:
+      qa_filter:
+        description: 'Optional targeted scenario regex; empty runs full build and QA'
+        required: false
+        default: ''
+      exe_run_id:
+        description: 'Existing EXE artifact run for targeted regression'
+        required: false
+        default: '40436598127'
 
 permissions:
   contents: read
 
 jobs:
   build-windows:
+    if: github.event.head_commit.message != 'qa-targeted-only' && !inputs.qa_filter
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
@@ -53,6 +63,34 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: XTANK-Windows-GUI-Evidence
+          path: qa-evidence/
+          if-no-files-found: error
+          retention-days: 30
+
+  targeted-gui:
+    if: github.event.head_commit.message == 'qa-targeted-only' || inputs.qa_filter
+    runs-on: windows-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: XTANK-Windows-Portable-EXE
+          path: release
+          run-id: ${{ inputs.exe_run_id || '40436598127' }}
+          github-token: ${{ github.token }}
+      - run: npm install --no-save --ignore-scripts --no-audit --no-fund playwright@1.56.1
+      - name: Targeted regression on the unchanged portable EXE
+        run: node scripts/windows-gui-qa.cjs
+        env:
+          XTANK_QA_FILTER: ${{ inputs.qa_filter || '^(A-|C-(wall-clock|Escape|WASD|items|F3|target-hit|mine|wall-boundary))' }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: XTANK-Targeted-GUI-Evidence
           path: qa-evidence/
           if-no-files-found: error
           retention-days: 30
