@@ -65,8 +65,12 @@ test('two authenticated WebSocket players naturally finish a short official matc
   await waitFor(a,'LOBBY',{check:m=>m.people.some(p=>p.name==='QA-A'&&p.ready)});
   send(b,{type:'READY',ready:true});
   await waitFor(a,'LOBBY',{check:m=>m.people.every(p=>p.ready)});
+  const countdownStarted=Date.now();
   send(a,{type:'START'});
+  const countdown=await waitFor(a,'COUNTDOWN');
+  assert.equal(countdown.seconds,3,'official ready countdown is three seconds');
   const gameA=await waitFor(a,'START'),gameB=await waitFor(b,'START');
+  assert(Date.now()-countdownStarted>=2800,'official countdown must not start the round after only ~2 seconds');
   assert.equal(gameA.official,true);assert.equal(gameB.official,true);
   assert.notEqual(gameA.slotId,gameB.slotId);
   const ended=await waitFor(a,'SNAPSHOT',{timeout:6000,check:s=>s.ended===true});
