@@ -1,0 +1,21 @@
+.xtank-community-layer[hidden]{display:none!important}
+.xtank-community-layer{position:fixed;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;padding:12px;background:rgba(3,12,25,.87)}
+.xtank-community-dialog{background:#11243c;color:#e7f0fc;width:min(940px,97vw);max-height:93vh;overflow:auto;border:1px solid #59788b;border-radius:14px;padding:18px 22px;font:14px/1.55 system-ui,'Microsoft JhengHei',sans-serif;box-shadow:0 18px 60px #000a}
+.xtank-community-dialog *{box-sizing:border-box}
+.xtank-community-dialog header{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #425e76;padding-bottom:12px;font-size:21px}
+.xtank-community-dialog button,#xtankCommunityOpen{border:0;border-radius:7px;background:#f8d07a;color:#172536;padding:8px 14px;cursor:pointer;font-weight:700}
+#xtankCommunityOpen{display:block;width:100%;margin-top:8px;background:#345775;color:#fff;border:1px solid #7c9cb5}
+.xtank-community-dialog nav{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.xtank-community-dialog nav button{background:#334f65;color:#fff}
+.xtank-community-dialog nav button.active{background:#f8d07a;color:#172536}
+.xtank-community-dialog main{min-height:220px}
+.xtank-community-dialog h2{margin:18px 0 8px;font-size:19px;color:#f8d07a}
+.xtank-community-dialog article{padding:10px 12px;margin:7px 0;border-radius:7px;background:#233e57;overflow-wrap:anywhere}
+.xtank-community-dialog article button{margin:4px}
+.xtank-community-dialog form{background:#1a344e;padding:12px;margin:12px 0;border-radius:8px}
+.xtank-community-dialog label{display:block;margin:6px 0}
+.xtank-community-dialog input,.xtank-community-dialog textarea,.xtank-community-dialog select{display:block;width:100%;padding:8px 10px;margin-top:5px;color:#fff;background:#0c263c;border:1px solid #69889b;border-radius:6px}
+.xtank-community-dialog textarea{min-height:80px}
+#xtankCommunityStatus{color:#f8d07a;min-height:20px}
+#xtankClanMessages,#xtankDmMessages{max-height:240px;overflow:auto;overflow-wrap:anywhere;background:#081a2b;padding:8px 12px}
+@media(max-width:640px){.xtank-community-dialog{padding:11px}.xtank-community-dialog nav button{padding:6px 9px}}
