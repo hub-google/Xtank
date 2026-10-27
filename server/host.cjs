@@ -202,6 +202,7 @@ async function createHost({port=8787,host='0.0.0.0'}={}){
   httpServer.once('error',fail);httpServer.listen(port,host,()=>{httpServer.off('error',fail);ok();});
  });}catch(err){clearInterval(ticking);clearInterval(heartbeat);wss.close();throw err;}
  return {port:httpServer.address().port,rooms,close:async()=>{
+  official?.close?.();
   clearInterval(ticking);clearInterval(heartbeat);for(const ws of wss.clients)ws.terminate();
   await new Promise(ok=>wss.close(()=>httpServer.close(ok)));
  }};
