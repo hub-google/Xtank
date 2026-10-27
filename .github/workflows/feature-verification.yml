@@ -1,0 +1,27 @@
+name: X-TANK isolated feature verification
+on:
+  push:
+    branches:
+      - feat/five-gameplay-cameras-20261027
+    paths:
+      - src/**
+      - server/**
+      - test/**
+      - scripts/**
+      - index.html
+      - .github/workflows/feature-verification.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - run: npm test
+      - run: npm run build
