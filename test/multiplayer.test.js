@@ -139,3 +139,22 @@ test('public room directory hides password rooms and ready state broadcasts with
  const unready=await message(joiner,'LOBBY');
  assert(unready.people.some(x=>x.name==='Guest'&&!x.ready));
 });
+
+test('quick match joins the busiest compatible public room and creates a new room for a different map',async t=>{
+ const host=await createHost({host:'127.0.0.1',port:0});
+ t.after(async()=>host.close());
+ const url='ws://127.0.0.1:'+host.port;
+ const clients=await Promise.all([connect(url),connect(url),connect(url)]);
+ t.after(()=>clients.forEach(c=>c.terminate()));
+ const [a,b,c]=clients;
+ send(a,{type:'QUICK_MATCH',name:'QuickA',mode:'TDM',mapId:'chess',tank:'X'});
+ const first=await message(a,'JOINED');await message(a,'LOBBY');
+ send(b,{type:'QUICK_MATCH',name:'QuickB',mode:'TDM',mapId:'chess',tank:'D'});
+ const second=await message(b,'JOINED');
+ assert.equal(second.roomId,first.roomId);
+ const updated=await message(a,'LOBBY');
+ assert.equal(updated.people.length,2);
+ send(c,{type:'QUICK_MATCH',name:'QuickC',mode:'TDM',mapId:'desk',tank:'R'});
+ const third=await message(c,'JOINED');
+ assert.notEqual(third.roomId,first.roomId);
+});
