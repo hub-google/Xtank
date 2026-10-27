@@ -68,6 +68,7 @@ async function signIn(email,password,signup=false){
 }
 async function reload(){
  dashboard=await rpc('dashboard');
+ const nick=$('#playerName');if(nick&&nick.value==='Player')nick.value=dashboard.profile.display_name;
  catalog=await rpc('catalog');
  draw();
 }
@@ -179,4 +180,4 @@ async function run(fn){
 }
 show();
 if(session?.access_token){getToken().then(()=>rpc('initialize',{})).then(reload).catch(()=>{saveSession(null);dashboard=null;catalog=null;draw();msg('登入狀態已過期，請重新登入。')})}
-window.xtankAccount={show,hide,refresh:reload,getSignedInPlayerId:()=>dashboard?.profile?.player_id??null};
+window.xtankAccount={show,hide,refresh:reload,getAccessToken:getToken,getSignedInPlayerId:()=>dashboard?.profile?.player_id??null};
