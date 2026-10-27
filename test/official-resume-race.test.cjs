@@ -64,7 +64,11 @@ test('simultaneous official RESUME attempts cannot both consume a live JWT-prote
   assert.equal((await take(second,'ERROR',{code:'INVALID_SESSION'})).code,'INVALID_SESSION');
   const room=host.rooms.get(original.roomId);
   assert.equal(room.people.size,1,'slot must never be duplicated');
-  assert.equal(room.people.get(original.playerId).ws,first);
+  // The room holds the server-side peer, not the client's ws instance.
+  const peer=room.people.get(original.playerId).ws;
+  assert.equal(peer._isServer,true);
+  assert.equal(peer.readyState,WebSocket.OPEN);
+  assert.equal(room.people.get(original.playerId).token,resumed.token);
  }finally{
   release();
   for(const ws of clients)ws.terminate();
