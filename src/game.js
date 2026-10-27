@@ -1,4 +1,5 @@
 import {battleAudio} from './audio.js';
+import {DEFAULT_BINDINGS,ACTION_LABELS,isAllowedCode,assignBinding,loadBindings,saveBindings,displayCode} from './controls.js';
 import * as THREE from 'three';
 import './style.css';
 import {OnlineConnection} from './online.js';
@@ -116,6 +117,43 @@ let networkReady=false;
 let officialWeaponAllowlist=null;
 let officialRound=false,roundSettlementSaved=false;
 const keyboard = new Set();
+let bindings;
+try{bindings=loadBindings(window.localStorage)}catch{bindings={...DEFAULT_BINDINGS}}
+let waitingForBinding=null;
+function renderBindings(){
+ const editor=el('controlsEditor');
+ if(!editor)return;
+ editor.replaceChildren();
+ for(const [action,label] of Object.entries(ACTION_LABELS)){
+  const row=document.createElement('div');
+  row.className='control-binding';
+  const name=document.createElement('span');name.textContent=label;
+  const button=document.createElement('button');
+  button.type='button';button.className='secondary';
+  button.textContent=waitingForBinding===action?'請按新按鍵…':displayCode(bindings[action]);
+  button.setAttribute('aria-label','修改'+label+'的快捷鍵');
+  button.addEventListener('click',()=>{waitingForBinding=action;renderBindings()});
+  row.append(name,button);editor.append(row);
+ }
+ const hint=el('controlHint');
+ if(hint)hint.textContent=`${displayCode(bindings.forward)}/${displayCode(bindings.left)}/${displayCode(bindings.backward)}/${displayCode(bindings.right)} 移動 · 滑鼠瞄準 · ${displayCode(bindings.fire)}/左鍵射擊 · 7 種武器與 6 種道具快捷鍵可自訂 · ${displayCode(bindings.ability)} 技能 · ${displayCode(bindings.pause)} 暫停 · Esc 選單`;
+}
+el('resetControlBindings')?.addEventListener('click',()=>{
+ waitingForBinding=null;bindings={...DEFAULT_BINDINGS};keyboard.clear();
+ try{saveBindings(window.localStorage,bindings)}catch{}
+ renderBindings();
+});
+window.addEventListener('keydown',event=>{
+ if(!waitingForBinding)return;
+ event.preventDefault();event.stopImmediatePropagation();
+ if(event.code==='Escape'){waitingForBinding=null;renderBindings();return}
+ if(!isAllowedCode(event.code))return;
+ bindings=assignBinding(bindings,waitingForBinding,event.code);
+ waitingForBinding=null;keyboard.clear();fireHeld=false;
+ try{saveBindings(window.localStorage,bindings)}catch{}
+ renderBindings();
+},true);
+renderBindings();
 let fireHeld=false, itemQueue=0, abilityQueue=false, mouseX=innerWidth*.5,mouseY=innerHeight*.53, selectedWeapon=0;
 const raycaster=new THREE.Raycaster(), ground=new THREE.Plane(new THREE.Vector3(0,1,0),-.2), cursor=new THREE.Vector3();
 const cameraTarget=new THREE.Vector3(24,0,16);
@@ -272,8 +310,8 @@ function aimYaw(){
   return Math.atan2(-(cursor.x-t.x),-(cursor.z-t.z));
 }
 function tick(dt){
-  const dx=paused?0:Number(keyboard.has('KeyD'))-Number(keyboard.has('KeyA'));
-  const dz=paused?0:Number(keyboard.has('KeyS'))-Number(keyboard.has('KeyW'));
+  const dx=paused?0:Number(keyboard.has(bindings.right))-Number(keyboard.has(bindings.left));
+  const dz=paused?0:Number(keyboard.has(bindings.backward))-Number(keyboard.has(bindings.forward));
   if(online){
     networkAccumulator+=dt;
     if(networkAccumulator>=.05){
@@ -541,29 +579,26 @@ el('hostServerButton').addEventListener('click',async()=>{
  }catch(e){onlineStatus('無法啟動：'+e.message);}
 });
 window.addEventListener('keydown',e=>{
-  if(['Space','ArrowUp','ArrowDown','F1','F2','F3','F4','F5','F6'].includes(e.code))e.preventDefault();
-  if(e.repeat&&['KeyP','KeyE','F1','F2','F3','F4','F5','F6','Escape'].includes(e.code))return;
+  if(e.target instanceof HTMLElement&&e.target.closest('input,textarea,select,[contenteditable="true"]'))return;
+  if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();
+  if(e.repeat&&(e.code==='Escape'||e.code===bindings.pause||e.code===bindings.ability||
+    Object.keys(bindings).some(action=>action.startsWith('item')&&bindings[action]===e.code)))return;
   keyboard.add(e.code);
-  if(e.code==='KeyP'&&match&&!resultShown){paused=!paused;el('pauseBadge').hidden=!paused;fireHeld=false;}
+  if(e.code===bindings.pause&&match&&!resultShown){paused=!paused;el('pauseBadge').hidden=!paused;fireHeld=false;}
   if(e.code==='Escape'&&match&&!resultShown){paused=!paused;el('pauseBadge').hidden=!paused;fireHeld=false;keyboard.clear();itemQueue=0;abilityQueue=false;el('pauseTitle').textContent=online?'選單 · 連線對局持續進行':'暫停中 · 按 P 繼續';}
   if(!match||paused)return;
-  if(/^Digit[1-7]$/.test(e.code)){
-    const candidate=Number(e.code.slice(-1))-1;
-     if(!officialWeaponAllowlist||officialWeaponAllowlist.has(weaponKeys[candidate])){
-       selectedWeapon=candidate;
-       if(match.tanks[0])match.tanks[0].weapon=weaponKeys[selectedWeapon];
-     }else el('statusText').textContent='此武器尚未裝備，請到機庫配裝';
+  for(let index=1;index<=7;index++)if(e.code===bindings['weapon'+index]){
+    const candidate=index-1;
+    if(!officialWeaponAllowlist||officialWeaponAllowlist.has(weaponKeys[candidate])){
+      selectedWeapon=candidate;
+      if(match.tanks[0])match.tanks[0].weapon=weaponKeys[selectedWeapon];
+    }else el('statusText').textContent='此武器尚未裝備，請到機庫配裝';
   }
-  if(e.code==='F1')itemQueue=1;
-  if(e.code==='F2')itemQueue=2;
-  if(e.code==='F3')itemQueue=3;
-  if(e.code==='F4')itemQueue=4;
-  if(e.code==='F5')itemQueue=5;
-  if(e.code==='F6')itemQueue=6;
-  if(e.code==='KeyE')abilityQueue=true;
-  if(e.code==='Space')fireHeld=true;
+  for(let index=1;index<=6;index++)if(e.code===bindings['item'+index])itemQueue=index;
+  if(e.code===bindings.ability)abilityQueue=true;
+  if(e.code===bindings.fire)fireHeld=true;
 });
-window.addEventListener('keyup',e=>{keyboard.delete(e.code);if(e.code==='Space')fireHeld=false;});
+window.addEventListener('keyup',e=>{keyboard.delete(e.code);if(e.code===bindings.fire)fireHeld=false;});
 renderer.domElement.addEventListener('mousemove',e=>{mouseX=e.clientX;mouseY=e.clientY;});
 renderer.domElement.addEventListener('mousedown',e=>{if(e.button===0)fireHeld=true;});
 window.addEventListener('mouseup',e=>{if(e.button===0)fireHeld=false;});
