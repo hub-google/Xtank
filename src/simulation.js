@@ -210,31 +210,40 @@ export class Game {
     this.events.push({type:'respawn',id:t.id,x:t.x,z:t.z});
   }
   useItem(t,index){
+    const names=['repair','speed_boost','shield_cell','radar_ping','smoke','team_repair'];
+    const item=names[index-1];
+    if(t?.itemsRemaining && (!item||(t.itemsRemaining[item]||0)<=0))return false;
+    const consumed=()=>{
+      if(!t.itemsRemaining)return;
+      t.itemsRemaining[item]--;
+      if(!t.itemsUsed)t.itemsUsed={};
+      t.itemsUsed[item]=(t.itemsUsed[item]||0)+1;
+    };
     if(!t||!t.alive)return false;
     if(index===1&&t.repair>0&&t.repairCooldown<=0&&t.hp<t.maxHp){
       t.hp=Math.min(t.maxHp,t.hp+30);t.repair--;t.repairCooldown=25;
-      this.events.push({type:'repair',id:t.id,x:t.x,z:t.z});return true;
+      this.events.push({type:'repair',id:t.id,x:t.x,z:t.z});consumed();return true;
     }
     if(index===2&&t.boostCooldown<=0){
       t.boostTime=5;t.boostCooldown=30;
-      this.events.push({type:'boost',id:t.id,x:t.x,z:t.z});return true;
+      this.events.push({type:'boost',id:t.id,x:t.x,z:t.z});consumed();return true;
     }
     if(index===3&&t.shieldCells>0&&t.shieldCooldown<=0&&t.shield<t.maxShield){
       t.shield=Math.min(t.maxShield,t.shield+35);t.shieldCells--;t.shieldCooldown=25;
-      this.events.push({type:'shield',id:t.id,x:t.x,z:t.z});return true;
+      this.events.push({type:'shield',id:t.id,x:t.x,z:t.z});consumed();return true;
     }
     if(index===4&&t.radarCooldown<=0){
       t.radarTime=5;t.radarCooldown=35;
-      this.events.push({type:'radar',id:t.id,x:t.x,z:t.z});return true;
+      this.events.push({type:'radar',id:t.id,x:t.x,z:t.z});consumed();return true;
     }
     if(index===5&&t.smokeCooldown<=0){
       t.smokeCooldown=35;this.smokes.push({id:++this.nextBullet,x:t.x,z:t.z,time:6,team:t.team,radius:5});
-      this.events.push({type:'smoke',id:t.id,x:t.x,z:t.z});return true;
+      this.events.push({type:'smoke',id:t.id,x:t.x,z:t.z});consumed();return true;
     }
     if(index===6&&t.teamRepairCooldown<=0){
       t.teamRepairCooldown=60;
       this.repairFields.push({id:++this.nextBullet,x:t.x,z:t.z,time:5,team:t.team,owner:t.id,radius:7});
-      this.events.push({type:'teamRepair',id:t.id,x:t.x,z:t.z});return true;
+      this.events.push({type:'teamRepair',id:t.id,x:t.x,z:t.z});consumed();return true;
     }
     return false;
   }

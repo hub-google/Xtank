@@ -41,8 +41,13 @@ function officialService(){
         if(v.tank_id===tankId&&Object.hasOwn(upgrades,v.attribute)&&Number.isInteger(v.level))
           upgrades[v.attribute]=Math.max(0,Math.min(10,v.level));
       }
+      const itemsAvailable={repair:0,speed_boost:0,shield_cell:0,radar_ping:0,smoke:0,team_repair:0};
+      for(const item of (dash.inventory||[])){
+        if(Object.hasOwn(itemsAvailable,item.item_id)&&Number.isSafeInteger(Number(item.quantity))&&Number(item.quantity)>0)
+          itemsAvailable[item.item_id]=Math.min(30,itemsAvailable[item.item_id]+Number(item.quantity));
+      }
       return {player_id:u.id,name:dash.profile.display_name,
-        allowedWeapons:new Set(equipment.length?equipment:['hurricane']),upgrades};
+        allowedWeapons:new Set(equipment.length?equipment:['hurricane']),upgrades,itemsAvailable};
     },
     async settle(room){
       const g=room.game;
@@ -54,7 +59,8 @@ function officialService(){
         const flag=g.mode==='FLAG_HOLD';
         const won=g.mode==='FFA'?rank===1:g.scores[t.team]===g.scores[1-t.team]?null:g.scores[t.team]>g.scores[1-t.team];
         return {slot:i+1,player_id:owner||null,tank_id:t.kind,team:t.team,kills:t.kills,deaths:t.deaths,assists:t.assists||0,
-          damage:Math.round(t.damage||0),flag_scores:flag?t.score:0,placement:g.mode==='FFA'?rank:null,is_winner:won};
+          damage:Math.round(t.damage||0),flag_scores:flag?t.score:0,placement:g.mode==='FFA'?rank:null,is_winner:won,
+          items_used:owner?{...(t.itemsUsed||{})}:{}};
       });
       const winner=g.mode!=='FFA'&&g.scores[0]!==g.scores[1]?(g.scores[0]>g.scores[1]?0:1):null;
       const payload={round_id:room.roundId,mode_id:g.mode,map_id:g.mapId,

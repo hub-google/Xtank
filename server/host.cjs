@@ -95,6 +95,12 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
     t.maxShield=Math.round(cfg.shield*(1+.02*(t.upgrades?.energy||0)));
     t.shield=t.maxShield;t.ammo={chemical:18,ion_missile:8,mine:5};
     if(official){
+      t.itemsRemaining={...x.itemsAvailable};
+      t.itemsUsed={};
+      t.repair=Math.min(t.repair,t.itemsRemaining.repair||0);
+      t.shieldCells=Math.min(t.shieldCells,t.itemsRemaining.shield_cell||0);
+    }
+    if(official){
       const selected=x.allowedWeapons?.values().next().value;
       if(!selected)throw Error('OFFICIAL_EMPTY_LOADOUT');
       t.weapon=selected;
@@ -119,7 +125,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
       ws._xtankAuthPending=true;
       try{
         const verified=await official.authenticate(m.accessToken,m.tank);
-        m.name=verified.name;m.accountUserId=verified.player_id;m.allowedWeapons=verified.allowedWeapons;m.upgrades=verified.upgrades;
+        m.name=verified.name;m.accountUserId=verified.player_id;m.allowedWeapons=verified.allowedWeapons;m.upgrades=verified.upgrades;m.itemsAvailable=verified.itemsAvailable;
       }catch(err){ws._xtankAuthPending=false;return send(ws,{type:'ERROR',code:'AUTH_FAILED',message:err.message});}
       ws._xtankAuthPending=false;
       if(ws.readyState!==WebSocket.OPEN)return;
@@ -165,7 +171,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
        try{
          const verified=await official.authenticate(m.accessToken,old.tank);
          if(verified.player_id!==old.accountUserId)return send(ws,{type:'ERROR',code:'WRONG_ACCOUNT'});
-         if(found.phase==='lobby'){old.allowedWeapons=verified.allowedWeapons;old.upgrades=verified.upgrades;}
+         if(found.phase==='lobby'){old.allowedWeapons=verified.allowedWeapons;old.upgrades=verified.upgrades;old.itemsAvailable=verified.itemsAvailable;}
        }catch(error){return send(ws,{type:'ERROR',code:'AUTH_FAILED'});}
      }
     if(old.ws?.readyState===WebSocket.OPEN)old.ws.close(4001,'replaced');
@@ -219,7 +225,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
  function makePlayer(m,ws){
   const tank=TANKS[m.tank]?m.tank:'X';
   return {id:id(),token:id()+id(),name:String(m.name||'Player').replace(/[<>]/g,'').slice(0,20),
-   tank,ready:false,ws,seq:-1,slot:null,lastSeen:Date.now(),accountUserId:m.accountUserId||null,allowedWeapons:m.allowedWeapons||null,upgrades:m.upgrades||null};
+   tank,ready:false,ws,seq:-1,slot:null,lastSeen:Date.now(),accountUserId:m.accountUserId||null,allowedWeapons:m.allowedWeapons||null,upgrades:m.upgrades||null,itemsAvailable:m.itemsAvailable||null};
  }
  const ticking=setInterval(()=>{
   for(const r of rooms.values()){
