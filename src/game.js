@@ -379,7 +379,15 @@ el('returnButton').addEventListener('click',goHome);
 
 function onlineStatus(message){el('networkStatus').textContent=message;if(match&&online&&message.includes('斷線'))el('statusText').textContent=message;}
 function onlineMessage(msg){
-  if(msg.type==='ROOM_CHAT'){
+  if(msg.type==='COUNTDOWN'){
+    onlineStatus('正式對戰倒數 '+msg.seconds+' 秒，所有玩家保持準備');
+    return;
+  }
+  if(msg.type==='COUNTDOWN_CANCELLED'){
+    onlineStatus('有人取消準備或離線，已取消開局倒數');
+    return;
+  }
+ if(msg.type==='ROOM_CHAT'){
     const log=el('roomChatMessages'),entry=document.createElement('p');
     entry.textContent=(msg.name||'玩家')+': '+String(msg.text||'').slice(0,140);
     log.append(entry);
@@ -419,7 +427,10 @@ function onlineMessage(msg){
  if(msg.type==='LOBBY'){
   el('networkLobby').hidden=false;
   el('roomDetails').textContent='房間 '+msg.roomId+' · '+msg.mode+' · '+(MAPS[msg.mapId]?.name||'地圖')+' · '+msg.phase;
-  el('roomPeople').textContent=msg.people.map(p=>(p.host?'房主 ':'')+p.name+(p.ready?' ✓已準備':' · 未準備')+(p.connected?' ●':' ○')).join('、');
+  el('roomPeople').textContent=msg.people.map(p=>(p.host?'房主 ':'')+p.name+(msg.mode==='FFA'?'':p.team===0?' [紅隊]':' [藍隊]')+(p.ready?' ✓已準備':' · 未準備')+(p.connected?' ●':' ○')).join('、');
+  const me=msg.people.find(player=>player.id===online?.playerId);
+  el('teamChoose').hidden=msg.mode==='FFA'||msg.phase!=='lobby';
+  if(me&&msg.mode!=='FFA')el('teamChoose').value=String(me.team);
    networkReady=!!msg.people.find(p=>p.id===online?.playerId)?.ready;
    el('readyNetworkButton').hidden=msg.phase!=='lobby';
    el('readyNetworkButton').textContent=networkReady?'取消準備':'準備';
@@ -485,6 +496,7 @@ el('joinRoomButton').addEventListener('click',()=>establishNetwork('JOIN'));
  el('listRoomsButton').addEventListener('click',()=>establishNetwork('LIST_ROOMS'));
  el('quickMatchButton').addEventListener('click',()=>establishNetwork('QUICK_MATCH'));
  el('readyNetworkButton').addEventListener('click',()=>online?.send({type:'READY',ready:!networkReady}));
+ el('teamChoose').addEventListener('change',()=>online?.send({type:'TEAM',team:Number(el('teamChoose').value)}));
  el('roomChatForm').addEventListener('submit',event=>{
    event.preventDefault();
    const input=el('roomChatInput'),text=input.value.trim();

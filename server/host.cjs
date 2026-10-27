@@ -42,19 +42,52 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
  }
  function broadcast(r,msg){for(const p of members(r))send(p.ws,msg);}
  function lobby(r){broadcast(r,{type:'LOBBY',roomId:r.id,mode:r.mode,mapId:r.mapId,phase:r.phase,hostId:r.hostId,
-  people:members(r).map(p=>({id:p.id,name:p.name,tank:p.tank,connected:!!p.ws,ready:!!p.ready,host:p.id===r.hostId}))});}
+  people:members(r).map(p=>({id:p.id,name:p.name,tank:p.tank,team:p.team,connected:!!p.ws,ready:!!p.ready,host:p.id===r.hostId}))});}
+ function selectTeam(r,requested){
+   if(r.mode==='FFA')return 0;
+   const counts=[0,0];for(const x of members(r))if(x.team===0||x.team===1)counts[x.team]++;
+   if((requested===0||requested===1)&&counts[requested]<4)return requested;
+   return counts[0]<=counts[1]&&counts[0]<4?0:1;
+ }
+ function cancelCountdown(r){
+   if(r.phase!=='countdown')return;
+   r.phase='lobby';delete r.countdownDeadline;
+   broadcast(r,{type:'COUNTDOWN_CANCELLED'});lobby(r);
+ }
  function start(r,p){
   if(p.id!==r.hostId||r.phase!=='lobby')return send(p.ws,{type:'ERROR',code:'NOT_HOST_OR_PHASE'});
   if(members(r).filter(v=>v.ws).length<2)return send(p.ws,{type:'ERROR',code:'NEED_TWO_PLAYERS'});
    if(official&&members(r).some(v=>v.ws&&!v.ready))return send(p.ws,{type:'ERROR',code:'PLAYERS_NOT_READY'});
+   if(r.mode!=='FFA'){
+     const live=members(r).filter(v=>v.ws);
+     if(!live.some(v=>v.team===0)||!live.some(v=>v.team===1))
+       return send(p.ws,{type:'ERROR',code:'NEED_BOTH_TEAMS'});
+   }
+  if(official){
+   r.phase='countdown';r.countdownDeadline=Date.now()+2100;
+   broadcast(r,{type:'COUNTDOWN',seconds:3});lobby(r);
+   return;
+  }
+  launch(r);
+ }
+ function launch(r){
+  if(r.phase!=='lobby'&&r.phase!=='countdown')return;
   const game=new Game({mode:r.mode,mapId:r.mapId,selectedTank:'X',size:8,seed:crypto.randomBytes(4).readUInt32LE()});
   if(testRoundSeconds!==null)game.time=testRoundSeconds;
   game.humanIds=new Set();
   r.game=game;r.inputs=new Map();r.phase='live';r.roundId=id();r.events=[];
    r.startedAt=Date.now();r.accountBySlot=new Map();r.persistStarted=false;
   const slots=r.mode==='FFA'?[0,1,2,3,4,5,6,7]:[0,4,1,5,2,6,3,7];
+  const chosen=new Set();
   members(r).filter(x=>x.ws).forEach((x,i)=>{
-   const t=game.tanks[slots[i]],cfg=TANKS[x.tank];
+   let slot=slots[i];
+   if(r.mode!=='FFA'){
+     const found=game.tanks.findIndex((t,j)=>!chosen.has(j)&&t.team===x.team);
+     if(found<0)throw Error('TEAM_SLOT_MISSING');
+     slot=found;
+   }
+   chosen.add(slot);
+   const t=game.tanks[slot],cfg=TANKS[x.tank];
    x.slot=t.id;x.seq=-1;
    t.kind=x.tank;t.hp=t.maxHp=cfg.hp;
     // Growth is read from the authenticated DB profile; clients never send level modifiers.
@@ -114,7 +147,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
       const salt=crypto.randomBytes(16);r.password={salt,hash:passwordDigest(m.password,salt)};
      }
      rooms.set(code,r);
-    p=makePlayer(m,ws);r.people.set(p.id,p);r.hostId=p.id;
+    p=makePlayer(m,ws);p.team=selectTeam(r,m.team);r.people.set(p.id,p);r.hostId=p.id;
     send(ws,{type:'JOINED',roomId:r.id,playerId:p.id,token:p.token,host:true});lobby(r);
    }else if(m.type==='JOIN'&&!p){
     const found=rooms.get(String(m.roomId||'').toUpperCase());
@@ -122,7 +155,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
     if(found.phase!=='lobby')return send(ws,{type:'ERROR',code:'ROUND_RUNNING'});
      if(!roomPasswordValid(found,m.password))return send(ws,{type:'ERROR',code:'BAD_ROOM_PASSWORD'});
     if(found.people.size>=8)return send(ws,{type:'ERROR',code:'ROOM_FULL'});
-    r=found;p=makePlayer(m,ws);r.people.set(p.id,p);
+    r=found;p=makePlayer(m,ws);p.team=selectTeam(r,m.team);r.people.set(p.id,p);
     send(ws,{type:'JOINED',roomId:r.id,playerId:p.id,token:p.token,host:false});lobby(r);
    }else if(m.type==='RESUME'&&!p){
     const found=rooms.get(String(m.roomId||'').toUpperCase());
@@ -141,7 +174,17 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
     lobby(r);if(r.phase==='live')send(ws,{type:'START',mode:r.mode,mapId:r.mapId,slotId:p.slot,roundId:r.roundId,roomId:r.id,official:!!official,allowedWeapons:official?[...p.allowedWeapons]:null});
    }else if(!p||p.ws!==ws){send(ws,{type:'ERROR',code:'NOT_JOINED'});}
    else if(m.type==='START')start(r,p);
-    else if(m.type==='READY'&&r.phase==='lobby'){p.ready=m.ready===true;lobby(r);}
+    else if(m.type==='READY'&&(r.phase==='lobby'||r.phase==='countdown')){
+      if(r.phase==='countdown'&&m.ready!==true)cancelCountdown(r);
+      p.ready=m.ready===true;lobby(r);
+    }
+    else if(m.type==='TEAM'&&r.phase==='lobby'){
+      if(r.mode==='FFA')return send(ws,{type:'ERROR',code:'NO_TEAMS_IN_FFA'});
+      if(m.team!==0&&m.team!==1)return send(ws,{type:'ERROR',code:'INVALID_TEAM'});
+      const teamSize=members(r).filter(member=>member.id!==p.id&&member.team===m.team).length;
+      if(teamSize>=4)return send(ws,{type:'ERROR',code:'TEAM_FULL'});
+      p.team=m.team;p.ready=false;lobby(r);
+    }
     else if(m.type==='CHAT'&&r.phase==='lobby'){
       const text=typeof m.text==='string'?m.text.trim():'';
       if(text.length<1||text.length>140||/[\u0000-\u001f\u007f]/.test(text))
@@ -167,6 +210,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
    if(!p||p.ws!==ws)return;
    p.ws=null;p.lastSeen=Date.now();
    if(r.inputs&&p.slot)r.inputs.set(p.slot,{dx:0,dz:0,aimYaw:0,fire:false});
+   if(r.phase==='countdown')cancelCountdown(r);
    if(p.id===r.hostId)r.hostId=members(r).find(x=>x.ws)?.id||null;
    lobby(r);
   });
@@ -179,6 +223,18 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
  }
  const ticking=setInterval(()=>{
   for(const r of rooms.values()){
+   if(r.phase==='countdown'){
+     const live=members(r).filter(member=>member.ws);
+     if(live.length<2||live.some(member=>!member.ready))cancelCountdown(r);
+     else if(Date.now()>=r.countdownDeadline)launch(r);
+     else{
+       const seconds=Math.max(1,Math.ceil((r.countdownDeadline-Date.now())/1000));
+       if(seconds!==r.lastCountdownSecond){
+         r.lastCountdownSecond=seconds;
+         broadcast(r,{type:'COUNTDOWN',seconds});
+       }
+     }
+   }
    for(const p of members(r)){
     if(!p.ws&&Date.now()-p.lastSeen>30000){
      if(r.game&&p.slot){r.game.humanIds.delete(p.slot);r.inputs?.delete(p.slot);}

@@ -179,3 +179,21 @@ test('room lobby chat delivers escaped text to players, refuses invalid content 
  send(b,{type:'CHAT',text:'bad\nline'});
  assert.equal((await message(b,'ERROR')).code,'INVALID_CHAT');
 });
+
+
+test('TDM humans spawn in selected red/blue teams and team choices clear ready',async t=>{
+ const host=await createHost({host:'127.0.0.1',port:0});t.after(()=>host.close());
+ const url='ws://127.0.0.1:'+host.port;const a=await connect(url),b=await connect(url);
+ t.after(()=>{a.terminate();b.terminate()});
+ send(a,{type:'CREATE',name:'Red',tank:'X',mode:'TDM'});
+ const room=(await message(a,'JOINED')).roomId;await message(a,'LOBBY');
+ send(b,{type:'JOIN',roomId:room,name:'Blue',tank:'X'});await message(b,'JOINED');await message(b,'LOBBY');await message(a,'LOBBY');
+ send(b,{type:'READY',ready:true});await message(a,'LOBBY');
+ send(b,{type:'TEAM',team:0});const change=await message(a,'LOBBY');assert(!change.people.find(p=>p.name==='Blue').ready);
+ send(a,{type:'START'});assert.equal((await message(a,'ERROR')).code,'NEED_BOTH_TEAMS');
+ send(b,{type:'TEAM',team:1});await message(a,'LOBBY');
+ send(a,{type:'START'});const aa=await message(a,'START'),bb=await message(b,'START');
+ const snap=await message(a,'SNAPSHOT');
+ assert.equal(snap.tanks.find(t=>t.id===aa.slotId).team,0);
+ assert.equal(snap.tanks.find(t=>t.id===bb.slotId).team,1);
+});
