@@ -197,3 +197,27 @@ test('TDM humans spawn in selected red/blue teams and team choices clear ready',
  assert.equal(snap.tanks.find(t=>t.id===aa.slotId).team,0);
  assert.equal(snap.tanks.find(t=>t.id===bb.slotId).team,1);
 });
+
+test('room owner resumes as host after being the only connected player',async t=>{
+ const host=await createHost({host:'127.0.0.1',port:0});
+ t.after(async()=>host.close());
+ const url='ws://127.0.0.1:'+host.port;
+ const first=await connect(url);
+ t.after(()=>first.terminate());
+ send(first,{type:'CREATE',name:'ReturningOwner',tank:'X',mode:'FFA'});
+ const created=await message(first,'JOINED');await message(first,'LOBBY');
+ await new Promise(resolve=>{first.once('close',resolve);first.close();});
+ const resumed=await connect(url);
+ t.after(()=>resumed.terminate());
+ send(resumed,{type:'RESUME',roomId:created.roomId,playerId:created.playerId,token:created.token});
+ assert.equal((await message(resumed,'JOINED')).host,true);
+ const lobby=await message(resumed,'LOBBY');
+ assert.equal(lobby.hostId,created.playerId);
+ const second=await connect(url);
+ t.after(()=>second.terminate());
+ send(second,{type:'JOIN',roomId:created.roomId,name:'Opponent',tank:'D'});
+ await message(second,'JOINED');await message(second,'LOBBY');
+ send(resumed,{type:'START'});
+ assert.equal((await message(resumed,'START')).roomId,created.roomId);
+ assert.equal((await message(second,'START')).roomId,created.roomId);
+});
