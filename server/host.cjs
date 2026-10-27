@@ -56,7 +56,11 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
   members(r).filter(x=>x.ws).forEach((x,i)=>{
    const t=game.tanks[slots[i]],cfg=TANKS[x.tank];
    x.slot=t.id;x.seq=-1;
-   t.kind=x.tank;t.hp=t.maxHp=cfg.hp;t.shield=t.maxShield=cfg.shield;t.ammo={chemical:18,ion_missile:8,mine:5};
+   t.kind=x.tank;t.hp=t.maxHp=cfg.hp;
+    // Growth is read from the authenticated DB profile; clients never send level modifiers.
+    if(official)t.upgrades={...x.upgrades};
+    t.maxShield=Math.round(cfg.shield*(1+.02*(t.upgrades?.energy||0)));
+    t.shield=t.maxShield;t.ammo={chemical:18,ion_missile:8,mine:5};
    game.humanIds.add(t.id);
     if(official&&x.accountUserId)r.accountBySlot.set(t.id,x.accountUserId);
    r.inputs.set(t.id,{dx:0,dz:0,aimYaw:0,fire:false,item:0,ability:false});
@@ -77,7 +81,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
       ws._xtankAuthPending=true;
       try{
         const verified=await official.authenticate(m.accessToken,m.tank);
-        m.name=verified.name;m.accountUserId=verified.player_id;m.allowedWeapons=verified.allowedWeapons;
+        m.name=verified.name;m.accountUserId=verified.player_id;m.allowedWeapons=verified.allowedWeapons;m.upgrades=verified.upgrades;
       }catch(err){ws._xtankAuthPending=false;return send(ws,{type:'ERROR',code:'AUTH_FAILED',message:err.message});}
       ws._xtankAuthPending=false;
       if(ws.readyState!==WebSocket.OPEN)return;
@@ -123,7 +127,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
        try{
          const verified=await official.authenticate(m.accessToken,old.tank);
          if(verified.player_id!==old.accountUserId)return send(ws,{type:'ERROR',code:'WRONG_ACCOUNT'});
-         old.allowedWeapons=verified.allowedWeapons;
+         if(found.phase==='lobby'){old.allowedWeapons=verified.allowedWeapons;old.upgrades=verified.upgrades;}
        }catch(error){return send(ws,{type:'ERROR',code:'AUTH_FAILED'});}
      }
     if(old.ws?.readyState===WebSocket.OPEN)old.ws.close(4001,'replaced');
@@ -157,7 +161,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
  function makePlayer(m,ws){
   const tank=TANKS[m.tank]?m.tank:'X';
   return {id:id(),token:id()+id(),name:String(m.name||'Player').replace(/[<>]/g,'').slice(0,20),
-   tank,ready:false,ws,seq:-1,slot:null,lastSeen:Date.now(),accountUserId:m.accountUserId||null,allowedWeapons:m.allowedWeapons||null};
+   tank,ready:false,ws,seq:-1,slot:null,lastSeen:Date.now(),accountUserId:m.accountUserId||null,allowedWeapons:m.allowedWeapons||null,upgrades:m.upgrades||null};
  }
  const ticking=setInterval(()=>{
   for(const r of rooms.values()){
