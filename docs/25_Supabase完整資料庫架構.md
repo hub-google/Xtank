@@ -1,6 +1,6 @@
 # X-TANK｜Supabase 完整資料庫架構（已部署）
 > 2026-10-27 / Supabase **Game** 專案 / 私有 schema: `xtank`  
-> 實際部署 **62 張資料表、62 張 RLS 啟用**。種子資料：8 車、7 武器、6 道具、3 張地圖、3 模式、5 技能、3 項初始商店商品、1 種金幣及 1 版規則。  
+> 實際部署 **62 張遊戲業務資料表 + 2 張私有 QA 專用表 = 64 張資料表，64 張 RLS 啟用**。種子資料：8 車、7 武器、6 道具、3 張地圖、3 模式、5 技能、3 項初始商店商品、1 種金幣及 1 版規則。  
 > 此文件代表資料庫已建好，**不代表 EXE 登入、購物或結算 UI 已串接**。
 
 ## 1. 唯一規格與正式 SQL
@@ -135,9 +135,15 @@ seasons ──1:N── player_ratings ── N:1── players
 | `xtank.audit_logs` | id, actor_player_id, actor_service, operation, entity_type, entity_id, before_data, after_data, request_id, created_at |
 | `xtank.config_changes` | change_id, actor_player_id, config_type, config_key, before_value, after_value, reason, created_at |
 
+## 3.1 另有 2 張私有 QA 資料表（不列入上面的 62 張業務表）
+- `xtank.qa_credentials`：已建立的 3 位 Auth QA 玩家之 label、email、密碼（私有管理測試用途）、UUID、provisioned_at。**真實密碼不能寫入公開 repo 或 Windows EXE；以服務管理角色管理和查詢。**
+- `xtank.qa_bootstrap`：一次性建檔 nonce、使用狀態與過期時間。初始測試帳號已開通，公開 bootstrap Edge Function 已停用。
+- 本次已直接向 Supabase 查核：64 張 BASE TABLE 全數 RLS ON；`anon` / `authenticated` 均不能 USAGE `xtank` schema，也不能讀 `qa_credentials`。一般玩家不得直接執行正式對戰入帳 RPC，但登入玩家可呼叫受控的個人資料 RPC。
+- 測試帳號與操作範例見 [27｜測試帳號與跨對話接續](27_測試帳號與跨對話接續.md)。
+
 ## 4. 核心安全模型
 1. `auth.users.id` 是帳號身份，`players.player_id` 必須是相同 UUID；密碼由 Supabase Auth 管理，遊戲資料庫不存密碼。
-2. **所有 62 表 RLS ENABLED，且 `xtank` 不授權 anon/authenticated 直接存取**。高權限 service role 僅在可信任後端使用；**EXE 禁止內嵌 service key**。
+2. **64 表全數 RLS ENABLED，且 `xtank` 不授權 anon/authenticated 直接存取**。高權限 service role 僅在可信任後端使用；**EXE 禁止內嵌 service key**。
 3. 玩家客戶端走經驗證 JWT 的遊戲後端 API；玩家只能修改自己的設定與允許的暱稱，不可直接改錢、XP、分數、所有權或商店價格。
 4. 武器子彈、移動、碰撞、血量和旗幟狀態在權威 WebSocket 遊戲伺服器記憶體運算，**不得每 tick 寫 PostgreSQL**。
 5. 資料庫永續保存帳號、坦克、背包、配裝、經濟交易、正式對局摘要、成就、賽季排行及稽核。
@@ -184,7 +190,7 @@ EXE 開啟 → Supabase Auth signIn/匿名身份 → 官方 API 驗 JWT
 
 ## 9. SQL 唯讀驗證
 ```sql
-SELECT count(*) FROM information_schema.tables WHERE table_schema='xtank' AND table_type='BASE TABLE'; -- 62
+SELECT count(*) FROM information_schema.tables WHERE table_schema='xtank' AND table_type='BASE TABLE'; -- 64
 SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='xtank' AND c.relkind='r' AND c.relrowsecurity; -- 62
 SELECT count(*) FROM xtank.tank_defs; -- 8
 SELECT count(*) FROM xtank.weapon_defs; -- 7
