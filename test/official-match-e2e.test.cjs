@@ -97,6 +97,16 @@ test('two authenticated WebSocket players naturally finish a short official matc
   assert(payload.participants.some(p=>p.player_id===UID_A));
   assert(payload.participants.some(p=>p.player_id===UID_B));
   assert.equal(fs.readdirSync(dir).filter(f=>f.endsWith('.json')).length,0,'successful delivery clears durable outbox');
+  // A non-host player may start the next lobby, but only after the
+  // official result is durable. Neither player should become disconnected.
+  send(b,{type:'BACK_TO_LOBBY'});
+  const lobbyA=await waitFor(a,'LOBBY',{check:m=>m.phase==='lobby'});
+  const lobbyB=await waitFor(b,'LOBBY',{check:m=>m.phase==='lobby'});
+  assert.equal(lobbyA.people.length,2);
+  assert.equal(lobbyB.roomId,joinedA.roomId);
+  assert(lobbyA.people.every(player=>player.ready===false));
+  assert.equal(settlements.length,1,'returning to lobby cannot settle twice');
+
  }finally{
   for(const ws of sockets)ws.terminate();
   if(host)await host.close();
