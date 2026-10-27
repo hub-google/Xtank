@@ -1,0 +1,11 @@
+.xtank-quest-overlay[hidden]{display:none!important}
+.xtank-quest-overlay{position:fixed;inset:0;z-index:520;background:#041124db;display:flex;align-items:center;justify-content:center;padding:12px}
+.xtank-quest-dialog{background:#10293f;color:#eaf1f9;border:1px solid #63839f;border-radius:12px;padding:20px;width:min(650px,96vw);max-height:90vh;overflow:auto;font:14px/1.5 system-ui,'Microsoft JhengHei',sans-serif}
+.xtank-quest-dialog header{display:flex;align-items:center;justify-content:space-between;font-size:20px}
+.xtank-quest-dialog h3{color:#ffda91;margin:6px 0}
+.xtank-quest-dialog article{margin:10px 0;padding:10px;background:#1d3d55;border-radius:9px}
+.xtank-quest-dialog progress{width:100%;height:14px}
+.xtank-quest-dialog button,#xtankQuestsOpen{padding:8px 12px;border:0;border-radius:8px;background:#ffdc8b;color:#1a2835;cursor:pointer}
+.xtank-quest-dialog button:disabled{opacity:.5;cursor:default}
+#xtankQuestsOpen{width:100%;margin-top:8px;background:#395b74;color:#fff}
+#xtankQuestStatus{color:#ffdc8b;min-height:22px}
