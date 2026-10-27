@@ -1,3 +1,4 @@
+import {battleAudio} from './audio.js';
 import * as THREE from 'three';
 import './style.css';
 import {OnlineConnection} from './online.js';
@@ -198,6 +199,7 @@ function flash(color, x, z, size=.22){
 }
 function handleEvents(events){
   for(const e of events){
+    battleAudio.event(e,e.id==='player'||e.owner==='player');
     if(e.type==='fire')flash(e.weapon==='chemical'?0x56ffc7:0xffd16c,e.x,e.z,.15);
     if(e.type==='explosion')for(let i=0;i<5;i++){const a=i*Math.PI*2/5;flash(0xff9d3f,e.x+Math.cos(a)*.35,e.z+Math.sin(a)*.35,.20);}
     if(e.type==='hit'&&e.id==='player'){
@@ -367,6 +369,9 @@ function animate(now){
   if(match&&!el('hud').hidden){hudAccumulator+=dt;if(hudAccumulator>=.1){updateHUD();hudAccumulator=0;}}
   renderer.render(scene,camera);
 }
+window.xtankAudio=battleAudio;
+document.addEventListener('pointerdown',()=>battleAudio.unlock(),{passive:true});
+document.addEventListener('keydown',()=>battleAudio.unlock(),{passive:true});
 el('startButton').addEventListener('click',start);
 el('againButton').addEventListener('click',()=>{
  if(!online)return start();
@@ -432,7 +437,7 @@ function onlineMessage(msg){
   el('teamChoose').hidden=msg.mode==='FFA'||msg.phase!=='lobby';
   if(me&&msg.mode!=='FFA')el('teamChoose').value=String(me.team);
    networkReady=!!msg.people.find(p=>p.id===online?.playerId)?.ready;
-   el('readyNetworkButton').hidden=msg.phase!=='lobby';
+   el('readyNetworkButton').hidden=msg.phase!=='lobby'&&msg.phase!=='countdown';
    el('readyNetworkButton').textContent=networkReady?'取消準備':'準備';
   el('startNetworkButton').hidden=msg.hostId!==online?.playerId||msg.phase!=='lobby';
   if(msg.phase==='lobby'&&match&&resultShown){
