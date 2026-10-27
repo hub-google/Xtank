@@ -61,6 +61,11 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null}={}){
     if(official)t.upgrades={...x.upgrades};
     t.maxShield=Math.round(cfg.shield*(1+.02*(t.upgrades?.energy||0)));
     t.shield=t.maxShield;t.ammo={chemical:18,ion_missile:8,mine:5};
+    if(official){
+      const selected=x.allowedWeapons?.values().next().value;
+      if(!selected)throw Error('OFFICIAL_EMPTY_LOADOUT');
+      t.weapon=selected;
+    }
    game.humanIds.add(t.id);
     if(official&&x.accountUserId)r.accountBySlot.set(t.id,x.accountUserId);
    r.inputs.set(t.id,{dx:0,dz:0,aimYaw:0,fire:false,item:0,ability:false});
