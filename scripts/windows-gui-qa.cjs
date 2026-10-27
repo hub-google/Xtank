@@ -205,6 +205,24 @@ async function testMockedNativeAccount(p){
   await p.click('#resetControlBindings');
   assert.equal(await p.locator('[aria-label="修改前進的快捷鍵"]').textContent(),'W');
  });
+ await step('A-display-settings-save-reload',p,async()=>{
+  await home(p);
+  await p.selectOption('#graphicsQuality','low');
+  await p.check('#highContrastToggle');
+  const chosen=await state(p);
+  assert.equal(chosen.graphics.quality,'low');
+  assert.equal(chosen.graphics.shadows,false);
+  assert.equal(chosen.graphics.highContrast,true);
+  assert.equal(await p.evaluate(()=>localStorage.getItem('xtankGraphicsQualityV1')),'low');
+  await p.reload({waitUntil:'domcontentloaded'});
+  await wait(p,()=>window.xtankDiagnostics?.().render.frame>1);
+  await ensureGuestEntry(p);
+  assert.equal(await p.inputValue('#graphicsQuality'),'low');
+  assert(await p.isChecked('#highContrastToggle'));
+  await p.selectOption('#graphicsQuality','high');
+  await p.uncheck('#highContrastToggle');
+  assert.equal((await state(p)).graphics.quality,'high');
+ });
  for(const tank of ['X','D','M','R','H','A','O','S'])for(const mode of ['FFA','TDM','FLAG_HOLD'])for(const map of ['desk','chess','circuit']){
   await step(`B-${tank}-${mode}-${map}`,p,async()=>{
    await start(p,tank,mode,map);
