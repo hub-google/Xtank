@@ -26,3 +26,6 @@ npm-debug.log*
 
 # Compiled server copy
 server/engine.cjs
+
+# Private game settlement outbox, never commit player IDs or game outcomes
+xtank-settlement-outbox/
