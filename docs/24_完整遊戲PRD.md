@@ -15,6 +15,8 @@
 - DB DDL：[`supabase/migrations/20261027_xtank_62_table_game_schema_v1.sql`](../supabase/migrations/20261027_xtank_62_table_game_schema_v1.sql)
 - DB functions：[`supabase/migrations/20261027_xtank_secure_economy_procedures_v1.sql`](../supabase/migrations/20261027_xtank_secure_economy_procedures_v1.sql)
 
+- DB 商店修正：[商品/結算一致性補丁 migration](../supabase/migrations/20261027_xtank_shop_checkout_consistency_v2.sql)
+
 ## 1. 產品定位與完成定義
 重製受 2000–2002 X-TANK ONLINE 啟發的第三人稱迷你坦克戰鬥。核心循環：
 **開啟 EXE → 身分驗證 → 個人機庫/主大廳 → 配裝/商店 → 選模式 → 房間/配對 → 戰前準備 → 3D 對戰 → 權威結算 → 經驗與遊戲幣/成就入帳 → 升級/換裝 → 再戰/退出。**
