@@ -174,7 +174,8 @@ async function createHost({port=8787,host='0.0.0.0'}={}){
          r.persistStarted=true;
          (async()=>{
            for(let attempt=1;attempt<=4;attempt++){
-             try{const saved=await official.settle(r);r.officialMatchId=saved.match_id;return}
+             try{const saved=await official.settle(r);r.officialMatchId=saved.match_id;
+              broadcast(r,{type:'MATCH_SAVED',matchId:saved.match_id,players:saved.players});return}
              catch(error){console.error('Official settlement attempt',attempt,error.message);await new Promise(ok=>setTimeout(ok,attempt*700))}
            }
            console.error('X-TANK official settlement requires recovery',r.roundId);
