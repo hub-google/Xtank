@@ -2,7 +2,7 @@ name: Windows EXE build and scoped GUI QA
 on:
   push:
     branches: [main]
-    paths: ['src/**', 'server/**', 'scripts/**', 'test/**', 'electron/**', 'index.html', 'package.json', 'vite.config.js', '.github/workflows/windows-exe.yml']
+    paths: ['src/**', 'server/**', 'scripts/**', 'test/**', 'electron/**', 'index.html', 'package.json', 'vite.config.js', 'Dockerfile', '.dockerignore', 'compose.official.example.yml', '.github/workflows/windows-exe.yml']
   workflow_dispatch:
     inputs:
       qa_filter:
@@ -60,3 +60,25 @@ jobs:
           path: qa-evidence/
           if-no-files-found: error
           retention-days: 30
+
+  linux-server-smoke:
+    name: Official server Docker packaging & health
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build official server image with compiled engine
+        run: docker build --tag xtank-server:qa .
+      - name: Verify compiled engine, start server, health endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint node xtank-server:qa -e "require('./server/engine.cjs'); console.log('Compiled combat engine loaded')"
+          docker run --detach --name xtank-server-qa --publish 127.0.0.1:18787:8787 xtank-server:qa
+          trap 'docker rm -f xtank-server-qa >/dev/null 2>&1 || true' EXIT
+          for i in $(seq 1 35); do
+            if curl --silent --fail http://127.0.0.1:18787/health > /tmp/xtank-health.json; then break; fi
+            sleep 1
+          done
+          node -e "const x=require('/tmp/xtank-health.json'); if(!x.ok || x.rooms!==0) process.exit(1);"
+          docker logs xtank-server-qa
