@@ -84,3 +84,21 @@ X-TANK 是一款最多 8 人同場的 3D 第三人稱即時坦克射擊遊戲。
 - [25｜Supabase 完整資料庫架構](docs/25_Supabase完整資料庫架構.md)：Game 專案已部署 `xtank` 62 張資料表、全部 RLS、遊戲內容種子及可信交易程序；尚未把玩家 UI 和後端 API 串接。
 - [26｜完整遊戲端到端測試計畫](docs/26_完整遊戲端到端測試計畫.md)：Windows 原生 EXE、多人體驗、登入、經濟、重連、戰績、作弊、效能及逐項證據的完整 QA 契約。
 - [Supabase Migration SQL](supabase/migrations/20261027_xtank_62_table_game_schema_v1.sql)；[交易程序](supabase/migrations/20261027_xtank_secure_economy_procedures_v1.sql)；[商店一致性修正與初始商品](supabase/migrations/20261027_xtank_shop_checkout_consistency_v2.sql)。
+
+
+## 2026-10-27 開發進度同步（依原始碼核查）
+目前 package.json 版本 **0.2.2**；舊版 0.2.0 說明為歷史資訊，不是最新發行版。正式完整產品仍未達成。
+
+| 工作流 / 能力 | 本次確認情況 | 正式驗收 |
+| --- | --- | --- |
+| 8 車、3 模式、3 張地圖、LAN 權威戰鬥 | 程式及測試案例存在 | 尚需最新 Windows EXE 全案例證據 |
+| 公開/密碼房、快速配對、READY、房間聊天 | server/host.cjs 與 test/multiplayer.test.js 有實作 | 單元/協定測試存在；非跨網正式驗收 |
+| 官方房間 3 秒倒數 | 已修正伺服器實際等待從 2.1 秒為 3.0 秒（commit 71393dc） | 尚待 CI 執行確認 |
+| 永久資料 | Supabase 文件記錄 66 張資料表（62 業務表、2 QA、2 帳務表） | 資料庫建立不代表 EXE 全流程已完成 |
+| 帳號、機庫、購買與配裝 | 已有模擬後端 GUI 測試及正式介面規格 | 真 Supabase 登入、購買、結算、重登入仍待真實 E2E |
+| 官方公網 WSS | 尚無經驗收的 24 小時正式端點 | BLOCKED |
+| 社交、公會、賽季、任務、郵件、管理後台 | 已有部分表及規格 | 尚未完整實作與驗收 |
+
+**完成標準**：兩台不同網路上的原生 Windows EXE，實際註冊/登入、選車配裝、購買、加入官方房間、對戰、權威結算、金幣及 XP 唯一入帳、關閉重登入資料一致；再完成社交/營運與安全壓測。未取得對應 Actions 測試證據前不得標記 PASS。
+
+本次變更：`server/host.cjs` 對正式對戰 READY 倒數時間修正；此版本沒有宣稱已完成所有功能或通過實機驗收。避免與其他開發對話並行寫入同一檔案，後續修改須先取得最新檔案 SHA。
