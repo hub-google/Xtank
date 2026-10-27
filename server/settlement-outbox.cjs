@@ -9,6 +9,7 @@ function createSettlementOutbox({directory,deliver,intervalMs=10000}){
  if(typeof deliver!=='function')throw Error('Settlement delivery callback is required');
  fs.mkdirSync(directory,{recursive:true,mode:0o700});
  let closed=false,running=false;
+ const inFlight=new Map();
  const retryAt=new Map();
  const filename=roundId=>{
   if(typeof roundId!=='string'||roundId.length<12||roundId.length>128)throw Error('Invalid round ID');
@@ -26,10 +27,16 @@ function createSettlementOutbox({directory,deliver,intervalMs=10000}){
   return filenameOnDisk;
  }
  async function deliverFile(file){
-  const data=JSON.parse(fs.readFileSync(file,'utf8'));
-  await deliver(data);
-  fs.unlinkSync(file);
-  retryAt.delete(file);
+  if(inFlight.has(file))return inFlight.get(file);
+  const task=(async()=>{
+   const data=JSON.parse(fs.readFileSync(file,'utf8'));
+   const result=await deliver(data);
+   fs.unlinkSync(file);
+   retryAt.delete(file);
+   return result;
+  })();
+  inFlight.set(file,task);
+  try{return await task}finally{inFlight.delete(file)}
  }
  async function retry(){
   if(closed||running)return;
@@ -49,7 +56,7 @@ function createSettlementOutbox({directory,deliver,intervalMs=10000}){
  }
  async function settle(payload){
   const file=queue(payload);
-  try{await deliverFile(file);return {ok:true,stored:false}}
+  try{return await deliverFile(file)}
   catch(err){retryAt.set(file,Date.now()+10000);throw err}
  }
  const timer=setInterval(()=>{retry().catch(err=>console.error('X-TANK settlement outbox:',err.message))},intervalMs);
