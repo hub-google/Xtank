@@ -289,7 +289,9 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
       if(ws._xtankAuthPending)return send(ws,{type:'ERROR',code:'AUTH_PENDING'});
       ws._xtankAuthPending=true;
       try{
-        const verified=await official.authenticate(m.accessToken,m.tank);
+        const verified=m.type==='SPECTATE'
+          ?await official.authenticateSpectator(m.accessToken)
+          :await official.authenticate(m.accessToken,m.tank);
         m.name=verified.name;m.accountUserId=verified.player_id;m.allowedWeapons=verified.allowedWeapons;m.upgrades=verified.upgrades;m.itemsAvailable=verified.itemsAvailable;
       }catch(err){ws._xtankAuthPending=false;return send(ws,{type:'ERROR',code:'AUTH_FAILED',message:err.message});}
       ws._xtankAuthPending=false;
