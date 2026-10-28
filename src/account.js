@@ -227,7 +227,14 @@ function draw(){
  if(disposeGaragePreview){disposeGaragePreview();disposeGaragePreview=null;}
  if(overlay.hidden)return;
  if(!session?.access_token){authView();return}
- if(!dashboard||!catalog){content.innerHTML='<p>玩家資料載入中…</p>';return}
+ if(!dashboard||!catalog){
+  content.innerHTML='<p>玩家資料尚未同步，請重新讀取；不會因暫時網路錯誤而刪除登入憑證。</p>'+
+   '<button type="button" id="xtankReloadProfile">重新讀取帳號</button>'+
+   '<button type="button" id="xtankSwitchAccount">改用其他帳號登入</button>';
+  $('#xtankReloadProfile').onclick=()=>run(async()=>{await getToken();await rpc('initialize',{});await reload();msg('帳號資料已恢復')});
+  $('#xtankSwitchAccount').onclick=()=>{saveSession(null);dashboard=null;catalog=null;draw()};
+  return;
+ }
  content.innerHTML=bar()+`<section class="xtank-account-panel">${panel()}</section>`;
  if(tab==='garage'){
   try{
@@ -426,7 +433,14 @@ async function run(fn){
  try{await fn()}catch(e){msg('操作失敗：'+(e.message||e))}finally{busy=false}
 }
 show();
-if(session?.access_token){getToken().then(()=>rpc('initialize',{})).then(reload).catch(()=>{saveSession(null);dashboard=null;catalog=null;draw();msg('登入狀態已過期，請重新登入。')})}
+if(session?.access_token){
+ getToken().then(()=>rpc('initialize',{})).then(reload).catch(error=>{
+  // Network/DB failure is not proof of a revoked Auth session.
+  // Keep refresh tokens until the user explicitly switches accounts.
+  dashboard=null;catalog=null;draw();
+  msg('帳號資料暫時無法同步：'+(error?.message||'網路或伺服器異常')+'。請重新讀取，或改用其他帳號登入。');
+ });
+}
 window.xtankAccount={show,hide,refresh:reload,getAccessToken:getToken,savePreferences,saveCloudBindings,
  getMatchReceipt:matchId=>rpcNamed('xtank_player_match_receipt',{p_match_id:matchId}),
  getSignedInPlayerId:()=>dashboard?.profile?.player_id??null};
