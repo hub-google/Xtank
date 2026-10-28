@@ -402,7 +402,22 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
      if(!r.hostId||!members(r).some(member=>member.id===r.hostId&&member.ws))r.hostId=p.id;
      send(ws,{type:'JOINED',roomId:r.id,playerId:p.id,token:p.token,host:p.id===r.hostId});
      lobby(r);
-     if(r.phase==='live')send(ws,{type:'START',mode:r.mode,mapId:r.mapId,slotId:p.slot,roundId:r.roundId,roomId:r.id,seed:r.seed,rulesetCode:r.rulesetCode,ruleClass:r.ruleClass,official:!!official,allowedWeapons:official?[...p.allowedWeapons]:null});
+     if((r.phase==='live'||r.phase==='finished')&&r.game&&p.slot){
+       send(ws,{type:'START',mode:r.mode,mapId:r.mapId,slotId:p.slot,roundId:r.roundId,
+         roomId:r.id,seed:r.seed,rulesetCode:r.rulesetCode,ruleClass:r.ruleClass,
+         official:!!official,allowedWeapons:official?[...p.allowedWeapons]:null});
+       if(r.phase==='finished'){
+         const g=r.game;
+         send(ws,{type:'SNAPSHOT',mode:g.mode,mapId:g.mapId,roundId:r.roundId,
+           time:g.time,tick:g.tick,ended:true,score:[...g.scores],target:g.target,
+           flag:{...g.flag},tanks:g.tanks.map(t=>({...t,ammo:{...t.ammo}})),
+           projectiles:g.projectiles.map(projectile=>({...projectile})),
+           smokes:g.smokes.map(effect=>({...effect})),
+           repairFields:g.repairFields.map(effect=>({...effect})),events:[]});
+         if(official&&r.officialMatchId)
+           send(ws,{type:'MATCH_SAVED',matchId:r.officialMatchId});
+       }
+     }
     }finally{
      old.resumePending=false;
      ws._xtankResumePending=false;
