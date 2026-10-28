@@ -14,7 +14,7 @@
 ### 本次移除的實際程式
 - `server/host.cjs`：取消跨節點配對代理、配對票券資格驗證、回放蒐集與回放訊息協定。
 - `server/official.cjs`、`src/community.js`、`src/game.js`、`index.html`：取消全球排位配對／組隊入口及戰後重播 UI。
-- Supabase：撤銷 `xtank_party_queue_api`、`xtank_matchmaker_host`、`xtank_match_ticket_status` 的實際函式，新增撤回 migration；舊 schema 中尚未使用的欄表不再作為需求。
+- Supabase：撤銷 `xtank_party_queue_api`、`xtank_matchmaker_host`、`xtank_match_ticket_status` 的實際函式，新增撤回 migration；確認這些舊版表格均為 0 筆後，亦已刪除 `xtank.parties`、`xtank.party_members`、`xtank.matchmaking_tickets` 和 `xtank.replay_files`，並保留可重現的回退 migration。
 - 官方遊戲的 Auth、金幣／XP 結算、消耗品預留、聊天與營運管理程式均保留。
 
 ---
