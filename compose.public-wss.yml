@@ -11,6 +11,7 @@ services:
     environment:
       NODE_ENV: production
       XTANK_OFFICIAL_MODE: "1"
+      XTANK_SERVER_REGION: ${XTANK_SERVER_REGION:-}
       BIND_HOST: 0.0.0.0
       PORT: "8787"
       XTANK_SETTLEMENT_DIR: /data/settlements
