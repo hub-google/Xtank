@@ -288,6 +288,14 @@ async function testMockedNativeAccount(p){
  await step('C-Escape-return-home',p,async()=>{if(!await p.isVisible('#pauseBadge'))await p.keyboard.press('Escape');await p.click('#resumeButton');assert(!(await state(p)).paused);await p.keyboard.press('Escape');await p.click('#pauseHomeButton');assert(await p.isVisible('#startMenu'));});
  // A tank matrix regex such as ^B-D- must NOT launch a second network client.
   const q=needsNetworkClient(filter)?await launch(1):null;
+ await step('D-dual-client-bootstrap',p,async()=>{
+  assert(q,'second native Electron process required');
+  const a=await state(p),b=await state(q);
+  assert(a?.render?.triangles>100,'first real EXE 3D renderer active');
+  assert(b?.render?.triangles>100,'second real EXE 3D renderer active');
+  assert(await q.isVisible('#startMenu'),'second EXE home screen visible');
+  await snap(q,'native-second-exe-3D-started');
+ });
  await step('D-LAN-create-join-start-sync-reconnect',p,async()=>{
  await home(p);await home(q);await p.click('#hostServerButton');await p.waitForFunction(()=>document.querySelector('#networkStatus').textContent.includes('已啟動'));
  await p.fill('#playerName','QA-A');await p.selectOption('#mapSelect','chess');await p.click('#makeRoomButton');await wait(p,()=>document.querySelector('#roomCode').value.length===6);await p.click('#leaveNetworkButton');assert(!await p.isVisible('#networkLobby'));await p.fill('#roomCode','');await p.click('#makeRoomButton');await wait(p,()=>document.querySelector('#roomCode').value.length===6);const code=await p.inputValue('#roomCode');
