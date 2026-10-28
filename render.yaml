@@ -20,6 +20,11 @@ services:
         value: 0.0.0.0
       - key: XTANK_OFFICIAL_MODE
         value: "1"
+      - key: XTANK_REGION
+        value: asia-east
+      # Set to the actual provider-issued WSS URL after the service is online.
+      - key: XTANK_PUBLIC_WSS_URL
+        sync: false
       - key: SUPABASE_URL
         value: https://fanffwnhkxpfhttylntw.supabase.co
       - key: SUPABASE_SERVICE_ROLE_KEY
