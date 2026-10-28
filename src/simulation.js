@@ -207,6 +207,10 @@ export class Game {
     if(!spots.length)return;
     [t.x,t.z]=spots[0];
     t.hp=t.maxHp;t.shield=t.maxShield;t.alive=true;t.respawn=0;t.cooldown=.8;t.boostTime=0;t.abilityTime=0;t.ammo={chemical:18,ion_missile:8,mine:5};
+    // Repair/shield charges are per-life caps. Official matches additionally
+    // obey the actual reserved inventory left from all previous lives.
+    t.repair=Math.min(2,t.itemsRemaining?.repair??2);
+    t.shieldCells=Math.min(2,t.itemsRemaining?.shield_cell??2);
     this.events.push({type:'respawn',id:t.id,x:t.x,z:t.z});
   }
   useItem(t,index){
