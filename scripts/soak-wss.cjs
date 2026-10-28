@@ -13,7 +13,7 @@ const send=(ws,msg)=>{if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(m
 const clients=[];
 let host=null,heartbeat=null,sampling=null,closed=false;
 const stats={durationSeconds:seconds,players:8,packets:0,snapshots:0,rounds:0,
-  maxGapMs:0,maxRssMb:0,maxHeapMb:0,minHz:Infinity,errors:[],disconnected:0,
+  maxGapMs:0,maxRssMb:0,maxHeapMb:0,errors:[],disconnected:0,
   lastServerTick:0,firstStartedAt:null,lastSnapshotAt:null,roomId:null};
 async function dial(port,name){
  const ws=new WebSocket('ws://127.0.0.1:'+port);
