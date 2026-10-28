@@ -99,12 +99,40 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
   }
   launch(r);
  }
+ async function prepareOfficialLaunch(r){
+  if(!official||r.phase!=='countdown')return;
+  r.phase='allocating';
+  r.roundId=id()+id();
+  const roundId=r.roundId;
+  const prepared=members(r).filter(p=>p.ws);
+  try{
+   // Reserve per-player stocks in the database before any client enters the
+   // official match. Failure rolls back all previously reserved players.
+   for(const p of prepared){
+    if(!p.accountUserId)throw Error('PLAYER_NOT_AUTHENTICATED');
+    await official.reserve(roundId,p.accountUserId,p.itemsAvailable);
+   }
+   if(r.phase!=='allocating'||r.roundId!==roundId||
+      prepared.length<2||prepared.some(p=>!p.ws||!p.ready||!r.people.has(p.id)))
+      throw Error('ROOM_CHANGED_DURING_RESERVATION');
+   launch(r);
+  }catch(error){
+   console.error('Official reservation rejected:',error.message);
+   try{await official.release(roundId);}
+   catch(releaseError){console.error('Escrow release requires operator recovery:',releaseError.message);}
+   if(r.roundId===roundId){
+    r.phase='lobby';r.roundId=null;
+    broadcast(r,{type:'ERROR',code:'MATCH_RESERVATION_FAILED',message:error.message});
+    lobby(r);
+   }
+  }
+ }
  function launch(r){
-  if(r.phase!=='lobby'&&r.phase!=='countdown')return;
+  if(r.phase!=='lobby'&&r.phase!=='countdown'&&r.phase!=='allocating')return;
   const game=new Game({mode:r.mode,mapId:r.mapId,selectedTank:'X',size:8,seed:crypto.randomBytes(4).readUInt32LE()});
   if(testRoundSeconds!==null)game.time=testRoundSeconds;
   game.humanIds=new Set();
-  r.game=game;r.inputs=new Map();r.phase='live';r.roundId=id();r.events=[];
+  r.game=game;r.inputs=new Map();r.phase='live';r.roundId=r.roundId||id();r.events=[];
    r.startedAt=Date.now();r.accountBySlot=new Map();r.persistStarted=false;r.officialMatchId=null;
   const slots=r.mode==='FFA'?[0,1,2,3,4,5,6,7]:[0,4,1,5,2,6,3,7];
   const chosen=new Set();
@@ -317,7 +345,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
    if(r.phase==='countdown'){
      const live=members(r).filter(member=>member.ws);
      if(live.length<2||live.some(member=>!member.ready))cancelCountdown(r);
-     else if(Date.now()>=r.countdownDeadline)launch(r);
+     else if(Date.now()>=r.countdownDeadline)void prepareOfficialLaunch(r);
      else{
        const seconds=Math.max(1,Math.ceil((r.countdownDeadline-Date.now())/1000));
        if(seconds!==r.lastCountdownSecond){
