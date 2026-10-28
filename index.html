@@ -92,6 +92,7 @@
             <label>你的名稱 <input id="playerName" maxlength="20" value="Player" autocomplete="off"></label>
             <label>伺服器 WebSocket 網址 <input id="serverAddress" value="ws://127.0.0.1:8787" spellcheck="false"></label>
             <label>建立房間名稱 <input id="roomName" maxlength="32" placeholder="例如：週末坦克大戰" autocomplete="off"></label>
+            <label>房間規則 <select id="ruleClass"><option value="growth">經典成長房（套用坦克升級）</option><option value="standard">標準競技房（不套用升級）</option></select></label>
             <label>房間代碼（加入時填寫） <input id="roomCode" maxlength="6" placeholder="例如 A1B2C3" spellcheck="false"></label>
             <label>房間密碼（選填） <input id="roomPassword" type="password" maxlength="40" autocomplete="off" placeholder="公開房間留空"></label>
           </div>
@@ -111,6 +112,7 @@
               <strong>房主：修改房間設定</strong>
               <label>房間名稱 <input name="name" maxlength="32" minlength="2" required></label>
               <label>模式 <select name="mode"><option value="FFA">個人死鬥</option><option value="TDM">團隊戰</option><option value="FLAG_HOLD">持旗戰</option></select></label>
+              <label>房間規則 <select name="ruleClass"><option value="growth">經典成長房</option><option value="standard">標準競技房</option></select></label>
               <label>地圖 <select name="mapId"><option value="desk">書桌</option><option value="chess">棋盤</option><option value="circuit">電路板</option></select></label>
               <button type="submit" class="secondary">儲存房間設定（取消原準備）</button>
             </form>
