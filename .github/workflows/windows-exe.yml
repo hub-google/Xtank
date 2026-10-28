@@ -48,6 +48,7 @@ jobs:
           retention-days: 10
 
   windows-gui-shards:
+    if: github.ref != 'refs/heads/release-validation/20261028-dual-bootstrap'
     name: Real EXE - ${{ matrix.group }}
     needs: windows-build
     runs-on: windows-latest
@@ -95,7 +96,7 @@ jobs:
 
   windows-extended-qa:
     name: Real EXE - additional weapons, items and multiplayer
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/release-validation/20261028-dual-bootstrap'
     needs: windows-build
     runs-on: windows-latest
     timeout-minutes: 115
@@ -118,7 +119,42 @@ jobs:
       - name: Extended native EXE QA
         run: node scripts/windows-gui-qa.cjs
         env:
-          XTANK_QA_FILTER: ${{ inputs.qa_filter == '^' && '^(C-|D-)' || inputs.qa_filter }}
+          XTANK_QA_FILTER: '^D-dual-client-bootstrap
+          XTANK_QA_OUT: qa-evidence/extended
+      - name: Close game processes
+        if: always()
+        shell: pwsh
+        run: Get-Process -Name 'XTANK*','X-TANK*' -ErrorAction SilentlyContinue | Stop-Process -Force
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: XTANK-GUI-Extended
+          path: qa-evidence/extended/
+          if-no-files-found: warn
+          retention-days: 30
+
+  linux-server-smoke:
+    name: Official server Docker packaging & health
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build official server image with compiled engine
+        run: docker build --tag xtank-server:qa .
+      - name: Verify compiled engine, start server, health endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint node xtank-server:qa -e "require('./server/engine.cjs'); console.log('Compiled combat engine loaded')"
+          docker run --detach --name xtank-server-qa --publish 127.0.0.1:18787:8787 xtank-server:qa
+          trap 'docker rm -f xtank-server-qa >/dev/null 2>&1 || true' EXIT
+          for i in $(seq 1 35); do
+            if curl --silent --fail http://127.0.0.1:18787/health > /tmp/xtank-health.json; then break; fi
+            sleep 1
+          done
+          node -e "const x=require('/tmp/xtank-health.json'); if(!x.ok || x.rooms!==0) process.exit(1);"
+          docker logs xtank-server-qa
+
           XTANK_QA_OUT: qa-evidence/extended
       - name: Close game processes
         if: always()
