@@ -617,12 +617,12 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
      const online=[...rooms.values()].flatMap(room=>members(room)
        .filter(player=>player.ws?.readyState===WebSocket.OPEN&&player.accountUserId)
        .map(player=>({room,player})));
-     if(!online.length)return;
      const observing=[...rooms.values()].flatMap(room=>[...(room.spectators||[])]
        .filter(ws=>ws.readyState===WebSocket.OPEN&&ws._xtankAccountUserId)
        .map(ws=>({ws,accountUserId:ws._xtankAccountUserId})));
      const uniqueIds=[...new Set([...online.map(({player})=>player.accountUserId),
        ...observing.map(x=>x.accountUserId)])];
+     if(!uniqueIds.length)return;
      for(let i=0;i<uniqueIds.length;i+=512){
        const ids=uniqueIds.slice(i,i+512);
        const result=await official.onlineModeration(ids);
