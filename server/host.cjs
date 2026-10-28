@@ -241,7 +241,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
    let m;try{m=JSON.parse(raw.toString());}catch{return send(ws,{type:'ERROR',code:'BAD_JSON'});}
    if(!m||typeof m.type!=='string')return;
    if(observedRoom){
-     if(m.type==='PING')send(ws,{type:'PONG',serverTime:Date.now()});
+     if(m.type==='PING')send(ws,{type:'PONG',serverTime:Date.now(),clientTime:Number.isSafeInteger(m.clientTime)?m.clientTime:null});
      else send(ws,{type:'ERROR',code:'SPECTATOR_READ_ONLY'});
      return;
    }
@@ -464,7 +464,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
       const waiting=members(r).filter(v=>v.ws?.readyState===WebSocket.OPEN&&!v.returned).length;
       broadcast(r,{type:'REMATCH_WAITING',playersRemaining:waiting});
     }
-   }else if(m.type==='PING')send(ws,{type:'PONG',serverTime:Date.now()});
+   }else if(m.type==='PING')send(ws,{type:'PONG',serverTime:Date.now(),clientTime:Number.isSafeInteger(m.clientTime)?m.clientTime:null});
   });
   ws.on('close',()=>{
    clearTimeout(joinTimeout);
