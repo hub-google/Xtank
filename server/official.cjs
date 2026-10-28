@@ -52,6 +52,12 @@ function officialService({onSettlement}={}){
       });
     },
     chatMutedUntil,
+    async maintenanceStatus(){
+      const state=await request('/rest/v1/rpc/xtank_service_maintenance',{body:{p_action:'status'}});
+      if(typeof state?.enabled!=='boolean'||typeof state?.notice!=='string')
+        throw Error('INVALID_MAINTENANCE_STATE');
+      return {enabled:state.enabled,notice:state.notice};
+    },
     async onlineModeration(playerIds){
       if(!Array.isArray(playerIds)||playerIds.length>512)throw Error('INVALID_PLAYER_IDS');
       if(!playerIds.length)return {suspended:[],muted:{}};
