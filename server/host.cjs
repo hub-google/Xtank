@@ -58,6 +58,20 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
  });
  const wss=new WebSocketServer({server:httpServer,maxPayload:4096,perMessageDeflate:false});
  const members=r=>[...r.people.values()];
+ function sendReplay(ws,r){
+  const frames=r.replay||[];
+  if(!frames.length)return send(ws,{type:'ERROR',code:'REPLAY_NOT_AVAILABLE'});
+  send(ws,{type:'REPLAY_BEGIN',roundId:r.replayRoundId,frameCount:frames.length,sampleIntervalMs:2000});
+  let i=0;
+  const advance=()=>{
+   if(ws.readyState!==WebSocket.OPEN)return;
+   if(i>=frames.length){send(ws,{type:'REPLAY_END',roundId:r.replayRoundId});return;}
+   if(ws.bufferedAmount>256*1024){setTimeout(advance,50);return;}
+   send(ws,{type:'REPLAY_CHUNK',roundId:r.replayRoundId,frames:frames.slice(i,i+4)});
+   i+=4;setTimeout(advance,12);
+  };
+  advance();
+ }
  const roomSummary=r=>({roomId:r.id,mode:r.mode,mapId:r.mapId,phase:r.phase,
    players:members(r).filter(p=>p.ws).length,capacity:8,passwordRequired:!!r.password});
  function passwordDigest(password,salt){return new Promise((resolve,reject)=>crypto.scrypt(password,salt,32,(error,key)=>error?reject(error):resolve(key)));}
@@ -70,6 +84,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
    return crypto.timingSafeEqual(r.password.hash,attempt);
  }
  function broadcast(r,msg){for(const p of members(r))send(p.ws,msg);}
+ function broadcastSpectators(r,msg){for(const ws of r.spectators||[])send(ws,msg);}
  function lobby(r){broadcast(r,{type:'LOBBY',roomId:r.id,mode:r.mode,mapId:r.mapId,phase:r.phase,hostId:r.hostId,
   people:members(r).map(p=>({id:p.id,name:p.name,tank:p.tank,team:p.team,connected:!!p.ws,ready:!!p.ready,host:p.id===r.hostId}))});}
  function selectTeam(r,requested){
@@ -133,6 +148,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
   if(testRoundSeconds!==null)game.time=testRoundSeconds;
   game.humanIds=new Set();
   r.game=game;r.inputs=new Map();r.phase='live';r.roundId=r.roundId||id();r.events=[];
+   r.replay=[];r.replayRoundId=r.roundId;r.replaySecond=-1;
    r.startedAt=Date.now();r.accountBySlot=new Map();r.persistStarted=false;r.officialMatchId=null;
   const slots=r.mode==='FFA'?[0,1,2,3,4,5,6,7]:[0,4,1,5,2,6,3,7];
   const chosen=new Set();
@@ -168,11 +184,13 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
    send(x.ws,{type:'START',mode:r.mode,mapId:r.mapId,slotId:t.id,roundId:r.roundId,roomId:r.id,official:!!official,allowedWeapons:official?[...x.allowedWeapons]:null});
   });
   lobby(r);
+  broadcastSpectators(r,{type:'START',mode:r.mode,mapId:r.mapId,slotId:game.tanks[0].id,
+   roundId:r.roundId,roomId:r.id,official:!!official,spectator:true});
  }
  wss.on('connection',ws=>{
   // Limit anonymous sockets before they can use game / authentication state.
   if(wss.clients.size>maxConnections){ws.close(1013,'server full');return;}
-  let p=null,r=null,received=0,windowStart=Date.now();
+  let p=null,r=null,observedRoom=null,received=0,windowStart=Date.now();
   const joinTimeout=setTimeout(()=>{
    if(!p&&ws.readyState===WebSocket.OPEN)ws.close(1008,'join timeout');
   },unjoinedTimeoutMs);
@@ -183,10 +201,16 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
    if(++received>60){ws.close(1008,'rate limit');return;}
    let m;try{m=JSON.parse(raw.toString());}catch{return send(ws,{type:'ERROR',code:'BAD_JSON'});}
    if(!m||typeof m.type!=='string')return;
+   if(observedRoom){
+     if(m.type==='REPLAY_REQUEST')sendReplay(ws,observedRoom);
+     else if(m.type==='PING')send(ws,{type:'PONG',serverTime:Date.now()});
+     else send(ws,{type:'ERROR',code:'SPECTATOR_READ_ONLY'});
+     return;
+   }
    if(ws._xtankResumePending)return send(ws,{type:'ERROR',code:'RESUME_PENDING'});
    // Creating a password-protected room hashes off-thread. Reject concurrent packets.
    if(ws._xtankCreatePending)return send(ws,{type:'ERROR',code:'CREATE_PENDING'});
-   if(official&&(m.type==='CREATE'||m.type==='JOIN'||m.type==='QUICK_MATCH')&&!p){
+   if(official&&(m.type==='CREATE'||m.type==='JOIN'||m.type==='QUICK_MATCH'||m.type==='SPECTATE')&&!p){
       if(ws._xtankAuthPending)return send(ws,{type:'ERROR',code:'AUTH_PENDING'});
       ws._xtankAuthPending=true;
       try{
@@ -208,10 +232,20 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
     }
     if(m.type==='LIST_ROOMS'&&!p){
       send(ws,{type:'ROOMS',rooms:[...rooms.values()].filter(room=>room.phase==='lobby'&&!room.password).map(roomSummary).slice(0,32)});
+    }else if(m.type==='SPECTATE'&&!p){
+      const target=rooms.get(String(m.roomId||'').toUpperCase());
+      if(!target||target.password||target.phase!=='live')return send(ws,{type:'ERROR',code:'SPECTATE_UNAVAILABLE'});
+      if(!target.spectators)target.spectators=new Set();
+      if(target.spectators.size>=8)return send(ws,{type:'ERROR',code:'SPECTATOR_LIMIT'});
+      observedRoom=target;target.spectators.add(ws);
+      send(ws,{type:'JOINED',roomId:target.id,playerId:null,token:null,host:false,spectator:true});
+      send(ws,{type:'START',mode:target.mode,mapId:target.mapId,
+        slotId:target.game?.tanks[0]?.id||null,roundId:target.roundId,roomId:target.id,
+        official:!!official,spectator:true});
     }else if(m.type==='CREATE'&&!p){
     if(rooms.size>=32)return send(ws,{type:'ERROR',code:'SERVER_FULL'});
     let code;do{code=crypto.randomBytes(3).toString('hex').toUpperCase();}while(rooms.has(code));
-    r={id:code,mode:['FFA','TDM','FLAG_HOLD'].includes(m.mode)?m.mode:'FFA',
+    r={id:code,spectators:new Set(),replay:[],mode:['FFA','TDM','FLAG_HOLD'].includes(m.mode)?m.mode:'FFA',
       mapId:typeof m.mapId==='string'&&Object.hasOwn(MAPS,m.mapId)?m.mapId:'desk',
       phase:'lobby',people:new Map(),hostId:null,game:null,inputs:null,roundId:null,events:[],snapCount:0,created:Date.now()};
     if(typeof m.password==='string'&&m.password.length>0){
@@ -311,6 +345,8 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
     if(!input)return send(ws,{type:'ERROR',code:'INVALID_INPUT'});
     if(official&&input.weapon&&!p.allowedWeapons?.has(input.weapon))return send(ws,{type:'ERROR',code:'WEAPON_NOT_OWNED'});
      p.seq=m.seq;r.inputs.set(p.slot,input);
+   }else if(m.type==='REPLAY_REQUEST'){
+    sendReplay(ws,r);
    }else if(m.type==='BACK_TO_LOBBY'&&r.phase==='finished'){
     // Any player may return the finished room to lobby. Do not discard an
     // official round until the durable settlement has been acknowledged.
@@ -322,6 +358,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
   });
   ws.on('close',()=>{
    clearTimeout(joinTimeout);
+   if(observedRoom)observedRoom.spectators?.delete(ws);
    if(!p||p.ws!==ws)return;
    p.ws=null;p.lastSeen=Date.now();
    if(r.inputs&&p.slot)r.inputs.set(p.slot,{dx:0,dz:0,aimYaw:0,fire:false});
@@ -381,16 +418,24 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
      }
     if(r.snapCount%2===0||r.phase==='finished'){
      const g=r.game;
-     broadcast(r,{type:'SNAPSHOT',mode:g.mode,mapId:g.mapId,roundId:r.roundId,time:g.time,tick:g.tick,
-      ended:g.ended,score:[...g.scores],target:g.target,flag:{...g.flag},
-      tanks:g.tanks.map(x=>({...x,ammo:{...x.ammo}})),
-      projectiles:g.projectiles.map(x=>({...x})),smokes:g.smokes.map(x=>({...x})),repairFields:g.repairFields.map(x=>({...x})),events:r.events.splice(0)});
+     const snapshot={type:'SNAPSHOT',mode:g.mode,mapId:g.mapId,roundId:r.roundId,time:g.time,tick:g.tick,
+       ended:g.ended,score:[...g.scores],target:g.target,flag:{...g.flag},
+       tanks:g.tanks.map(x=>({...x,ammo:{...x.ammo}})),
+       projectiles:g.projectiles.map(x=>({...x})),smokes:g.smokes.map(x=>({...x})),
+       repairFields:g.repairFields.map(x=>({...x})),events:r.events.splice(0)};
+     const replaySecond=Math.floor(g.tick/2);
+     if(replaySecond!==r.replaySecond&&r.replay.length<300){
+       r.replaySecond=replaySecond;
+       r.replay.push({...snapshot,events:[],projectiles:snapshot.projectiles.slice(0,24)});
+     }
+     broadcast(r,snapshot);broadcastSpectators(r,snapshot);
+
      if(r.phase==='finished')lobby(r);
     }
    }
    // Do not discard an active round just because every socket timed out: the
    // authoritative engine must finish it and persist official results first.
-   if(!r.people.size&&r.phase!=='live'&&Date.now()-r.created>20000)rooms.delete(r.id);
+   if(!r.people.size&&!(r.spectators?.size)&&r.phase!=='live'&&Date.now()-r.created>20000)rooms.delete(r.id);
   }
  },25);
  ticking.unref?.();
