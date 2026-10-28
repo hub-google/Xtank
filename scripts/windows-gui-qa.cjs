@@ -236,16 +236,22 @@ async function testMockedNativeAccount(p){
    // A 72-round matrix must not exhaust graphics memory as arenas are rebuilt.
    assert((s.render.geometries||0)<450,'Excess GPU geometry: '+s.render.geometries);
    if(mode==='FFA'&&map==='desk'){
-    const deadline=Date.now()+6000;
-    let triggered=false,lastTank=null;
+    const deadline=Date.now()+15000;
+    let triggered=false,lastTank=null,lastSample=null;
+    // The native Windows software renderer sometimes processes a very short
+    // press between rare render frames. Hold the real key long enough for a
+    // simulation frame, and explicitly remove stale focus from form controls.
+    await p.evaluate(()=>document.activeElement?.blur());
     while(Date.now()<deadline){
-     const sample=await state(p);
+     const sample=await state(p);lastSample=sample;
      lastTank=sample.match?.tanks[0];
      if(sample.events.some(e=>e.type==='ability'&&e.id==='player')||lastTank?.abilityTime>0){triggered=true;break}
-     if(lastTank?.alive&&lastTank.hp>14&&lastTank.abilityCooldown<=0)await p.keyboard.press('e');
+     if(lastTank?.alive&&lastTank.hp>14&&lastTank.abilityCooldown<=0){
+      await p.keyboard.down('e');await delay(250);await p.keyboard.up('e');
+     }
      await delay(200);
     }
-    assert(triggered,'tank ability '+tank+' not triggered '+JSON.stringify({hp:lastTank?.hp,alive:lastTank?.alive,cooldown:lastTank?.abilityCooldown}));
+    assert(triggered,'tank ability '+tank+' not triggered '+JSON.stringify({hp:lastTank?.hp,alive:lastTank?.alive,cooldown:lastTank?.abilityCooldown,paused:lastSample?.paused,tick:lastSample?.match?.tick,activeElement:await p.evaluate(()=>document.activeElement?.tagName)}));
    }
   });
  }
