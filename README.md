@@ -318,3 +318,16 @@ X-TANK 是一款最多 8 人同場的 3D 第三人稱即時坦克射擊遊戲。
 - [9afd248](https://github.com/hub-google/Xtank/commit/9afd248bce646b9a380a682220b066bef9ed6dde) 已整合 JWT 重連競態鎖、離線賽果 `fsync`、慢 WebSocket 客戶端背壓與伺服器運維健康指標；對應 59/59 回歸測試 [#40604857910](https://github.com/hub-google/Xtank/actions/runs/40604857910) 成功。
 - 目前新版本的完整 72-case main CI 以 [#40607260097](https://github.com/hub-google/Xtank/actions/runs/40607260097) 的**最後結果**判斷，不可把舊版 [#40523660546](https://github.com/hub-google/Xtank/actions/runs/40523660546) SUCCESS 套用到最新版本。雙原生 Windows E2E 仍未通過；獨立 GUI/GPU 診斷在 [release-validation/20261028-dual-bootstrap](https://github.com/hub-google/Xtank/tree/release-validation/20261028-dual-bootstrap) 分支。
 - 真實部署公網 WSS 與由不同公網 Windows EXE 到 Supabase 結算仍缺可管理常駐主機，維持未完成。版本尚非正式發行。
+
+## 2026-10-28｜續作：結算恢復、對戰重賽與 WSS 關閉保護
+
+本次只開發功能，**未執行打包、測試，也未觸發新的 GitHub Actions**。
+
+- **異常對局退款與自動重試**：官方道具預留／遊戲引擎失敗會進入暫停的新對局狀態；資料庫確認全場退款成功後才允許重新準備，失敗會延遲 5～60 秒重試，避免誤把尚未退款的道具當成已退還。
+- **房主踢人**：踢掉玩家的同時移除該坦克的人類輸入控制，避免留下無法操作的虛擬佔位。
+- **停權玩家仍可正確結算既有場次**：已修正 `public.xtank_record_official_match`，只有在停權前已完成合法 escrow 預留的玩家，才可在停權後完成該場原本的結算，避免其他玩家的獎勵及退款整批堵塞。對停權玩家的後續新對局仍拒絕登入。
+- **重賽由在場玩家共同確認**：`BACK_TO_LOBBY` 不再讓單一玩家強制把所有人的結算畫面關掉；所有仍連線的玩家確認後才重設房間，離線玩家不會阻塞重賽。畫面顯示等待人數。
+- **結算狀況可觀察**：`/health` 回報待補送的永久儲存賽果數量、最久等待時間、退款待處理房間數；資料夾讀取失敗則健康檢查回傳 503；伺服器正在關閉時拒絕新連線並回傳 503。
+- **本輪資料庫 migration**：`supabase/migrations/20261028_xtank_settle_midgame_suspensions.sql`，已套用既有 Game Supabase。
+
+**尚未完成**：雲端服務商實際常駐部署、公開 WSS 網域與 TLS 憑證；因此不能宣稱「24 小時公網已上線」。上述新修改尚未按要求執行驗收。
