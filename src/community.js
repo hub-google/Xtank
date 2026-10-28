@@ -7,7 +7,7 @@ let data=null,friendData=null,tab='clans',busy=false,selectedClan=null,selectedF
 const menu=qs('#startMenu .panel');
 if(menu){
   const launch=document.createElement('button');
-  launch.id='xtankCommunityOpen';launch.className='secondary';launch.type='button';launch.textContent='公會／聊天／信件／通知';
+  launch.id='xtankCommunityOpen';launch.className='secondary';launch.type='button';launch.textContent='組隊／公會／聊天／信件／通知';
   menu.insertBefore(launch,menu.querySelector('.online-box'));
   const layer=document.createElement('div');layer.id='xtankCommunityOverlay';layer.className='xtank-community-layer';layer.hidden=true;
   layer.innerHTML='<section class="xtank-community-dialog" role="dialog" aria-modal="true" aria-label="玩家社群"><header><strong>玩家社群</strong><button type="button" id="xtankCommunityClose">關閉</button></header><p id="xtankCommunityStatus" role="status"></p><nav id="xtankCommunityNav"></nav><main id="xtankCommunityMain"></main></section>';
@@ -44,9 +44,44 @@ if(menu){
     name:f.friend_name}))||[];
   function render(){
     const nav=qs('#xtankCommunityNav'),main=qs('#xtankCommunityMain');
-    nav.innerHTML=[['clans','公會'],['chat','好友私訊'],['mail','信件'],['notifications','通知'],['report','檢舉']].map(([id,name])=>'<button type="button" data-tab="'+id+'" class="'+(tab===id?'active':'')+'">'+name+'</button>').join('');
+    nav.innerHTML=[['party','組隊配對'],['clans','公會'],['chat','好友私訊'],['mail','信件'],['notifications','通知'],['report','檢舉']].map(([id,name])=>'<button type="button" data-tab="'+id+'" class="'+(tab===id?'active':'')+'">'+name+'</button>').join('');
     nav.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{tab=b.dataset.tab;render()});
-    if(tab==='clans'){
+    if(tab==='party'){
+      main.innerHTML='<h2>玩家預組隊伍（最多 4 人）</h2><div id="xtankPartyInfo">讀取隊伍中…</div>'+
+        form('xtankCreateParty','','建立隊伍')+
+        form('xtankJoinParty','<label>邀請碼（隊伍 UUID）<input name="party_id" required></label>','加入隊伍')+
+        '<h3>跨伺服器 MMR 配對佇列</h3>'+
+        form('xtankQueueParty','<label>模式<select name="mode"><option value="FFA">個人混戰</option><option value="TDM">團隊對抗</option><option value="FLAG_HOLD">持旗戰</option></select></label>'+
+        '<label>區域<select name="region"><option value="asia-east">亞洲東部</option><option value="asia-south">亞洲南部</option><option value="us-west">美西</option><option value="eu-west">歐洲西部</option></select></label>','加入排位佇列')+
+        '<button id="xtankCancelQueue" type="button">取消排隊</button>'+
+        '<p>已提交至永久配對佇列；尚須上線跨節點配對分配器才能自動進入遊戲房間。</p>';
+      main.querySelector('#xtankCreateParty').onsubmit=e=>{e.preventDefault();run(()=>rpc('xtank_party_queue_api',{p_action:'create'}))};
+      main.querySelector('#xtankJoinParty').onsubmit=e=>{e.preventDefault();run(()=>rpc('xtank_party_queue_api',{p_action:'join',p_payload:{party_id:e.target.elements.party_id.value.trim()}}))};
+      main.querySelector('#xtankQueueParty').onsubmit=e=>{
+       e.preventDefault();const form=e.target;
+       run(()=>rpc('xtank_party_queue_api',{p_action:'queue',p_payload:{mode:form.elements.mode.value,region:form.elements.region.value}}));
+      };
+      main.querySelector('#xtankCancelQueue').onclick=()=>run(()=>rpc('xtank_party_queue_api',{p_action:'cancel'}));
+      rpc('xtank_party_queue_api',{p_action:'overview'}).then(d=>{
+       const target=qs('#xtankPartyInfo');if(!target||!target.isConnected||tab!=='party')return;
+       const me=window.xtankAccount?.getSignedInPlayerId?.();
+       const leader=(d.members||[]).find(m=>m.leader)?.player_id===me;
+       target.innerHTML=(d.party_id?
+        '<p>隊伍邀請碼：<code>'+safe(d.party_id)+'</code></p>'+
+        (d.members||[]).map(m=>'<article>'+safe(m.name)+(m.leader?'（隊長）':'')+
+           (leader&&!m.leader?'<button data-party-action="transfer" data-member="'+safe(m.player_id)+'">移交隊長</button>'+
+           '<button data-party-action="kick" data-member="'+safe(m.player_id)+'">移除</button>':'')+
+         '</article>').join('')+
+         '<button id="xtankLeaveParty">退出／解散隊伍</button>':'<p>目前沒有隊伍；可建立或輸入邀請碼加入。</p>')+
+         '<p>近期佇列：'+(d.queue||[]).map(x=>safe(x.mode)+' '+safe(x.region||'')+' '+safe(x.status)).join('、')+'</p>';
+       const leave=target.querySelector('#xtankLeaveParty');if(leave)leave.onclick=()=>run(()=>rpc('xtank_party_queue_api',{p_action:'leave'}));
+       target.querySelectorAll('[data-party-action]').forEach(b=>b.onclick=()=>{
+        const action=b.dataset.partyAction;
+        if(!confirm(action==='kick'?'移除這位隊員？':'確定移交隊長？'))return;
+        run(()=>rpc('xtank_party_queue_api',{p_action:action,p_payload:{target:b.dataset.member}}));
+       });
+      }).catch(error=>{const target=qs('#xtankPartyInfo');if(target)target.textContent=error.message});
+    }else if(tab==='clans'){
       const own=data.clans||[],list=data.public_clans||[];
       main.innerHTML='<h2>我的公會</h2>'+(own.map(c=>'<article><strong>'+safe(c.name)+'</strong> ['+safe(c.tag)+'] ('+safe(c.role)+') <button data-clan-chat="'+safe(c.clan_id)+'">公會聊天</button><button data-leave="'+safe(c.clan_id)+'">退出／解散</button></article>').join('')||'<p>尚未加入公會</p>')
       +'<h2>公開公會</h2>'+list.map(c=>'<article>'+safe(c.name)+' ['+safe(c.tag)+'] <button data-join="'+safe(c.id)+'">加入</button></article>').join('')
