@@ -574,6 +574,17 @@ el('returnButton').addEventListener('click',goHome);
 
 function onlineStatus(message){el('networkStatus').textContent=message;if(match&&online&&message.includes('斷線'))el('statusText').textContent=message;}
 function onlineMessage(msg){
+ if(msg.type==='ROUND_ABORTED'){
+  paused=true;resultShown=false;match=null;networkSlot=null;
+  officialRound=false;roundSettlementSaved=false;
+  keyboard.clear();fireHeld=false;itemQueue=0;abilityQueue=false;
+  el('hud').hidden=true;el('battleChat').hidden=true;
+  el('resultMenu').hidden=true;el('startMenu').hidden=false;
+  el('networkLobby').hidden=false;el('pauseBadge').hidden=true;
+  onlineStatus('對戰因伺服器異常中止。道具將安全退回，可在房間重新準備。');
+  return;
+ }
+
   if(msg.type==='ROOM_MODERATION'){
    if(msg.action==='suspend'){
     goHome();
