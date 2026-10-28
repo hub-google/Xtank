@@ -720,6 +720,13 @@ function onlineMessage(msg){
   if(match.ended)showResult();
  }
 }
+// A public WSS address can be configured at site build time. Never expose
+// Supabase service credentials or other secrets via VITE_ variables.
+const officialWss=String(import.meta.env.VITE_XTANK_PUBLIC_WSS_URL||'').trim();
+if(/^wss:\/\/[^\s/]+(?:\/[^\s]*)?$/.test(officialWss)){
+  el('serverAddress').value=officialWss;
+  el('networkStatus').textContent='官方多人伺服器已設定，可登入並連線。';
+}
 async function establishNetwork(action){
  const accessToken=window.xtankAccount?.getAccessToken?await window.xtankAccount.getAccessToken().catch(()=>null):null;
  spectating=false;online?.close();match=null;paused=true;networkSlot=null;
