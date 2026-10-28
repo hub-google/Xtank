@@ -31,6 +31,17 @@ if(menu){
   if(!res.ok)throw Error(data.message||data.error||'HTTP '+res.status);
   return data;
  }
+ async function chatAdmin(action,payload={}){
+  const token=await window.xtankAccount?.getAccessToken?.();
+  if(!token)throw Error('請先登入管理員');
+  const response=await fetch(URL.replace('xtank_admin_api','xtank_admin_chat_api'),{
+   method:'POST',headers:{apikey:KEY,Authorization:'Bearer '+token,'Content-Type':'application/json'},
+   body:JSON.stringify({p_action:action,p_payload:payload})
+  });
+  const result=await response.json().catch(()=>({}));
+  if(!response.ok)throw Error(result.message||result.error||'HTTP '+response.status);
+  return result;
+ }
  async function verify(){
   try{await api('overview');open.hidden=false}catch{open.hidden=true}
  }
@@ -42,12 +53,20 @@ if(menu){
   catch(e){status('操作失敗：'+e.message)}
  }
  async function refresh(){
-  const [d,ops]=await Promise.all([api('overview'),liveops('overview')]);
+  const [d,ops,chat]=await Promise.all([api('overview'),liveops('overview'),chatAdmin('list')]);
   $('#xtankAdminMain').innerHTML=
     '<p>玩家總數：'+d.total_players+'　正式場次：'+d.total_official_matches+'　未處理檢舉：'+d.unresolved_reports+'</p>'+
     '<h2>玩家檢舉</h2>'+(d.reports||[]).map(r=>'<article><strong>'+esc(r.reason)+'</strong><p>'+esc(r.details)+'／被檢舉：'+esc(r.reported_id)+'</p><small>'+esc(r.status)+'　'+esc(r.created_at)+'</small>　'+(r.status==='open'?'<button data-report="'+esc(r.report_id)+'">結案</button>':'')+'</article>').join('')+
     '<h2>停權名單</h2>'+(d.bans||[]).map(b=>'<article>玩家：'+esc(b.player_id)+'　'+esc(b.reason)+'　'+(b.revoked_at?'已解除':'仍在停權')+'</article>').join('')+
     '<h2>玩家處置</h2><form id="xtankModerationForm"><label>玩家 UUID<input name="player_id" required></label><label>操作<select name="action"><option value="suspend">停權</option><option value="unsuspend">解除停權</option></select></label><label>原因<input name="reason" minlength="5" maxlength="300" required></label><button type="submit">確認處置</button></form>'+
+    '<h2>跨房間聊天室管理</h2><p>這裡的禁言會持久保存並適用於所有官方遊戲房間（最多 7 天），不是單一房間的房主禁言。</p>'+
+    '<form id="xtankGlobalMute"><label>玩家 UUID<input name="player_id" required></label>'+
+    '<label>禁言分鐘數<input name="minutes" type="number" min="1" max="10080" value="60" required></label>'+
+    '<label>原因（至少 5 字）<input name="reason" minlength="5" maxlength="300" required></label>'+
+    '<button type="submit">啟用全域禁言</button></form>'+
+    (chat.restrictions||[]).map(c=>'<article><strong>'+esc(c.display_name)+'</strong>（'+esc(c.player_id)+
+     '）<p>禁言至：'+esc(c.muted_until)+'，原因：'+esc(c.reason)+'</p>'+
+     '<button data-unmute="'+esc(c.player_id)+'" type="button">解除全域禁言</button></article>').join('')+
     '<h2>限時活動營運</h2><p>新活動先建立為停用，檢查後再啟用；每次操作會產生資料庫稽核紀錄。</p>'+
     '<form id="xtankCreateEvent"><label>活動代碼<input name="code" pattern="[a-z0-9-]{3,40}" required></label>'+
     '<label>活動名稱<input name="name" maxlength="80" minlength="3" required></label>'+
@@ -66,6 +85,15 @@ if(menu){
      (o.enabled?'下架':'上架')+'</button></article>').join('');
   $('#xtankModerationForm').onsubmit=e=>{e.preventDefault();const f=e.target;run(()=>api(f.elements.action.value,{player_id:f.elements.player_id.value,reason:f.elements.reason.value}))};
   $('#xtankAdminMain').querySelectorAll('[data-report]').forEach(b=>b.onclick=()=>run(()=>api('resolve_report',{report_id:b.dataset.report})));
+  $('#xtankGlobalMute').onsubmit=e=>{
+   e.preventDefault();const form=e.target;
+   run(()=>chatAdmin('mute',{player_id:form.elements.player_id.value,
+     minutes:Number(form.elements.minutes.value),reason:form.elements.reason.value}));
+  };
+  $('#xtankAdminMain').querySelectorAll('[data-unmute]').forEach(button=>button.onclick=()=>{
+   if(!confirm('解除該玩家所有官方房間的禁言？'))return;
+   run(()=>chatAdmin('unmute',{player_id:button.dataset.unmute}));
+  });
   $('#xtankCreateEvent').onsubmit=e=>{e.preventDefault();const f=e.target;
    run(()=>liveops('create_event',{code:f.elements.code.value,name:f.elements.name.value,kind:f.elements.kind.value,
       target:Number(f.elements.target.value),reward:Number(f.elements.reward.value),
