@@ -155,7 +155,7 @@ function panel(){
  </article>`}).join('')}</div>`;
  if(tab==='inventory')return `<h2>背包及配裝</h2><p>已持有物品：</p>
  <div class="xtank-inventory">${dashboard.inventory.length?dashboard.inventory.map(x=>`<span>${escaped(x.weapon_id||x.item_id||x.cosmetic_id)} × ${x.quantity}</span>`).join(''):'目前沒有購買的物品'}</div>
- <h3>已儲存配裝</h3>${dashboard.loadouts.length?dashboard.loadouts.map(x=>`<p>${escaped(x.tank_id)} / ${escaped(x.name)} (${x.is_selected?'使用中':'未選'}) <button type="button" data-edit-loadout="${escaped(x.loadout_id)}">載入編輯</button></p>`).join(''):'尚未儲存配裝'}
+ <h3>已儲存配裝</h3>${dashboard.loadouts.length?dashboard.loadouts.map(x=>`<p>${escaped(x.tank_id)} / ${escaped(x.name)} (${x.is_selected?'使用中':'未選'}) <button type="button" data-edit-loadout="${escaped(x.loadout_id)}">載入編輯</button> <button type="button" data-manage-loadout="select:${escaped(x.loadout_id)}" ${x.is_selected?'disabled':''}>設為使用中</button> <button type="button" data-manage-loadout="delete:${escaped(x.loadout_id)}">刪除配裝</button></p>`).join(''):'尚未儲存配裝'}
  <p>戰鬥內仍可按數字鍵 1–7 切換武器；正式對戰需由伺服器讀取已保存的配裝。</p>
  <h3>建立或編輯配裝方案</h3><form id="xtankLoadoutForm">
  <label>坦克<select name="tank_id">${dashboard.tanks.map(t=>`<option value="${escaped(t.tank_id)}">${escaped(t.tank_id)}-TANK</option>`).join('')}</select></label>
@@ -239,6 +239,15 @@ function draw(){
    });
   }).catch(e=>msg(e.message));
  $('#xtankFriendForm')?.addEventListener('submit',e=>{e.preventDefault();const f=e.target;run(async()=>{await rpcNamed('xtank_social_api',{p_action:'invite',p_target:f.elements.player_id.value.trim()});draw();msg('已送出邀請')})});
+ content.querySelectorAll('[data-manage-loadout]').forEach(button=>button.addEventListener('click',()=>{
+  const [action,id]=button.dataset.manageLoadout.split(':');
+  if(action==='delete'&&!confirm('確定要刪除這份配裝？此操作無法復原。'))return;
+  run(async()=>{
+   await rpcNamed('xtank_manage_loadout',{p_action:action,p_loadout_id:id});
+   await reload();
+   msg(action==='select'?'已選用此配裝':'配裝已刪除');
+  });
+ }));
  const loadoutForm=$('#xtankLoadoutForm');
  if(loadoutForm){
   loadoutForm.elements.tank_id.addEventListener('change',()=>{delete loadoutForm.dataset.editLoadout});
