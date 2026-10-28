@@ -81,6 +81,10 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
  });
  const wss=new WebSocketServer({server:httpServer,maxPayload:4096,perMessageDeflate:false});
  const members=r=>[...r.people.values()];
+ // Repeat the admission guard immediately before inserting a room seat.
+ // An async auth/password check can make an earlier scan stale.
+ const accountHasSeat=accountId=>!!accountId&&[...rooms.values()]
+  .some(room=>members(room).some(player=>player.accountUserId===accountId));
  const roomSummary=r=>({roomId:r.id,name:r.name||'未命名房間',mode:r.mode,mapId:r.mapId,ruleClass:r.ruleClass||'growth',region:serverRegion||null,phase:r.phase,
    players:members(r).filter(p=>p.ws).length,capacity:8,passwordRequired:!!r.password});
  function passwordDigest(password,salt){return new Promise((resolve,reject)=>crypto.scrypt(password,salt,32,(error,key)=>error?reject(error):resolve(key)));}
@@ -296,7 +300,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
       }catch(err){ws._xtankAuthPending=false;return send(ws,{type:'ERROR',code:'AUTH_FAILED',message:err.message});}
       ws._xtankAuthPending=false;
       if(ws.readyState!==WebSocket.OPEN)return;
-       if([...rooms.values()].some(room=>members(room).some(member=>member.accountUserId===m.accountUserId))){
+       if(accountHasSeat(m.accountUserId)){
          return send(ws,{type:'ERROR',code:'ACCOUNT_ALREADY_IN_ROOM'});
        }
     }
@@ -341,6 +345,8 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
      }
      if(rooms.size>=32)return send(ws,{type:'ERROR',code:'SERVER_FULL'});
      while(rooms.has(r.id))r.id=crypto.randomBytes(3).toString('hex').toUpperCase();
+     if(official&&accountHasSeat(m.accountUserId))
+       return send(ws,{type:'ERROR',code:'ACCOUNT_ALREADY_IN_ROOM'});
      rooms.set(r.id,r);
     p=makePlayer(m,ws);p.team=selectTeam(r,m.team);r.people.set(p.id,p);r.hostId=p.id;
     send(ws,{type:'JOINED',roomId:r.id,playerId:p.id,token:p.token,host:true});lobby(r);
@@ -360,6 +366,8 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
     // Verify mutable room state again after asynchronous password checking.
     if(found.phase!=='lobby')return send(ws,{type:'ERROR',code:'ROUND_RUNNING'});
     if(found.people.size>=8)return send(ws,{type:'ERROR',code:'ROOM_FULL'});
+    if(official&&accountHasSeat(m.accountUserId))
+      return send(ws,{type:'ERROR',code:'ACCOUNT_ALREADY_IN_ROOM'});
     r=found;p=makePlayer(m,ws);p.team=selectTeam(r,m.team);r.people.set(p.id,p);
     if(!r.hostId)r.hostId=p.id;
     send(ws,{type:'JOINED',roomId:r.id,playerId:p.id,token:p.token,host:p.id===r.hostId});lobby(r);
