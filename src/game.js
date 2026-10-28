@@ -136,11 +136,7 @@ const sparks=[];
 let models=new Map(), bulletModels=new Map(), zoneModels=new Map(), flagGroup=null, match=null;
 let paused=true,resultShown=false,last=performance.now(),accum=0;
 let online=null,networkSlot=null,networkSeq=0,networkAccumulator=0,networkRoomId=null;
-let spectating=false,replaying=false,replayDispatch=false,replayFrames=[],replayTimer=null;
-function resetReplay(){
- if(replayTimer!==null)clearInterval(replayTimer);
- replayTimer=null;replaying=false;replayDispatch=false;replayFrames=[];
-}
+let spectating=false;
 let networkReady=false;
 let officialWeaponAllowlist=null;
 let officialRound=false,roundSettlementSaved=false;
@@ -284,7 +280,7 @@ function clearModels(){
 }
 function start(){
   paused=true;qaEvents.length=0;
-  resetReplay();spectating=false;
+  spectating=false;
   online?.close();online=null;networkSlot=null;
   try {
     clearModels();
@@ -301,7 +297,7 @@ function start(){
   } catch(e){console.error(e);el('matchInfo').textContent='啟動失敗：'+e.message;}
 }
 function goHome(){
-  resetReplay();spectating=false;
+  spectating=false;
   online?.close();online=null;networkSlot=null;networkRoomId=null;officialWeaponAllowlist=null;
   officialRound=false;roundSettlementSaved=false;
   el('networkLobby').hidden=true;
@@ -399,7 +395,7 @@ function tick(dt){
   const dx=paused?0:Number(keyboard.has(bindings.right))-Number(keyboard.has(bindings.left));
   const dz=paused?0:Number(keyboard.has(bindings.backward))-Number(keyboard.has(bindings.forward));
   if(online){
-    if(spectating||replaying)return;
+    if(spectating)return;
     networkAccumulator+=dt;
     if(networkAccumulator>=.05){
       networkAccumulator=0;
@@ -576,30 +572,6 @@ el('returnButton').addEventListener('click',goHome);
 
 function onlineStatus(message){el('networkStatus').textContent=message;if(match&&online&&message.includes('斷線'))el('statusText').textContent=message;}
 function onlineMessage(msg){
-  if(msg.type==='REPLAY_BEGIN'){
-   resetReplay();replayFrames=[];onlineStatus('正在下載本場重播：'+msg.frameCount+' 影格');
-   return;
-  }
-  if(msg.type==='REPLAY_CHUNK'){
-   if(Array.isArray(msg.frames))replayFrames.push(...msg.frames);
-   return;
-  }
-  if(msg.type==='REPLAY_END'){
-   if(!replayFrames.length){onlineStatus('沒有可播放的重播資料');return;}
-   const frames=[...replayFrames];resetReplay();replaying=true;
-   el('resultMenu').hidden=true;resultShown=false;el('hud').hidden=false;
-   onlineStatus('重播播放中（取樣每 2 秒、約 8 倍速）');
-   let index=0;
-   replayTimer=setInterval(()=>{
-    if(!online||!match||index>=frames.length){
-     resetReplay();if(match)showResult();return;
-    }
-    const frame={...frames[index++],ended:false,events:[]};
-    replayDispatch=true;onlineMessage(frame);replayDispatch=false;
-    if(index>=frames.length){resetReplay();showResult();}
-   },250);
-   return;
-  }
   if(msg.type==='ROOM_MODERATION'){
    onlineStatus(msg.action==='kick'?'你已被房主移出房間':'已被房主禁言至 '+new Date(msg.until).toLocaleTimeString('zh-TW'));
    if(msg.action==='kick')goHome();
@@ -710,7 +682,6 @@ function onlineMessage(msg){
   return;
  }
  if(msg.type==='SNAPSHOT'&&online&&networkSlot&&match){
-  if(replaying&&!replayDispatch)return;
   qaNetworkFrames.push(msg);if(qaNetworkFrames.length>10)qaNetworkFrames.shift();
   if(msg.mapId&&msg.mapId!==match.mapId&&MAPS[msg.mapId]){
     match.mapId=msg.mapId;match.obstacles=MAPS[msg.mapId].obstacles;
@@ -732,7 +703,7 @@ function onlineMessage(msg){
 }
 async function establishNetwork(action){
  const accessToken=window.xtankAccount?.getAccessToken?await window.xtankAccount.getAccessToken().catch(()=>null):null;
- resetReplay();spectating=false;online?.close();match=null;paused=true;networkSlot=null;
+ spectating=false;online?.close();match=null;paused=true;networkSlot=null;
  online=new OnlineConnection(onlineMessage,onlineStatus,()=>window.xtankAccount?.getAccessToken?.());
  try{
   online.open(el('serverAddress').value.trim(),{
@@ -742,25 +713,10 @@ async function establishNetwork(action){
   });
  }catch(e){onlineStatus('設定錯誤：'+e.message);online=null;}
 }
-window.xtankJoinMatchedRoom=(endpoint,roomCode,mode)=>{
- if(typeof endpoint!=='string'||!/^wss:\/\/[^\s]+$/.test(endpoint)
-    ||typeof roomCode!=='string'||!/^[A-Z0-9]{6}$/.test(roomCode))
-  throw Error('無效的官方配對地址或房碼');
- if(!['FFA','TDM','FLAG_HOLD'].includes(mode))throw Error('無效的配對模式');
- el('serverAddress').value=endpoint;
- el('roomCode').value=roomCode;el('modeSelect').value=mode;
- el('roomPassword').value='';
- const social=document.getElementById('xtankCommunityOverlay');if(social)social.hidden=true;
- void establishNetwork('JOIN');
-};
 el('makeRoomButton').addEventListener('click',()=>establishNetwork('CREATE'));
 el('spectateRoomButton').addEventListener('click',()=>{
  if(!el('roomCode').value.trim())return onlineStatus('請先輸入公開房間代碼');
  establishNetwork('SPECTATE');
-});
-el('watchReplayButton').addEventListener('click',()=>{
- if(!online)return onlineStatus('需留在該局的房間才能取得重播');
- online.send({type:'REPLAY_REQUEST'});
 });
 el('joinRoomButton').addEventListener('click',()=>establishNetwork('JOIN'));
  el('listRoomsButton').addEventListener('click',()=>establishNetwork('LIST_ROOMS'));
@@ -780,7 +736,7 @@ el('roomSlowMode').addEventListener('change',()=>online?.send({type:'MODERATE',a
  });
 el('startNetworkButton').addEventListener('click',()=>online?.send({type:'START'}));
 el('leaveNetworkButton').addEventListener('click',()=>{
- resetReplay();spectating=false;online?.close();online=null;networkSlot=null;el('networkLobby').hidden=true;
+ spectating=false;online?.close();online=null;networkSlot=null;el('networkLobby').hidden=true;
  onlineStatus('已離開多人房間');
 });
 el('hostServerButton').addEventListener('click',async()=>{
