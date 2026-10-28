@@ -11,15 +11,15 @@
 | 遊戲核心 | 8 車、3 地圖、FFA／TDM／持旗、7 種武器、6 種消耗道具、AI、五視角、音效、自訂鍵位、畫質與高對比，及可旋轉的 3D 機庫預覽 |
 | 連線對戰 | WebSocket 權威伺服器、LAN／官方模式、公開／密碼房、房間列表、快速加入、READY、隊伍選擇、房內聊天、30 秒重連 |
 | 永久帳號 | Supabase Auth、機庫、武器／道具購買、已持有物品驗證、配裝、升級、正式結算 outbox、金幣與 XP；非官方 LAN 不發獎 |
-| 社群與營運 | 好友與封鎖、私訊、公會及會員管理、永久信件／通知、玩家檢舉、管理員停權、任務、成就、限時活動、賽季排行／獎勵 |
+| 社群與營運 | 好友與黑名單（封鎖／解除封鎖）、私訊、公會及會員管理、永久信件／通知、玩家檢舉、管理員停權、任務、成就、限時活動、賽季排行／獎勵 |
 | 部署資產 | Dockerfile、Render/Compose 部署配置、GitHub Actions Windows EXE 建置與 GUI QA、8 人 WebSocket 壓測腳本 |
 
 ### 本輪新增的實際程式
 
 1. **跨裝置快捷鍵同步**：新增 `public.xtank_save_keybindings(jsonb)`，先核對登入身分、21 個動作名稱／按鍵合法性／重複鍵，再更新當前玩家的 `xtank.player_settings.keybindings`。 migration：[`20261028_xtank_player_keybindings_cloud_sync.sql`](supabase/migrations/20261028_xtank_player_keybindings_cloud_sync.sql)，已部署至既有 Game Supabase。
 2. **帳號設定同步**：`src/account.js` 登入及重整 Dashboard 時會將雲端鍵位／畫質送給遊戲；`src/game.js` 套用設定並將新的鍵位、畫質保存到玩家帳號。玩家設定表單新增雲端畫質選項；遊客仍可在本機設定。
-3. **既有配裝重新編輯**：機庫中的已存配裝可「載入編輯」武器和 F1–F6 道具，再透過既有具擁有權檢查的 `xtank_save_loadout` 更新原方案，不再只能每次新增一份。
-4. **好友封鎖入口**：玩家中心可直接確認封鎖指定好友／邀請人，透過已存在的 `xtank_social_api('block')` 更新，伺服器會解除好友關係。
+3. **配裝全套管理**：已存配裝可「載入編輯」武器和 F1–F6 道具；新 `xtank_manage_loadout` 支援切換使用中配置和刪除，刪除選用中配置時選擇後備方案，所有操作驗證身分與擁有權。資料庫 migration：[`20261028_xtank_manage_loadout.sql`](supabase/migrations/20261028_xtank_manage_loadout.sql)。
+4. **好友黑名單管理**：玩家中心可封鎖好友／邀請人，並在黑名單檢視、解除封鎖；`xtank_social_api('block')` 和新增的 `xtank_blocks_api('list'/'unblock')` 皆限定登入玩家自身的紀錄。 migration：[`20261028_xtank_friend_unblock_api.sql`](supabase/migrations/20261028_xtank_friend_unblock_api.sql)。
 5. **8 車互動式 3D 機庫**：新增 `src/garage-preview.js`，單一 WebGL 預覽畫布、旋轉拖曳、依車種數值呈現不同尺寸及色彩，離開機庫即釋放 GPU 資源；與主畫面選用坦克同步。此為自製造型而非原版素材。
 6. **登入／登出完整性**：首次登入雲端鍵位為空時，將遊客本機鍵位同步至帳號；登出時呼叫 Supabase Auth 本機 session 撤銷 API，再刪本機憑證。網路撤銷失敗會明確提示。
 
