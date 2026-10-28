@@ -1,5 +1,26 @@
 # X-TANK ONLINE（X 坦克）
 
+## 2026-10-28｜接續功能開發（未執行打包或測試）
+
+依使用者指示，繼續修改 X-TANK 原始碼與既有 Game Supabase；沒有手動啟動 GitHub Actions，也沒有執行 Windows EXE 打包／GUI 測試。
+
+| 功能 | 本次新增的實際實作 |
+| --- | --- |
+| 管理員停權立即生效 | 新增服務身分專用 `xtank_official_online_moderation`，官方 WSS 每 15 秒查詢連線中玩家與觀戰者；帳號停權會中斷現有連線。也同步全域禁言狀態。 |
+| 全域禁言涵蓋其他聊天入口 | 更新 `xtank_community_api`，將禁言套用在好友私訊、寄送玩家郵件與公會發言；讀取訊息、申訴和檢舉不受影響。 |
+| 連續對戰道具庫存正確性 | 新增限後端的 `xtank_official_item_snapshot`，每次正式開局前重新查已選坦克的裝備道具與當前庫存，然後再原子預留，避免上一場消耗後沿用過期數量。 |
+| 當機／異常對局處理 | 伺服器停止時取消未完成場次並嘗試原子退還預留道具；若戰鬥引擎報錯，廣播 `ROUND_ABORTED` 並返回可重新準備的房間，釋放庫存或由逾期回收追蹤。 |
+| 停機排程安全 | 關閉期間停止新的預留批次，等待目前進行中的預留操作，並行處理多個對局的庫存退還；正式結算成功或有待補送賽果的場次不會當成中斷場次直接退款。 |
+
+新增 migration：
+- `supabase/migrations/20261028_xtank_official_live_moderation.sql`
+- `supabase/migrations/20261028_xtank_official_refreshed_item_snapshot.sql`
+- `supabase/migrations/20261028_xtank_community_global_chat_mute.sql`
+
+**仍未完成：** 真正連到外部持續運作的主機／TLS 公網 WSS。現有 Docker + Caddy 程式不會自行租用或建立主機。且本次按要求未驗收，不能宣稱功能已實機通過。
+
+---
+
 ## 2026-10-28 只做功能開發（不自動打包／測試）
 
 依使用者指示，`.github/workflows/windows-exe.yml` 已移除 push 自動觸發，保留 `workflow_dispatch` **手動啟動**。本輪未啟動任何新 EXE 打包或測試。
