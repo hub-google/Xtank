@@ -712,7 +712,7 @@ function onlineMessage(msg){
     if(!rooms.length){const empty=document.createElement('p');empty.textContent='沒有開放中的公開房間';list.append(empty);}
     for(const room of rooms){
       const button=document.createElement('button');button.type='button';button.className='secondary';
-      button.textContent=(room.name||'公開房間')+' · '+(room.ruleClass==='standard'?'標準競技':'經典成長')+' · '+room.roomId+' · '+room.mode+' · '+(MAPS[room.mapId]?.name||room.mapId)+' · '+room.players+'/'+room.capacity;
+      button.textContent=(room.name||'公開房間')+' · '+(room.ruleClass==='standard'?'標準競技':'經典成長')+' · '+(room.region||'區域未設定')+' · '+room.roomId+' · '+room.mode+' · '+(MAPS[room.mapId]?.name||room.mapId)+' · '+room.players+'/'+room.capacity;
       button.addEventListener('click',()=>{
         el('roomCode').value=room.roomId;
         el('roomPassword').value='';
@@ -741,7 +741,7 @@ function onlineMessage(msg){
  }
  if(msg.type==='LOBBY'){
   el('networkLobby').hidden=false;
-  el('roomDetails').textContent=(msg.name||'房間')+' ('+msg.roomId+') · '+(msg.ruleClass==='standard'?'標準競技房':'經典成長房')+' · '+msg.mode+' · '+(MAPS[msg.mapId]?.name||'地圖')+' · '+msg.phase;
+  el('roomDetails').textContent=(msg.name||'房間')+' ('+msg.roomId+') · '+(msg.ruleClass==='standard'?'標準競技房':'經典成長房')+' · '+(msg.region||'區域未設定')+' · '+msg.mode+' · '+(MAPS[msg.mapId]?.name||'地圖')+' · '+msg.phase;
   const settings=el('xtankRoomSettings');
   settings.hidden=!msg.people.some(person=>person.id===online?.playerId&&person.host)||msg.phase!=='lobby';
   if(!settings.hidden){
