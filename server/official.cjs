@@ -28,6 +28,15 @@ function officialService({onSettlement}={}){
   return {
     close:()=>outbox.close(),
     recover:()=>outbox.retry(),
+    async recoverConsumables(){
+      // Retry any durable results first. If settlement outbox files remain,
+      // do not release stock, because a completed match may still be deliverable.
+      await outbox.retry();
+      if(outbox.hasPending())return {ok:true,skipped:'PENDING_SETTLEMENT_OUTBOX'};
+      return request('/rest/v1/rpc/xtank_recover_abandoned_items',{
+        body:{p_hours:72,p_limit:50}
+      });
+    },
     async reserve(roundId,playerId,items){
       // A server-only, durable escrow prevents inventory races across hosts.
       // Reserve before START, including an empty session for players without items.
