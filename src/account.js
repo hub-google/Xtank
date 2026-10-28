@@ -180,7 +180,7 @@ function panel(){
  <label>主音量 (0–1)<input name="master_volume" type="number" min="0" max="1" step=".1" value="${dashboard.settings.master_volume}"></label>
  <label>滑鼠靈敏度<input name="mouse_sensitivity" type="number" min=".1" max="10" step=".1" value="${dashboard.settings.mouse_sensitivity}"></label>
  <label>畫面品質<select name="graphics_quality">
- ${[['low','省電'],['balanced','平衡'],['high','高畫質']].map(([value,title])=>`<option value="${value}" ${dashboard.settings.graphics_quality===value?'selected':''}>${title}</option>`).join('')}
+ ${[['auto','沿用本機設定'],['low','省電'],['balanced','平衡'],['high','高畫質']].map(([value,title])=>`<option value="${value}" ${dashboard.settings.graphics_quality===value?'selected':''}>${title}</option>`).join('')}
  </select></label>
  <p>登入時自動載入雲端畫質與快捷鍵設定。修改鍵位後會保存到帳號；高對比仍為本機設定。</p>
  <button type="submit">儲存設定</button></form>
@@ -271,7 +271,19 @@ function draw(){
  })});
  content.querySelectorAll('[data-action]').forEach(b=>b.addEventListener('click',()=>{const parts=b.dataset.action.split(':');
  if(parts[0]==='tab'){tab=parts[1];draw();return}
- if(parts[0]==='logout'){saveSession(null);dashboard=null;catalog=null;tab='home';draw();msg('已登出');return}
+ if(parts[0]==='logout'){
+  run(async()=>{
+   let revoked=true;
+   const token=await getToken().catch(()=>null);
+   try{
+    if(token)await rest('/auth/v1/logout?scope=local',{method:'POST',token});
+    else revoked=false;
+   }catch(error){revoked=false;console.warn('Auth session revoke failed:',error.message)}
+   saveSession(null);dashboard=null;catalog=null;tab='home';draw();
+   msg(revoked?'已登出並撤銷此裝置的更新權杖':'已退出此裝置，但伺服器憑證撤銷尚未確認');
+  });
+  return;
+ }
  if(parts[0]==='tank'){const sel=$('#tankSelect');if(sel)sel.value=parts[1];hide();return}
  if(parts[0]==='upgrade')run(async()=>{await rpc('upgrade',{tank_id:parts[1],attribute:parts[2]});await reload();msg('坦克升級成功');return});
  if(parts[0]==='buy')run(async()=>{
