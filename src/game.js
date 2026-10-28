@@ -8,6 +8,32 @@ import {OnlineConnection} from './online.js';
 import {Game, TANKS, WEAPONS, OBSTACLES, MAPS, WIDTH, DEPTH} from './simulation.js';
 
 const el = id => document.getElementById(id);
+function drawMapPreview(){
+ const canvas=el('mapPreview'),id=el('mapSelect')?.value||'desk';
+ if(!canvas||!MAPS[id])return;
+ el('mapPreviewTitle').textContent=MAPS[id].name+'（俯視障礙示意）';
+ const ctx=canvas.getContext('2d');if(!ctx)return;
+ const w=canvas.width,h=canvas.height,sx=w/WIDTH,sz=h/DEPTH;
+ ctx.clearRect(0,0,w,h);ctx.fillStyle=id==='chess'?'#e1d5bc':id==='circuit'?'#183b3c':'#735844';
+ ctx.fillRect(0,0,w,h);
+ ctx.strokeStyle='#f2e5d955';ctx.lineWidth=.5;
+ for(let x=0;x<=WIDTH;x+=8){ctx.beginPath();ctx.moveTo(x*sx,0);ctx.lineTo(x*sx,h);ctx.stroke();}
+ for(let z=0;z<=DEPTH;z+=8){ctx.beginPath();ctx.moveTo(0,z*sz);ctx.lineTo(w,z*sz);ctx.stroke();}
+ ctx.fillStyle=id==='circuit'?'#74d4bb':'#293d50';
+ for(const obstacle of MAPS[id].obstacles){
+  ctx.beginPath();
+  if(obstacle.type==='circle')ctx.ellipse(obstacle.x*sx,obstacle.z*sz,obstacle.r*sx,obstacle.r*sz,0,0,Math.PI*2);
+  else ctx.rect(obstacle.x1*sx,obstacle.z1*sz,(obstacle.x2-obstacle.x1)*sx,(obstacle.z2-obstacle.z1)*sz);
+  ctx.fill();
+ }
+ ctx.fillStyle='#ff998b';
+ for(const z of [6,13,19,26]){ctx.beginPath();ctx.arc(4*sx,z*sz,3,0,Math.PI*2);ctx.fill();}
+ ctx.fillStyle='#7cbdfc';
+ for(const z of [6,13,19,26]){ctx.beginPath();ctx.arc(44*sx,z*sz,3,0,Math.PI*2);ctx.fill();}
+ ctx.fillStyle='#ffe07a';ctx.beginPath();ctx.arc(24*sx,16*sz,4,0,Math.PI*2);ctx.fill();
+}
+el('mapSelect')?.addEventListener('change',drawMapPreview);
+drawMapPreview();
 const viewport = el('viewport');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x12253e);
@@ -584,6 +610,8 @@ function onlineMessage(msg){
  if(msg.type==='NETWORK_LATENCY'){
   const meter=el('networkLatency');
   if(meter)meter.textContent='連線延遲：約 '+msg.ms+' 毫秒（往返）';
+  const hudMeter=el('hudLatency');
+  if(hudMeter)hudMeter.textContent='連線往返：約 '+msg.ms+' 毫秒';
   return;
  }
  if(msg.type==='REMATCH_WAITING'){
