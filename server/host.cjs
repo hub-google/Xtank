@@ -414,7 +414,11 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
    if(r.phase==='countdown'){
      const live=members(r).filter(member=>member.ws);
      if(live.length<2||live.some(member=>!member.ready))cancelCountdown(r);
-     else if(Date.now()>=r.countdownDeadline)void prepareOfficialLaunch(r);
+     else if(Date.now()>=r.countdownDeadline){
+       const task=prepareOfficialLaunch(r);
+       r.allocationTask=task;
+       void task.finally(()=>{if(r.allocationTask===task)r.allocationTask=null;});
+     }
      else{
        const seconds=Math.max(1,Math.ceil((r.countdownDeadline-Date.now())/1000));
        if(seconds!==r.lastCountdownSecond){
@@ -513,12 +517,36 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
  },60*60*1000):null;
  recoveryTimer?.unref?.();
  if(official)void official.recoverConsumables().catch(e=>console.error('Escrow startup recovery:',e.message));
- return {port:httpServer.address().port,rooms,close:async()=>{
-  if(recoveryTimer)clearInterval(recoveryTimer);
-  if(moderationTimer)clearInterval(moderationTimer);
-  official?.close?.();
-  clearInterval(ticking);clearInterval(heartbeat);for(const ws of wss.clients)ws.terminate();
-  await new Promise(ok=>wss.close(()=>httpServer.close(ok)));
- }};
+ let shutdownPromise=null;
+ async function shutdown(){
+  if(shutdownPromise)return shutdownPromise;
+  shutdownPromise=(async()=>{
+   clearInterval(ticking);
+   clearInterval(heartbeat);
+   if(recoveryTimer)clearInterval(recoveryTimer);
+   if(moderationTimer)clearInterval(moderationTimer);
+   const abandoned=[];
+   for(const room of rooms.values()){
+    if(!official||!room.roundId)continue;
+    if(room.phase==='allocating'||room.phase==='live'){
+      abandoned.push(room);
+      room.phase='closing';
+    }else if(room.phase==='countdown')room.phase='closing';
+   }
+   // Finish pending atomic reservations before refunding.
+   await Promise.allSettled(abandoned.map(room=>room.allocationTask).filter(Boolean));
+   if(official){
+    for(const room of abandoned){
+     try{await official.release(room.roundId);}
+     catch(error){console.error('Item refund deferred to abandoned-round recovery:',room.roundId,error.message);}
+    }
+   }
+   official?.close?.();
+   for(const socket of wss.clients)socket.terminate();
+   await new Promise(resolve=>wss.close(()=>httpServer.close(resolve)));
+  })();
+  return shutdownPromise;
+ }
+ return {port:httpServer.address().port,rooms,close:shutdown};
 }
 module.exports={createHost,sanitizeInput,send,MAX_BUFFERED_BYTES};
