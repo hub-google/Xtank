@@ -86,6 +86,7 @@
           <div class="network-grid">
             <label>你的名稱 <input id="playerName" maxlength="20" value="Player" autocomplete="off"></label>
             <label>伺服器 WebSocket 網址 <input id="serverAddress" value="ws://127.0.0.1:8787" spellcheck="false"></label>
+            <label>建立房間名稱 <input id="roomName" maxlength="32" placeholder="例如：週末坦克大戰" autocomplete="off"></label>
             <label>房間代碼（加入時填寫） <input id="roomCode" maxlength="6" placeholder="例如 A1B2C3" spellcheck="false"></label>
             <label>房間密碼（選填） <input id="roomPassword" type="password" maxlength="40" autocomplete="off" placeholder="公開房間留空"></label>
           </div>
@@ -100,7 +101,14 @@
           <p class="net-status" id="networkStatus" role="status" aria-live="polite">先開啟 LAN 伺服器，或輸入可連線的其他伺服器網址。</p>
           <div id="publicRoomList" role="region" aria-label="公開房間列表" hidden></div>
           <div id="networkLobby" hidden>
-            <p id="roomDetails"></p><p id="roomPeople"></p>
+            <p id="roomDetails"></p><p id="roomPeople"></p><p id="networkLatency" aria-live="off">連線延遲：讀取中</p>
+            <form id="xtankRoomSettings" hidden>
+              <strong>房主：修改房間設定</strong>
+              <label>房間名稱 <input name="name" maxlength="32" minlength="2" required></label>
+              <label>模式 <select name="mode"><option value="FFA">個人死鬥</option><option value="TDM">團隊戰</option><option value="FLAG_HOLD">持旗戰</option></select></label>
+              <label>地圖 <select name="mapId"><option value="desk">書桌</option><option value="chess">棋盤</option><option value="circuit">電路板</option></select></label>
+              <button type="submit" class="secondary">儲存房間設定（取消原準備）</button>
+            </form>
             <div id="roomModeration" hidden>
               <strong>房主聊天室管理</strong>
               <label>選擇玩家 <select id="roomModerationTarget"></select></label>
