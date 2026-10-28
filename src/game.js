@@ -312,11 +312,26 @@ function flash(color, x, z, size=.22){
   const mesh=new THREE.Mesh(new THREE.SphereGeometry(size,8,7),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.9}));
   mesh.position.set(x,.65,z);scene.add(mesh);sparks.push({mesh,life:.25,total:.25});
 }
+function pulseRing(color,x,z,radius=.75){
+  const mesh=new THREE.Mesh(
+   new THREE.RingGeometry(radius*.78,radius,24),
+   new THREE.MeshBasicMaterial({color,transparent:true,opacity:.7,side:THREE.DoubleSide,depthWrite:false}));
+  mesh.rotation.x=-Math.PI/2;mesh.position.set(x,.09,z);scene.add(mesh);
+  sparks.push({mesh,life:.42,total:.42});
+}
 function handleEvents(events){
   for(const e of events){
     battleAudio.event(e,e.id==='player'||e.owner==='player');
     if(e.type==='fire')flash(e.weapon==='chemical'?0x56ffc7:0xffd16c,e.x,e.z,.15);
-    if(e.type==='explosion')for(let i=0;i<5;i++){const a=i*Math.PI*2/5;flash(0xff9d3f,e.x+Math.cos(a)*.35,e.z+Math.sin(a)*.35,.20);}
+    if(e.type==='explosion'){
+      pulseRing(0xff923d,e.x,e.z,1.25);
+      for(let i=0;i<5;i++){const a=i*Math.PI*2/5;flash(0xff9d3f,e.x+Math.cos(a)*.35,e.z+Math.sin(a)*.35,.20);}
+    }
+    if(e.type==='hit')pulseRing(0x66d7ff,e.x,e.z,.62);
+    if(e.type==='repair')pulseRing(0x60e2a9,e.x,e.z,.9);
+    if(e.type==='boost')pulseRing(0xffdb58,e.x,e.z,.68);
+    if(e.type==='flagScore')pulseRing(e.team===0?0xff655d:0x65a9fc,e.x||24,e.z||16,1.4);
+    if(e.type==='respawn')pulseRing(0x8be4ff,e.x,e.z,1.1);
     if(e.type==='hit'&&e.id==='player'){
       el('statusText').textContent='受到攻擊！';
     }
