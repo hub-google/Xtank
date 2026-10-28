@@ -32,3 +32,13 @@ curl http://127.0.0.1:8787/health
 - 驗證房主離開、任一玩家斷線/重連、多人房 8 人長時間穩定、負載/延遲/封包丟失/故障後重試。
 - 已新增 `server/settlement-outbox.cjs`：結算前將合法賽果寫入權限限制的持久資料夾；寫 DB 失敗保留待補送檔案，服務啟動或定時重試，並由 `server_round_id` 保證 DB 防重複。**但仍需在正式主機驗證斷電/重啟的真實資料恢復。**
 - 密碼房、快速配對目前是單台遊戲伺服器範圍；跨節點房間路由、官方排位佇列與長期實例擴充尚未完成。
+
+
+## 2026-10-28 新增：共用 MMR 配對代理（程式已接入、尚未部署公開主機）
+
+- 官方伺服器增加 `XTANK_REGION`（預設 `asia-east`）與 **`XTANK_PUBLIC_WSS_URL`**。必須在真正公開的 HTTPS/WSS 主機上取得實際網址後設定，例如 `wss://<你實際取得的域名>`；不能用 `ws://localhost`、GitHub Pages 或臆測網址。
+- 正式模式下 `server/host.cjs` 每 8 秒透過 `server/official.cjs` 的 service-role 安全 RPC 呼叫 `xtank_matchmaker_host('heartbeat')`。資料庫登記伺服器並分配同地區、相近 MMR、成員不可被拆散的隊伍票券到同一間官方房間；由承接服務實際建立房間。該房只允許持有分配票券的登入玩家加入。
+- 玩家端 `src/community.js` 透過 `xtank_match_ticket_status` 查詢自己的分配狀態，取得已授權的 WSS 端點與房間代碼，按「進入配對房間」由 `src/game.js` 發出正式 `JOIN`。
+- 已在 DB 的 `BEGIN ... ROLLBACK` 情境用 2 名玩家建立佇列，成功配到同一房間並通過身份驗證，測試資料沒有保留。
+- **營運風險仍需補齊**：目前資料庫配對代理只是 MVP，沒有完備的多實例故障轉移、排隊結果 ACK／重排、各節點自動擴縮、動態負載／地區延遲測量。不要因 SQL 代理存在就宣稱全球配對已投入正式營運。
+- 官方服務尚未連線 Render 帳號、未部署常駐主機、未得到實際 WSS URL；環境變數 `XTANK_PUBLIC_WSS_URL` 尚需由託管管理員設置，才能開始外部配對流程。
