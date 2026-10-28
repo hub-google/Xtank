@@ -1,5 +1,10 @@
 # X-TANK ONLINE（X 坦克）
 
+## 2026-10-28｜Windows EXE 打包及 GUI 驗收
+
+[查看實際 GitHub Actions 結果](https://github.com/hub-google/Xtank/actions/runs/40638323009) ｜ [下載可攜式 Windows EXE Artifact](https://github.com/hub-google/Xtank/actions/runs/40638323009/artifacts/12794407679) ｜ [完整測試狀態與限制](docs/31_20261028_Windows_EXE_驗收紀錄.md)。已取得 **62/62 單元整合 PASS、Docker PASS、72/72 Windows 原生 EXE 戰鬥矩陣 PASS**。一般介面與延伸多人 GUI 工作尚無最終結論，不可視為整體全部驗收通過。
+
+
 ## 2026-10-28｜已確認 BUG 靜態盤點及修復（8 項）
 
 本輪以 GitHub `main` 實際程式做跨模組核對，**只列有直接程式證據的問題**，詳細案例、根因與每項 commit 見 [30｜實際 BUG 盤點與修復](docs/30_20261028_實際BUG盤點與修復.md)。
