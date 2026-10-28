@@ -20,6 +20,8 @@ services:
         value: 0.0.0.0
       - key: XTANK_OFFICIAL_MODE
         value: "1"
+      - key: XTANK_SERVER_REGION
+        value: Singapore
       - key: SUPABASE_URL
         value: https://fanffwnhkxpfhttylntw.supabase.co
       - key: SUPABASE_SERVICE_ROLE_KEY
