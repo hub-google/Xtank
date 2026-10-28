@@ -78,7 +78,10 @@ async function home(p){
    await p.click('#pauseHomeButton');
   }else await p.reload();
  }
- await p.waitForSelector('#startMenu:not([hidden])');
+ // On Windows software rendering the app can finish the transition on a
+ // late frame. Wait for the actual app state first, then verify visibility.
+ await p.waitForFunction(()=>!document.querySelector('#startMenu')?.hidden,null,{timeout:60000});
+ assert(await p.isVisible('#startMenu'),'Home overlay must be visible after returning from battle');
  await wait(p,()=>typeof window.xtankDiagnostics==='function');
  await ensureGuestEntry(p);
 }
