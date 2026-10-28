@@ -279,6 +279,7 @@ function clearModels(){
   models=new Map();bulletModels=new Map();zoneModels=new Map();sparks.length=0;
 }
 function start(){
+  el('battleChat').hidden=true;
   paused=true;qaEvents.length=0;
   spectating=false;
   online?.close();online=null;networkSlot=null;
@@ -297,6 +298,7 @@ function start(){
   } catch(e){console.error(e);el('matchInfo').textContent='啟動失敗：'+e.message;}
 }
 function goHome(){
+  el('battleChat').hidden=true;
   spectating=false;
   online?.close();online=null;networkSlot=null;networkRoomId=null;officialWeaponAllowlist=null;
   officialRound=false;roundSettlementSaved=false;
@@ -591,6 +593,11 @@ function onlineMessage(msg){
     log.append(entry);
     while(log.childElementCount>30)log.firstElementChild.remove();
     log.scrollTop=log.scrollHeight;
+    const battle=el('battleChatLog'),battleEntry=document.createElement('p');
+    battleEntry.textContent=entry.textContent;
+    battle.append(battleEntry);
+    while(battle.childElementCount>50)battle.firstElementChild.remove();
+    battle.scrollTop=battle.scrollHeight;
     return;
   }
   if(msg.type==='MATCH_SAVED'){
@@ -638,6 +645,16 @@ function onlineMessage(msg){
   const me=msg.people.find(player=>player.id===online?.playerId);
   const moderator=el('roomModeration');
   moderator.hidden=!me?.host||spectating||msg.phase!=='lobby';
+  const battleModeration=el('battleChatModeration');
+  battleModeration.hidden=!me?.host||spectating;
+  if(!battleModeration.hidden){
+   const target=el('battleChatTarget'),selected=target.value;
+   target.replaceChildren();
+   for(const person of msg.people.filter(person=>person.id!==me.id&&person.connected)){
+    const option=document.createElement('option');option.value=person.id;option.textContent=person.name;target.append(option);
+   }
+   if([...target.options].some(option=>option.value===selected))target.value=selected;
+  }
   if(!moderator.hidden){
    const target=el('roomModerationTarget');
    const current=target.value;
@@ -655,6 +672,7 @@ function onlineMessage(msg){
    el('readyNetworkButton').hidden=msg.phase!=='lobby'&&msg.phase!=='countdown';
    el('readyNetworkButton').textContent=networkReady?'取消準備':'準備';
   el('startNetworkButton').hidden=msg.hostId!==online?.playerId||msg.phase!=='lobby';
+  if(msg.phase==='lobby')el('battleChat').hidden=true;
   if(msg.phase==='lobby'&&match&&resultShown){
     match=null;paused=true;resultShown=false;officialRound=false;roundSettlementSaved=false;
     el('resultMenu').hidden=true;el('startMenu').hidden=false;el('hud').hidden=true;
@@ -677,6 +695,7 @@ function onlineMessage(msg){
   keyboard.clear();fireHeld=false;itemQueue=0;abilityQueue=false;
   selectedWeapon=officialWeaponAllowlist?Math.max(0,weaponKeys.findIndex(k=>officialWeaponAllowlist.has(k))):0;
   el('startMenu').hidden=true;el('resultMenu').hidden=true;el('hud').hidden=false;
+  el('battleChat').hidden=spectating;
   el('pauseBadge').hidden=true;
   onlineStatus(spectating?'觀戰模式（唯讀）：'+msg.roomId:'已進入真正的連線房間 '+msg.roomId);
   return;
@@ -729,6 +748,19 @@ el('roomKickButton').addEventListener('click',()=>{
 });
 el('roomSlowMode').addEventListener('change',()=>online?.send({type:'MODERATE',action:'slowmode',milliseconds:Number(el('roomSlowMode').value)}));
  el('teamChoose').addEventListener('change',()=>online?.send({type:'TEAM',team:Number(el('teamChoose').value)}));
+el('battleChatForm').addEventListener('submit',event=>{
+ event.preventDefault();
+ const input=el('battleChatInput'),text=input.value.trim();
+ if(text&&online?.send({type:'CHAT',text}))input.value='';
+ input.blur();
+ keyboard.clear();fireHeld=false;
+});
+el('battleChatInput').addEventListener('focus',()=>{keyboard.clear();fireHeld=false;});
+el('battleChatMute').addEventListener('click',()=>online?.send({type:'MODERATE',action:'mute',seconds:300,targetId:el('battleChatTarget').value}));
+el('battleChatUnmute').addEventListener('click',()=>online?.send({type:'MODERATE',action:'mute',seconds:0,targetId:el('battleChatTarget').value}));
+el('battleChatKick').addEventListener('click',()=>{
+ if(confirm('確定移出這名玩家？'))online?.send({type:'MODERATE',action:'kick',targetId:el('battleChatTarget').value});
+});
  el('roomChatForm').addEventListener('submit',event=>{
    event.preventDefault();
    const input=el('roomChatInput'),text=input.value.trim();
@@ -736,7 +768,7 @@ el('roomSlowMode').addEventListener('change',()=>online?.send({type:'MODERATE',a
  });
 el('startNetworkButton').addEventListener('click',()=>online?.send({type:'START'}));
 el('leaveNetworkButton').addEventListener('click',()=>{
- spectating=false;online?.close();online=null;networkSlot=null;el('networkLobby').hidden=true;
+ el('battleChat').hidden=true;spectating=false;online?.close();online=null;networkSlot=null;el('networkLobby').hidden=true;
  onlineStatus('已離開多人房間');
 });
 el('hostServerButton').addEventListener('click',async()=>{
