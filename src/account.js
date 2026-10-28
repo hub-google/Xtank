@@ -5,6 +5,25 @@ import {loadBindings} from './controls.js';
 const URL='https://fanffwnhkxpfhttylntw.supabase.co';
 const KEY='sb_publishable_fsrieSLUXlq-_WDpPY9K_w_eO-dN_jT';
 const storeKey='xtank_auth_session_v1';
+const purchaseKey='xtank_pending_purchase_v1';
+function pendingPurchaseId(playerId,offerId){
+ const id=playerId+':'+offerId;
+ let pending={};
+ try{pending=JSON.parse(localStorage.getItem(purchaseKey)||'{}')||{}}catch{}
+ // Only reuse a still-pending ID for precisely the same player and offer.
+ const existing=pending[id];
+ if(typeof existing==='string'&&/^[0-9a-f-]{36}$/i.test(existing))return existing;
+ const key=crypto.randomUUID();
+ pending[id]=key;
+ localStorage.setItem(purchaseKey,JSON.stringify(pending));
+ return key;
+}
+function clearPendingPurchase(playerId,offerId,key){
+ let pending={};
+ try{pending=JSON.parse(localStorage.getItem(purchaseKey)||'{}')||{}}catch{}
+ const id=playerId+':'+offerId;
+ if(pending[id]===key){delete pending[id];localStorage.setItem(purchaseKey,JSON.stringify(pending));}
+}
 const $=(selector,root=document)=>root.querySelector(selector);
 let session=null, dashboard=null, catalog=null, tab='home',busy=false,rankMode='FFA';
 try{session=JSON.parse(localStorage.getItem(storeKey)||'null')}catch{session=null}
@@ -424,7 +443,13 @@ function draw(){
     catalog.items.find(x=>x.item_id===offer.item_id);
   if(!confirm('確定購買 '+(item?.display_name||offer.offer_key)+' × '+offer.quantity+
     '，支付 '+offer.unit_price+' '+offer.currency_code+'？'))return;
-  const key=crypto.randomUUID();await rpc('buy',{offer_id:parts[1],quantity:1,key});
+  const playerId=dashboard?.profile?.player_id;
+  if(!playerId)throw Error('尚未取得正式玩家帳號');
+  const key=pendingPurchaseId(playerId,parts[1]);
+  // Keep the same idempotency key across uncertain network responses and restarts.
+  // Only a confirmed paid order may clear it.
+  await rpc('buy',{offer_id:parts[1],quantity:1,key});
+  clearPendingPurchase(playerId,parts[1],key);
   await reload();msg('購買成功，金幣與背包已更新；可在交易紀錄查看');return});
  }));
 }
