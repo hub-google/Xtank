@@ -119,8 +119,8 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
        return send(p.ws,{type:'ERROR',code:'NEED_BOTH_TEAMS'});
    }
   if(official){
-   r.phase='countdown';r.countdownDeadline=Date.now()+3000;r.lastCountdownSecond=3;
-   broadcast(r,{type:'COUNTDOWN',seconds:3});lobby(r);
+   r.phase='countdown';r.countdownDeadline=Date.now()+5000;r.lastCountdownSecond=5;
+   broadcast(r,{type:'COUNTDOWN',seconds:5});lobby(r);
    return;
   }
   launch(r);
@@ -183,7 +183,9 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
  }
  function launch(r){
   if(r.phase!=='lobby'&&r.phase!=='countdown'&&r.phase!=='allocating')return;
-  const game=new Game({mode:r.mode,mapId:r.mapId,selectedTank:'X',size:8,seed:crypto.randomBytes(4).readUInt32LE()});
+  const seed=crypto.randomBytes(4).readUInt32LE();
+  const game=new Game({mode:r.mode,mapId:r.mapId,selectedTank:'X',size:8,seed});
+  r.seed=seed;r.rulesetCode='prototype_0_2_2';
   if(testRoundSeconds!==null)game.time=testRoundSeconds;
   game.humanIds=new Set();
   r.game=game;r.inputs=new Map();r.phase='live';r.roundId=r.roundId||id();r.events=[];
@@ -219,11 +221,11 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
    game.humanIds.add(t.id);
     if(official&&x.accountUserId)r.accountBySlot.set(t.id,x.accountUserId);
    r.inputs.set(t.id,{dx:0,dz:0,aimYaw:0,fire:false,item:0,ability:false});
-   send(x.ws,{type:'START',mode:r.mode,mapId:r.mapId,slotId:t.id,roundId:r.roundId,roomId:r.id,official:!!official,allowedWeapons:official?[...x.allowedWeapons]:null});
+   send(x.ws,{type:'START',mode:r.mode,mapId:r.mapId,slotId:t.id,roundId:r.roundId,roomId:r.id,seed:r.seed,rulesetCode:r.rulesetCode,official:!!official,allowedWeapons:official?[...x.allowedWeapons]:null});
   });
   lobby(r);
   broadcastSpectators(r,{type:'START',mode:r.mode,mapId:r.mapId,slotId:game.tanks[0].id,
-   roundId:r.roundId,roomId:r.id,official:!!official,spectator:true});
+   roundId:r.roundId,roomId:r.id,seed:r.seed,rulesetCode:r.rulesetCode,official:!!official,spectator:true});
  }
  wss.on('connection',ws=>{
   if(shuttingDown){ws.close(1012,'server restarting');return;}
@@ -279,7 +281,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
       if(official)ws._xtankAccountUserId=m.accountUserId;
       send(ws,{type:'JOINED',roomId:target.id,playerId:null,token:null,host:false,spectator:true});
       send(ws,{type:'START',mode:target.mode,mapId:target.mapId,
-        slotId:target.game?.tanks[0]?.id||null,roundId:target.roundId,roomId:target.id,
+        slotId:target.game?.tanks[0]?.id||null,roundId:target.roundId,roomId:target.id,seed:target.seed,rulesetCode:target.rulesetCode,
         official:!!official,spectator:true});
     }else if(m.type==='CREATE'&&!p){
     if(rooms.size>=32)return send(ws,{type:'ERROR',code:'SERVER_FULL'});
@@ -354,7 +356,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
      if(!r.hostId||!members(r).some(member=>member.id===r.hostId&&member.ws))r.hostId=p.id;
      send(ws,{type:'JOINED',roomId:r.id,playerId:p.id,token:p.token,host:p.id===r.hostId});
      lobby(r);
-     if(r.phase==='live')send(ws,{type:'START',mode:r.mode,mapId:r.mapId,slotId:p.slot,roundId:r.roundId,roomId:r.id,official:!!official,allowedWeapons:official?[...p.allowedWeapons]:null});
+     if(r.phase==='live')send(ws,{type:'START',mode:r.mode,mapId:r.mapId,slotId:p.slot,roundId:r.roundId,roomId:r.id,seed:r.seed,rulesetCode:r.rulesetCode,official:!!official,allowedWeapons:official?[...p.allowedWeapons]:null});
     }finally{
      old.resumePending=false;
      ws._xtankResumePending=false;
