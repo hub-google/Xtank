@@ -156,11 +156,16 @@ async function testMockedNativeAccount(p){
   // The production shop now requires explicit human confirmation.
   // Accept the real native confirmation once, rather than bypassing
   // the purchase control or expecting payment without consent.
-  const confirmation=p.waitForEvent('dialog',{timeout:10000});
-  await p.click('[data-action="buy:'+offer+'"]',{noWaitAfter:true});
-  const dialog=await confirmation;
-  assert.match(dialog.message(),/確定購買/);
-  await dialog.accept();
+  let confirmationText='';
+  // Handle the dialog concurrently with the click: Chromium blocks the
+  // originating JS event until a real confirm dialog is accepted.
+  const confirmation=p.waitForEvent('dialog',{timeout:10000}).then(async dialog=>{
+   confirmationText=dialog.message();
+   await dialog.accept();
+  });
+  await p.click('[data-action="buy:'+offer+'"]');
+  await confirmation;
+  assert.match(confirmationText,/確定購買/);
   await p.waitForFunction(()=>document.querySelector('#xtankAccountStatus')?.textContent?.includes('購買成功'));
   assert.equal(wallet.balance,900);
   await p.click('[data-action="tab:inventory"]');
