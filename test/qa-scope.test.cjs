@@ -12,6 +12,7 @@ test('only the real multiplayer scenario requires the secondary client',()=>{
  assert.equal(needsNetworkClient(null),true);
  assert.equal(needsNetworkClient(/^/),true);
  assert.equal(needsNetworkClient(/^D-/),true);
+ assert.equal(needsNetworkClient(/^D-dual-client-bootstrap$/),true);
  assert.equal(needsNetworkClient(/^D-LAN-/),true);
  assert.equal(needsNetworkClient(/^B-/),false);
 });
