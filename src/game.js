@@ -574,6 +574,11 @@ el('returnButton').addEventListener('click',goHome);
 
 function onlineStatus(message){el('networkStatus').textContent=message;if(match&&online&&message.includes('斷線'))el('statusText').textContent=message;}
 function onlineMessage(msg){
+ if(msg.type==='NETWORK_LATENCY'){
+  const meter=el('networkLatency');
+  if(meter)meter.textContent='連線延遲：約 '+msg.ms+' 毫秒（往返）';
+  return;
+ }
  if(msg.type==='REMATCH_WAITING'){
   const remaining=Math.max(0,Number(msg.playersRemaining)||0);
   onlineStatus('等待其他 '+remaining+' 位仍在線上的玩家確認返回房間。');
@@ -650,7 +655,7 @@ function onlineMessage(msg){
     if(!rooms.length){const empty=document.createElement('p');empty.textContent='沒有開放中的公開房間';list.append(empty);}
     for(const room of rooms){
       const button=document.createElement('button');button.type='button';button.className='secondary';
-      button.textContent=room.roomId+' · '+room.mode+' · '+(MAPS[room.mapId]?.name||room.mapId)+' · '+room.players+'/'+room.capacity;
+      button.textContent=(room.name||'公開房間')+' · '+room.roomId+' · '+room.mode+' · '+(MAPS[room.mapId]?.name||room.mapId)+' · '+room.players+'/'+room.capacity;
       button.addEventListener('click',()=>{
         el('roomCode').value=room.roomId;
         el('roomPassword').value='';
@@ -679,7 +684,16 @@ function onlineMessage(msg){
  }
  if(msg.type==='LOBBY'){
   el('networkLobby').hidden=false;
-  el('roomDetails').textContent='房間 '+msg.roomId+' · '+msg.mode+' · '+(MAPS[msg.mapId]?.name||'地圖')+' · '+msg.phase;
+  el('roomDetails').textContent=(msg.name||'房間')+' ('+msg.roomId+') · '+msg.mode+' · '+(MAPS[msg.mapId]?.name||'地圖')+' · '+msg.phase;
+  const settings=el('xtankRoomSettings');
+  settings.hidden=!msg.people.some(person=>person.id===online?.playerId&&person.host)||msg.phase!=='lobby';
+  if(!settings.hidden){
+   if(document.activeElement?.closest('#xtankRoomSettings')!==settings){
+    settings.elements.name.value=msg.name||'';
+    settings.elements.mode.value=msg.mode;
+    settings.elements.mapId.value=msg.mapId;
+   }
+  }
   el('roomPeople').textContent=msg.people.map(p=>(p.host?'房主 ':'')+p.name+(msg.mode==='FFA'?'':p.team===0?' [紅隊]':' [藍隊]')+(p.ready?' ✓已準備':' · 未準備')+(p.connected?' ●':' ○')).join('、');
   const me=msg.people.find(player=>player.id===online?.playerId);
   const moderator=el('roomModeration');
@@ -772,12 +786,18 @@ async function establishNetwork(action){
  online=new OnlineConnection(onlineMessage,onlineStatus,()=>window.xtankAccount?.getAccessToken?.());
  try{
   online.open(el('serverAddress').value.trim(),{
-    type:action,name:el('playerName').value.trim()||'Player',accessToken,
+    type:action,name:el('playerName').value.trim()||'Player',roomName:el('roomName').value.trim(),accessToken,
     tank:el('tankSelect').value,mode:el('modeSelect').value,mapId:el('mapSelect').value,
     roomId:el('roomCode').value.trim().toUpperCase(),password:el('roomPassword').value
   });
  }catch(e){onlineStatus('設定錯誤：'+e.message);online=null;}
 }
+el('xtankRoomSettings').addEventListener('submit',event=>{
+ event.preventDefault();
+ const form=event.currentTarget;
+ online?.send({type:'ROOM_SETTINGS',name:form.elements.name.value.trim(),
+  mode:form.elements.mode.value,mapId:form.elements.mapId.value});
+});
 el('makeRoomButton').addEventListener('click',()=>establishNetwork('CREATE'));
 el('spectateRoomButton').addEventListener('click',()=>{
  if(!el('roomCode').value.trim())return onlineStatus('請先輸入公開房間代碼');
