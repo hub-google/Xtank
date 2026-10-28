@@ -442,7 +442,7 @@ function draw(){
   const item=catalog.weapons.find(x=>x.weapon_id===offer.weapon_id)||
     catalog.items.find(x=>x.item_id===offer.item_id);
   if(!confirm('確定購買 '+(item?.display_name||offer.offer_key)+' × '+offer.quantity+
-    '，支付 '+offer.unit_price+' '+offer.currency_code+'？'))return;
+    '，支付 '+offer.unit_price+' '+offer.currency_code+'？')){msg('已取消購買，沒有扣款');return;}
   const playerId=dashboard?.profile?.player_id;
   if(!playerId)throw Error('尚未取得正式玩家帳號');
   const key=pendingPurchaseId(playerId,parts[1]);
