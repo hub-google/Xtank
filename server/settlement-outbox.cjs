@@ -72,8 +72,11 @@ function createSettlementOutbox({directory,deliver,intervalMs=10000}){
   try{return await deliverFile(file)}
   catch(err){retryAt.set(file,Date.now()+10000);throw err}
  }
+ function hasPending(){
+  return fs.readdirSync(directory).some(name=>/^[0-9a-f]{64}\.json$/.test(name));
+ }
  const timer=setInterval(()=>{retry().catch(err=>console.error('X-TANK settlement outbox:',err.message))},intervalMs);
  timer.unref?.();
- return {queue,retry,settle,close:()=>{closed=true;clearInterval(timer)},directory};
+ return {queue,retry,settle,hasPending,close:()=>{closed=true;clearInterval(timer)},directory};
 }
 module.exports={createSettlementOutbox};
