@@ -72,11 +72,19 @@ function createSettlementOutbox({directory,deliver,intervalMs=10000}){
   try{return await deliverFile(file)}
   catch(err){retryAt.set(file,Date.now()+10000);throw err}
  }
- function hasPending(){
-  return fs.readdirSync(directory).some(name=>/^[0-9a-f]{64}\.json$/.test(name));
+ function stats(){
+  const files=fs.readdirSync(directory)
+   .filter(name=>/^[0-9a-f]{64}\.json$/.test(name));
+  let oldest=null;
+  for(const name of files){
+   const age=Math.max(0,Math.floor((Date.now()-fs.statSync(path.join(directory,name)).mtimeMs)/1000));
+   oldest=oldest===null?age:Math.max(oldest,age);
+  }
+  return {pendingFiles:files.length,oldestPendingSeconds:oldest,retryInProgress:running};
  }
+ function hasPending(){return stats().pendingFiles>0;}
  const timer=setInterval(()=>{retry().catch(err=>console.error('X-TANK settlement outbox:',err.message))},intervalMs);
  timer.unref?.();
- return {queue,retry,settle,hasPending,close:()=>{closed=true;clearInterval(timer)},directory};
+ return {queue,retry,settle,hasPending,stats,close:()=>{closed=true;clearInterval(timer)},directory};
 }
 module.exports={createSettlementOutbox};
