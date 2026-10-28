@@ -712,7 +712,7 @@ function onlineMessage(msg){
     if(!rooms.length){const empty=document.createElement('p');empty.textContent='沒有開放中的公開房間';list.append(empty);}
     for(const room of rooms){
       const button=document.createElement('button');button.type='button';button.className='secondary';
-      button.textContent=(room.name||'公開房間')+' · '+room.roomId+' · '+room.mode+' · '+(MAPS[room.mapId]?.name||room.mapId)+' · '+room.players+'/'+room.capacity;
+      button.textContent=(room.name||'公開房間')+' · '+(room.ruleClass==='standard'?'標準競技':'經典成長')+' · '+room.roomId+' · '+room.mode+' · '+(MAPS[room.mapId]?.name||room.mapId)+' · '+room.players+'/'+room.capacity;
       button.addEventListener('click',()=>{
         el('roomCode').value=room.roomId;
         el('roomPassword').value='';
@@ -741,13 +741,14 @@ function onlineMessage(msg){
  }
  if(msg.type==='LOBBY'){
   el('networkLobby').hidden=false;
-  el('roomDetails').textContent=(msg.name||'房間')+' ('+msg.roomId+') · '+msg.mode+' · '+(MAPS[msg.mapId]?.name||'地圖')+' · '+msg.phase;
+  el('roomDetails').textContent=(msg.name||'房間')+' ('+msg.roomId+') · '+(msg.ruleClass==='standard'?'標準競技房':'經典成長房')+' · '+msg.mode+' · '+(MAPS[msg.mapId]?.name||'地圖')+' · '+msg.phase;
   const settings=el('xtankRoomSettings');
   settings.hidden=!msg.people.some(person=>person.id===online?.playerId&&person.host)||msg.phase!=='lobby';
   if(!settings.hidden){
    if(document.activeElement?.closest('#xtankRoomSettings')!==settings){
     settings.elements.name.value=msg.name||'';
     settings.elements.mode.value=msg.mode;
+    settings.elements.ruleClass.value=msg.ruleClass||'growth';
     settings.elements.mapId.value=msg.mapId;
    }
   }
@@ -843,7 +844,7 @@ async function establishNetwork(action){
  online=new OnlineConnection(onlineMessage,onlineStatus,()=>window.xtankAccount?.getAccessToken?.());
  try{
   online.open(el('serverAddress').value.trim(),{
-    type:action,name:el('playerName').value.trim()||'Player',roomName:el('roomName').value.trim(),accessToken,
+    type:action,name:el('playerName').value.trim()||'Player',roomName:el('roomName').value.trim(),ruleClass:el('ruleClass').value,accessToken,
     tank:el('tankSelect').value,mode:el('modeSelect').value,mapId:el('mapSelect').value,
     roomId:el('roomCode').value.trim().toUpperCase(),password:el('roomPassword').value
   });
@@ -853,7 +854,7 @@ el('xtankRoomSettings').addEventListener('submit',event=>{
  event.preventDefault();
  const form=event.currentTarget;
  online?.send({type:'ROOM_SETTINGS',name:form.elements.name.value.trim(),
-  mode:form.elements.mode.value,mapId:form.elements.mapId.value});
+  mode:form.elements.mode.value,mapId:form.elements.mapId.value,ruleClass:form.elements.ruleClass.value});
 });
 el('makeRoomButton').addEventListener('click',()=>establishNetwork('CREATE'));
 el('spectateRoomButton').addEventListener('click',()=>{
