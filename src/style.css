@@ -65,3 +65,4 @@
 #xtankRoomSettings label{font-size:12px;display:flex;flex-direction:column;gap:5px;color:#d5e5f2}
 #xtankRoomSettings input,#xtankRoomSettings select{width:100%;padding:7px;border:1px solid #70849a;border-radius:6px;background:#12283d;color:white}
 #xtankRoomSettings button{grid-column:1/-1}
+#startupWarning:not([hidden]){position:fixed;top:78px;left:50%;transform:translateX(-50%);z-index:120;width:min(92vw,650px);padding:18px 22px;background:#301e29;color:#fff2e0;border:2px solid #f3b571;border-radius:12px;font-size:15px;line-height:1.6;box-shadow:0 12px 36px #000b}
