@@ -28,6 +28,16 @@ function officialService({onSettlement}={}){
   return {
     close:()=>outbox.close(),
     recover:()=>outbox.retry(),
+    async reserve(roundId,playerId,items){
+      // A server-only, durable escrow prevents inventory races across hosts.
+      // Reserve before START, including an empty session for players without items.
+      return request('/rest/v1/rpc/xtank_reserve_match_items',{
+        body:{p_round_id:roundId,p_player_id:playerId,p_items:items||{}}
+      });
+    },
+    async release(roundId){
+      return request('/rest/v1/rpc/xtank_release_match_items',{body:{p_round_id:roundId}});
+    },
     async authenticate(token,tankId){
       if(typeof token!=='string'||token.length<80)throw Error('LOGIN_REQUIRED');
       const u=await request('/auth/v1/user',{token,method:'GET'});
@@ -74,7 +84,7 @@ function officialService({onSettlement}={}){
           items_used:owner?{...(t.itemsUsed||{})}:{}};
       });
       const winner=g.mode!=='FFA'&&g.scores[0]!==g.scores[1]?(g.scores[0]>g.scores[1]?0:1):null;
-      const payload={round_id:room.roundId,mode_id:g.mode,map_id:g.mapId,
+      const payload={round_id:room.roundId,reservation_version:'1',mode_id:g.mode,map_id:g.mapId,
         elapsed_s:Math.min(600,Math.round((Date.now()-(room.startedAt||Date.now()))/1000)),
         winning_team:winner,participants:players};
       return outbox.settle(payload);
