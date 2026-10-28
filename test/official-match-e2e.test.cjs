@@ -47,6 +47,12 @@ test('two authenticated WebSocket players naturally finish a short official matc
     inventory:[{item_id:'repair',quantity:2},{item_id:'smoke',quantity:9}],
     upgrades:player===UID_A?[{tank_id:'X',attribute:'energy',level:5},{tank_id:'X',attribute:'speed',level:6}]:[]
    }),{status:200});
+   if(endpoint.endsWith('/rest/v1/rpc/xtank_service_maintenance'))
+    return new Response(JSON.stringify({enabled:false,notice:''}),{status:200});
+   if(endpoint.endsWith('/rest/v1/rpc/xtank_official_loadout_snapshot'))
+    return new Response(JSON.stringify({weapons:['hurricane'],items:{repair:2},upgrades:JSON.parse(opts.body).p_player_id===UID_A?{energy:5,speed:6}:{}}),{status:200});
+   if(endpoint.endsWith('/rest/v1/rpc/xtank_recover_abandoned_items'))
+    return new Response(JSON.stringify({ok:true,recovered:0}),{status:200});
    if(endpoint.endsWith('/rest/v1/rpc/xtank_reserve_match_items')||
        endpoint.endsWith('/rest/v1/rpc/xtank_release_match_items'))
      return new Response(JSON.stringify({ok:true}),{status:200});
@@ -77,9 +83,9 @@ test('two authenticated WebSocket players naturally finish a short official matc
   const countdownStarted=Date.now();
   send(a,{type:'START'});
   const countdown=await waitFor(a,'COUNTDOWN');
-  assert.equal(countdown.seconds,3,'official ready countdown is three seconds');
-  const gameA=await waitFor(a,'START'),gameB=await waitFor(b,'START');
-  assert(Date.now()-countdownStarted>=2800,'official countdown must not start the round after only ~2 seconds');
+  assert.equal(countdown.seconds,5,'official ready countdown follows the five-second PRD requirement');
+  const gameA=await waitFor(a,'START',{timeout:11000}),gameB=await waitFor(b,'START',{timeout:11000});
+  assert(Date.now()-countdownStarted>=4800,'official countdown must last approximately five seconds');
   assert.equal(gameA.official,true);assert.equal(gameB.official,true);
   assert.notEqual(gameA.slotId,gameB.slotId);
   const ended=await waitFor(a,'SNAPSHOT',{timeout:6000,check:s=>s.ended===true});
@@ -107,7 +113,12 @@ test('two authenticated WebSocket players naturally finish a short official matc
   assert.equal(fs.readdirSync(dir).filter(f=>f.endsWith('.json')).length,0,'successful delivery clears durable outbox');
   // A non-host player may start the next lobby, but only after the
   // official result is durable. Neither player should become disconnected.
+  // A finished match returns to lobby only after *each* connected player
+  // explicitly leaves the result screen. One player's click must not
+  // dismiss somebody else's match summary.
   send(b,{type:'BACK_TO_LOBBY'});
+  await waitFor(a,'REMATCH_WAITING',{check:m=>m.playersRemaining===1});
+  send(a,{type:'BACK_TO_LOBBY'});
   const lobbyA=await waitFor(a,'LOBBY',{check:m=>m.phase==='lobby'});
   const lobbyB=await waitFor(b,'LOBBY',{check:m=>m.phase==='lobby'});
   assert.equal(lobbyA.people.length,2);
