@@ -224,14 +224,14 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
        }
     }
     if(m.type==='QUICK_MATCH'&&!p){
-      const candidates=[...rooms.values()].filter(room=>room.phase==='lobby'&&!room.password&&members(room).length<8&&room.mode===m.mode
+      const candidates=[...rooms.values()].filter(room=>room.phase==='lobby'&&!room.password&&!room.matchmade&&members(room).length<8&&room.mode===m.mode
         &&(m.mapId==null||room.mapId===m.mapId));
       candidates.sort((a,b)=>members(b).length-members(a).length);
       if(candidates.length){m.type='JOIN';m.roomId=candidates[0].id;}
       else m.type='CREATE';
     }
     if(m.type==='LIST_ROOMS'&&!p){
-      send(ws,{type:'ROOMS',rooms:[...rooms.values()].filter(room=>room.phase==='lobby'&&!room.password).map(roomSummary).slice(0,32)});
+      send(ws,{type:'ROOMS',rooms:[...rooms.values()].filter(room=>room.phase==='lobby'&&!room.password&&!room.matchmade).map(roomSummary).slice(0,32)});
     }else if(m.type==='SPECTATE'&&!p){
       const target=rooms.get(String(m.roomId||'').toUpperCase());
       if(!target||target.password||target.phase!=='live')return send(ws,{type:'ERROR',code:'SPECTATE_UNAVAILABLE'});
@@ -276,11 +276,19 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
     ws._xtankJoinPending=false;
     if(ws.readyState!==WebSocket.OPEN||p)return;
     if(!correct)return send(ws,{type:'ERROR',code:'BAD_ROOM_PASSWORD'});
+    if(found.matchmade){
+     if(!official||!m.accountUserId)return send(ws,{type:'ERROR',code:'OFFICIAL_LOGIN_REQUIRED'});
+     let allowed=false;
+     try{allowed=await official.validateMatchmadePlayer(found.id,m.accountUserId);}
+     catch(error){return send(ws,{type:'ERROR',code:'MATCHMAKER_LOOKUP_FAILED',message:error.message});}
+     if(!allowed)return send(ws,{type:'ERROR',code:'MATCH_TICKET_REQUIRED'});
+    }
     // Verify mutable room state again after asynchronous password checking.
     if(found.phase!=='lobby')return send(ws,{type:'ERROR',code:'ROUND_RUNNING'});
     if(found.people.size>=8)return send(ws,{type:'ERROR',code:'ROOM_FULL'});
     r=found;p=makePlayer(m,ws);p.team=selectTeam(r,m.team);r.people.set(p.id,p);
-    send(ws,{type:'JOINED',roomId:r.id,playerId:p.id,token:p.token,host:false});lobby(r);
+    if(!r.hostId)r.hostId=p.id;
+    send(ws,{type:'JOINED',roomId:r.id,playerId:p.id,token:p.token,host:p.id===r.hostId});lobby(r);
    }else if(m.type==='RESUME'&&!p){
     const found=rooms.get(String(m.roomId||'').toUpperCase());
     const old=found&&members(found).find(x=>x.id===m.playerId&&x.token===m.token
@@ -473,7 +481,31 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
  try{await new Promise((ok,fail)=>{
   httpServer.once('error',fail);httpServer.listen(port,host,()=>{httpServer.off('error',fail);ok();});
  });}catch(err){clearInterval(ticking);clearInterval(heartbeat);wss.close();throw err;}
+ let brokerServerId=null,brokerBusy=false;
+ async function pollBroker(){
+  if(!official||!process.env.XTANK_PUBLIC_WSS_URL||brokerBusy)return;
+  brokerBusy=true;
+  try{
+   const result=await official.matchmakerHeartbeat(brokerServerId);
+   if(!result?.server_id)return;
+   brokerServerId=result.server_id;
+   for(const assignment of result.rooms||[]){
+    const code=String(assignment.room_code||'');
+    if(rooms.has(code)||rooms.size>=32||!['FFA','TDM','FLAG_HOLD'].includes(assignment.mode)
+      ||!Object.hasOwn(MAPS,assignment.map_id))continue;
+    rooms.set(code,{id:code,matchmade:true,spectators:new Set(),replay:[],slowModeMs:0,
+     mode:assignment.mode,mapId:assignment.map_id,phase:'lobby',
+     people:new Map(),hostId:null,game:null,inputs:null,roundId:null,events:[],snapCount:0,created:Date.now()});
+   }
+  }catch(error){console.error('X-TANK global matchmaking heartbeat:',error.message)}
+  finally{brokerBusy=false}
+ }
+ const brokerTimer=official&&process.env.XTANK_PUBLIC_WSS_URL?
+   setInterval(()=>{void pollBroker()},8000):null;
+ brokerTimer?.unref?.();
+ if(brokerTimer)void pollBroker();
  return {port:httpServer.address().port,rooms,close:async()=>{
+  if(brokerTimer)clearInterval(brokerTimer);
   official?.close?.();
   clearInterval(ticking);clearInterval(heartbeat);for(const ws of wss.clients)ws.terminate();
   await new Promise(ok=>wss.close(()=>httpServer.close(ok)));
