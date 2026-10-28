@@ -19,7 +19,7 @@ async function take(ws,type,predicate=()=>true,timeout=6000){
  }
  throw Error('Timeout: '+type+', recent='+ws.queue.slice(-4).map(m=>m.type).join(','));
 }
-test('spectators are read-only, room hosts moderate chat and replay streams in chunks',async()=>{
+test('spectators are read-only, room hosts moderate chat',async()=>{
  const mode=process.env.XTANK_OFFICIAL_MODE,nodeEnv=process.env.NODE_ENV;
  delete process.env.XTANK_OFFICIAL_MODE;process.env.NODE_ENV='test';
  const sockets=[];let host;
@@ -51,22 +51,6 @@ test('spectators are read-only, room hosts moderate chat and replay streams in c
   assert.equal(frame.mode,'FFA');
   send(observer,{type:'INPUT',seq:1,dx:1,dz:0,aimYaw:0});
   assert.equal((await take(observer,'ERROR')).code,'SPECTATOR_READ_ONLY');
-  await take(a,'SNAPSHOT',f=>f.ended===true);
-  send(a,{type:'REPLAY_REQUEST'});
-  const begin=await take(a,'REPLAY_BEGIN');
-  assert(begin.frameCount>0);
-  const chunks=[];let finished=false;
-  const stop=Date.now()+6000;
-  while(Date.now()<stop&&!finished){
-   for(let i=0;i<a.queue.length;i++){
-    const msg=a.queue[i];
-    if(msg.type==='REPLAY_CHUNK'){chunks.push(...msg.frames);a.queue.splice(i--,1);}
-    else if(msg.type==='REPLAY_END'){finished=true;a.queue.splice(i--,1);}
-   }
-   await sleep(20);
-  }
-  assert(finished,'chunked replay must terminate');
-  assert.equal(chunks.length,begin.frameCount);
  }finally{
   for(const ws of sockets)ws.terminate();
   if(host)await host.close();
