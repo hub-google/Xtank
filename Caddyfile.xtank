@@ -1,0 +1,13 @@
+# Set XTANK_DOMAIN to a real DNS A/AAAA hostname and point it to this host.
+# Caddy automatically manages TLS and forwards WebSocket upgrades.
+{
+  email {$XTANK_TLS_EMAIL}
+}
+{$XTANK_DOMAIN} {
+  encode zstd gzip
+  reverse_proxy xtank:8787
+  log {
+    output stdout
+    format console
+  }
+}
