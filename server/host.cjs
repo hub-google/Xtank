@@ -80,7 +80,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
  });
  const wss=new WebSocketServer({server:httpServer,maxPayload:4096,perMessageDeflate:false});
  const members=r=>[...r.people.values()];
- const roomSummary=r=>({roomId:r.id,name:r.name||'未命名房間',mode:r.mode,mapId:r.mapId,phase:r.phase,
+ const roomSummary=r=>({roomId:r.id,name:r.name||'未命名房間',mode:r.mode,mapId:r.mapId,ruleClass:r.ruleClass||'growth',phase:r.phase,
    players:members(r).filter(p=>p.ws).length,capacity:8,passwordRequired:!!r.password});
  function passwordDigest(password,salt){return new Promise((resolve,reject)=>crypto.scrypt(password,salt,32,(error,key)=>error?reject(error):resolve(key)));}
  async function roomPasswordValid(r,password){
@@ -93,7 +93,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
  }
  function broadcast(r,msg){for(const p of members(r))send(p.ws,msg);}
  function broadcastSpectators(r,msg){for(const ws of r.spectators||[])send(ws,msg);}
- function lobby(r){broadcast(r,{type:'LOBBY',roomId:r.id,name:r.name||'未命名房間',mode:r.mode,mapId:r.mapId,phase:r.phase,hostId:r.hostId,slowModeMs:r.slowModeMs||0,
+ function lobby(r){broadcast(r,{type:'LOBBY',roomId:r.id,name:r.name||'未命名房間',mode:r.mode,mapId:r.mapId,ruleClass:r.ruleClass||'growth',phase:r.phase,hostId:r.hostId,slowModeMs:r.slowModeMs||0,
   people:members(r).map(p=>({id:p.id,name:p.name,tank:p.tank,team:p.team,connected:!!p.ws,ready:!!p.ready,host:p.id===r.hostId}))});}
  function selectTeam(r,requested){
    if(r.mode==='FFA')return 0;
@@ -198,50 +198,66 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
   }
  }
  function launch(r){
-  if(r.phase!=='lobby'&&r.phase!=='countdown'&&r.phase!=='allocating')return;
+  if(!['lobby','countdown','allocating'].includes(r.phase))return;
+  // Prepare all participant slots before publishing START or switching phase.
+  // An invalid loadout/slot must not strand some players inside a phantom match.
   const seed=crypto.randomBytes(4).readUInt32LE();
+  const rulesetCode='prototype_0_2_2';
   const game=new Game({mode:r.mode,mapId:r.mapId,selectedTank:'X',size:8,seed});
-  r.seed=seed;r.rulesetCode='prototype_0_2_2';
   if(testRoundSeconds!==null)game.time=testRoundSeconds;
   game.humanIds=new Set();
-  r.game=game;r.inputs=new Map();r.phase='live';r.roundId=r.roundId||id();r.events=[];
-   r.startedAt=Date.now();r.accountBySlot=new Map();r.persistStarted=false;r.officialMatchId=null;
+  const inputs=new Map(),accountBySlot=new Map(),starts=[];
   const slots=r.mode==='FFA'?[0,1,2,3,4,5,6,7]:[0,4,1,5,2,6,3,7];
   const chosen=new Set();
-  members(r).filter(x=>x.ws).forEach((x,i)=>{
+  const connected=members(r).filter(x=>x.ws?.readyState===WebSocket.OPEN);
+  if(connected.length<2)throw Error('MATCH_PLAYERS_DISCONNECTED');
+  for(let i=0;i<connected.length;i++){
+   const player=connected[i];
+   if(!TANKS[player.tank])throw Error('INVALID_TANK');
    let slot=slots[i];
    if(r.mode!=='FFA'){
-     const found=game.tanks.findIndex((t,j)=>!chosen.has(j)&&t.team===x.team);
-     if(found<0)throw Error('TEAM_SLOT_MISSING');
-     slot=found;
+    const found=game.tanks.findIndex((tank,index)=>
+      !chosen.has(index)&&tank.team===player.team);
+    if(found<0)throw Error('TEAM_SLOT_MISSING');
+    slot=found;
    }
+   if(chosen.has(slot))throw Error('DUPLICATE_PLAYER_SLOT');
    chosen.add(slot);
-   const t=game.tanks[slot],cfg=TANKS[x.tank];
-   x.slot=t.id;x.seq=-1;
-   t.kind=x.tank;t.hp=t.maxHp=cfg.hp;
-    // Growth is read from the authenticated DB profile; clients never send level modifiers.
-    if(official)t.upgrades={...x.upgrades};
-    t.maxShield=Math.round(cfg.shield*(1+.02*(t.upgrades?.energy||0)));
-    t.shield=t.maxShield;t.ammo={chemical:18,ion_missile:8,mine:5};
-    if(official){
-      t.itemsRemaining={...x.itemsAvailable};
-      t.itemsUsed={};
-      t.repair=Math.min(t.repair,t.itemsRemaining.repair||0);
-      t.shieldCells=Math.min(t.shieldCells,t.itemsRemaining.shield_cell||0);
-    }
-    if(official){
-      const selected=x.allowedWeapons?.values().next().value;
-      if(!selected)throw Error('OFFICIAL_EMPTY_LOADOUT');
-      t.weapon=selected;
-    }
-   game.humanIds.add(t.id);
-    if(official&&x.accountUserId)r.accountBySlot.set(t.id,x.accountUserId);
-   r.inputs.set(t.id,{dx:0,dz:0,aimYaw:0,fire:false,item:0,ability:false});
-   send(x.ws,{type:'START',mode:r.mode,mapId:r.mapId,slotId:t.id,roundId:r.roundId,roomId:r.id,seed:r.seed,rulesetCode:r.rulesetCode,official:!!official,allowedWeapons:official?[...x.allowedWeapons]:null});
-  });
+   const tank=game.tanks[slot],cfg=TANKS[player.tank];
+   tank.kind=player.tank;tank.hp=tank.maxHp=cfg.hp;
+   tank.upgrades=official&&r.ruleClass==='growth'?{...player.upgrades}:undefined;
+   tank.maxShield=Math.round(cfg.shield*(1+.02*(tank.upgrades?.energy||0)));
+   tank.shield=tank.maxShield;tank.ammo={chemical:18,ion_missile:8,mine:5};
+   if(official){
+    if(!player.accountUserId)throw Error('OFFICIAL_PLAYER_NOT_AUTHENTICATED');
+    if(!player.allowedWeapons?.size)throw Error('OFFICIAL_EMPTY_LOADOUT');
+    tank.itemsRemaining={...player.itemsAvailable};
+    tank.itemsUsed={};
+    tank.repair=Math.min(tank.repair,tank.itemsRemaining.repair||0);
+    tank.shieldCells=Math.min(tank.shieldCells,tank.itemsRemaining.shield_cell||0);
+    tank.weapon=player.allowedWeapons.values().next().value;
+    accountBySlot.set(tank.id,player.accountUserId);
+   }
+   game.humanIds.add(tank.id);
+   inputs.set(tank.id,{dx:0,dz:0,aimYaw:0,fire:false,item:0,ability:false});
+   starts.push({player,slotId:tank.id});
+  }
+  const roundId=r.roundId||id();
+  // All validations succeeded: commit one coherent match state and publish START.
+  r.game=game;r.inputs=inputs;r.accountBySlot=accountBySlot;
+  r.phase='live';r.roundId=roundId;r.events=[];r.snapCount=0;
+  r.seed=seed;r.rulesetCode=rulesetCode;r.startedAt=Date.now();
+  r.persistStarted=false;r.officialMatchId=null;
+  for(const {player,slotId} of starts){
+   player.slot=slotId;player.seq=-1;player.returned=false;
+   send(player.ws,{type:'START',mode:r.mode,mapId:r.mapId,slotId,
+    roundId,roomId:r.id,seed,rulesetCode,ruleClass:r.ruleClass,
+    official:!!official,allowedWeapons:official?[...player.allowedWeapons]:null});
+  }
   lobby(r);
-  broadcastSpectators(r,{type:'START',mode:r.mode,mapId:r.mapId,slotId:game.tanks[0].id,
-   roundId:r.roundId,roomId:r.id,seed:r.seed,rulesetCode:r.rulesetCode,official:!!official,spectator:true});
+  broadcastSpectators(r,{type:'START',mode:r.mode,mapId:r.mapId,
+    slotId:game.tanks[0].id,roundId,roomId:r.id,seed,rulesetCode,
+    ruleClass:r.ruleClass,official:!!official,spectator:true});
  }
  wss.on('connection',ws=>{
   if(shuttingDown){ws.close(1012,'server restarting');return;}
@@ -299,14 +315,14 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
       if(official)ws._xtankAccountUserId=m.accountUserId;
       send(ws,{type:'JOINED',roomId:target.id,playerId:null,token:null,host:false,spectator:true});
       send(ws,{type:'START',mode:target.mode,mapId:target.mapId,
-        slotId:target.game?.tanks[0]?.id||null,roundId:target.roundId,roomId:target.id,seed:target.seed,rulesetCode:target.rulesetCode,
+        slotId:target.game?.tanks[0]?.id||null,roundId:target.roundId,roomId:target.id,seed:target.seed,rulesetCode:target.rulesetCode,ruleClass:target.ruleClass,
         official:!!official,spectator:true});
     }else if(m.type==='CREATE'&&!p){
     if(rooms.size>=32)return send(ws,{type:'ERROR',code:'SERVER_FULL'});
     let code;do{code=crypto.randomBytes(3).toString('hex').toUpperCase();}while(rooms.has(code));
     const requestedName=typeof m.roomName==='string'?m.roomName.trim():'';
     if(requestedName.length>32||/[\u0000-\u001f\u007f]/.test(requestedName))return send(ws,{type:'ERROR',code:'INVALID_ROOM_NAME'});
-    r={id:code,name:requestedName||String(m.name||'Player').slice(0,20)+' 的房間',spectators:new Set(),slowModeMs:0,mode:['FFA','TDM','FLAG_HOLD'].includes(m.mode)?m.mode:'FFA',
+    r={id:code,name:requestedName||String(m.name||'Player').slice(0,20)+' 的房間',ruleClass:['growth','standard'].includes(m.ruleClass)?m.ruleClass:'growth',spectators:new Set(),slowModeMs:0,mode:['FFA','TDM','FLAG_HOLD'].includes(m.mode)?m.mode:'FFA',
       mapId:typeof m.mapId==='string'&&Object.hasOwn(MAPS,m.mapId)?m.mapId:'desk',
       phase:'lobby',people:new Map(),hostId:null,game:null,inputs:null,roundId:null,events:[],snapCount:0,created:Date.now()};
     if(typeof m.password==='string'&&m.password.length>0){
@@ -374,7 +390,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
      if(!r.hostId||!members(r).some(member=>member.id===r.hostId&&member.ws))r.hostId=p.id;
      send(ws,{type:'JOINED',roomId:r.id,playerId:p.id,token:p.token,host:p.id===r.hostId});
      lobby(r);
-     if(r.phase==='live')send(ws,{type:'START',mode:r.mode,mapId:r.mapId,slotId:p.slot,roundId:r.roundId,roomId:r.id,seed:r.seed,rulesetCode:r.rulesetCode,official:!!official,allowedWeapons:official?[...p.allowedWeapons]:null});
+     if(r.phase==='live')send(ws,{type:'START',mode:r.mode,mapId:r.mapId,slotId:p.slot,roundId:r.roundId,roomId:r.id,seed:r.seed,rulesetCode:r.rulesetCode,ruleClass:r.ruleClass,official:!!official,allowedWeapons:official?[...p.allowedWeapons]:null});
     }finally{
      old.resumePending=false;
      ws._xtankResumePending=false;
@@ -385,11 +401,12 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
     if(r.phase!=='lobby'||p.id!==r.hostId)return send(ws,{type:'ERROR',code:'ROOM_SETTINGS_DENIED'});
     if(typeof m.name!=='string'||m.name.trim().length<2||m.name.trim().length>32||/[\u0000-\u001f\u007f]/.test(m.name))
       return send(ws,{type:'ERROR',code:'INVALID_ROOM_NAME'});
-    if(!['FFA','TDM','FLAG_HOLD'].includes(m.mode)||!Object.hasOwn(MAPS,m.mapId))
+    if(!['FFA','TDM','FLAG_HOLD'].includes(m.mode)||!Object.hasOwn(MAPS,m.mapId)||
+       !['growth','standard'].includes(m.ruleClass))
       return send(ws,{type:'ERROR',code:'INVALID_ROOM_RULES'});
     const previousMode=r.mode;
-    const changed=r.mode!==m.mode||r.mapId!==m.mapId;
-    r.name=m.name.trim();r.mode=m.mode;r.mapId=m.mapId;
+    const changed=r.mode!==m.mode||r.mapId!==m.mapId||r.ruleClass!==m.ruleClass;
+    r.name=m.name.trim();r.mode=m.mode;r.mapId=m.mapId;r.ruleClass=m.ruleClass;
     if(changed){
       let nextTeam=0;
       for(const member of members(r)){
