@@ -111,6 +111,9 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
    // official match. Failure rolls back all previously reserved players.
    for(const p of prepared){
     if(!p.accountUserId)throw Error('PLAYER_NOT_AUTHENTICATED');
+    // Refetch from DB every round: last round's consumed/refunded stock
+    // cannot be reused as the next round's authoritative quantity.
+    p.itemsAvailable=await official.currentConsumables(p.accountUserId,p.tank);
     await official.reserve(roundId,p.accountUserId,p.itemsAvailable);
    }
    if(r.phase!=='allocating'||r.roundId!==roundId||
