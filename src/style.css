@@ -55,3 +55,13 @@
 #battleChatModeration{margin-top:8px;border-top:1px solid #ffffff55;padding-top:8px}
 #battleChatModeration select{width:100%;margin:4px 0;padding:5px;background:#143955;color:white}
 @media(max-width:670px){.xtank-battle-chat{bottom:70px;max-height:45vh;overflow:auto}}
+/* PRD S08: map previews use actual mode collision geometry, not a static mockup. */
+.map-preview{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:10px 0;padding:10px 12px;border:1px solid #425c76;border-radius:10px;color:#e5ecf9;font-size:13px}
+.map-preview canvas{display:block;width:240px;max-width:100%;height:auto;aspect-ratio:3/2;border:1px solid #839cb5;border-radius:7px;background:#182d45}
+#hudLatency:empty{display:none}
+#xtankRoomSettings{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:10px 0;padding:10px;border:1px solid #45667b;border-radius:8px}
+#xtankRoomSettings[hidden]{display:none}
+#xtankRoomSettings strong{grid-column:1/-1}
+#xtankRoomSettings label{font-size:12px;display:flex;flex-direction:column;gap:5px;color:#d5e5f2}
+#xtankRoomSettings input,#xtankRoomSettings select{width:100%;padding:7px;border:1px solid #70849a;border-radius:6px;background:#12283d;color:white}
+#xtankRoomSettings button{grid-column:1/-1}
