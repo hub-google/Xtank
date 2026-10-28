@@ -75,12 +75,20 @@ function createSettlementOutbox({directory,deliver,intervalMs=10000}){
  function stats(){
   const files=fs.readdirSync(directory)
    .filter(name=>/^[0-9a-f]{64}\.json$/.test(name));
-  let oldest=null;
+  let oldest=null,pendingFiles=0;
   for(const name of files){
-   const age=Math.max(0,Math.floor((Date.now()-fs.statSync(path.join(directory,name)).mtimeMs)/1000));
+   let info;
+   try{info=fs.statSync(path.join(directory,name));}
+   catch(error){
+    // A successfully delivered record may disappear while /health is reading.
+    if(error.code==='ENOENT')continue;
+    throw error;
+   }
+   pendingFiles++;
+   const age=Math.max(0,Math.floor((Date.now()-info.mtimeMs)/1000));
    oldest=oldest===null?age:Math.max(oldest,age);
   }
-  return {pendingFiles:files.length,oldestPendingSeconds:oldest,retryInProgress:running};
+  return {pendingFiles,oldestPendingSeconds:oldest,retryInProgress:running};
  }
  function hasPending(){return stats().pendingFiles>0;}
  const timer=setInterval(()=>{retry().catch(err=>console.error('X-TANK settlement outbox:',err.message))},intervalMs);
