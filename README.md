@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | P0 消耗品併發預留 | `xtank.match_escrow_sessions` + `xtank.match_item_escrow`，正式開局前由服務身分鎖定玩家庫存並先扣庫存，結算核對使用量、退回未用數量；預留失敗則取消開局，修復跨場同時消費可能造成的超支 | **仍待完整故障恢復與真人驗收**。在伺服器開局後永久崩潰且賽果 outbox 也遺失的情況，預留庫存需經稽核後由營運方解除，不能自動亂退造成複製道具。 |
 | P0 官方公網 WSS 常駐 | 現有 Docker、Compose、Render Blueprint、權威 WebSocket、JWT 驗證、持久化結算 outbox 可用於部署 | **尚未上線**：無已連接且可操作的 Render／雲端託管專案與可持久運行主機，沒有實際公開 WSS/TLS 端點；配置檔≠部署成功。 |
-| P1 跨伺服器 MMR＋預組隊伍 | 新 `xtank_party_queue_api`：建立／加入／退出隊伍、隊長移交與踢人、上限 4 人、分模式／區域永久化排位票券、以賽季 MMR 給票券標分、取消排隊；社群介面有實際操作入口。 | **未完成跨節點自動成局**：尚無在線伺服器註冊／心跳及跨伺服器分配器、配對成功後的公網房間路由。票券入庫不等於已成功配對。 |
+| P1 跨伺服器 MMR＋預組隊伍 | `xtank_party_queue_api` 支援 4 人組隊及永久 MMR 票券；新增 `xtank_matchmaker_host` 跨伺服器共用資料庫配對代理（每節點心跳、MMR 範圍漸放寬、團隊不拆分、原子選房碼、票券分配及入房身分校驗）；`xtank_match_ticket_status` 回傳 WSS 站點／房碼，客戶端可一鍵進房。已於資料庫 ROLLBACK 驗證 2 名玩家成功分配同房間。 | **程式已接上，但尚未正式跨網上線**：需要至少一台可被外網連入且設好 `XTANK_PUBLIC_WSS_URL` 的官方 WSS 實例。房主連線掉線後的跨節點遷移、重排隊與真正跨地區延遲驗收仍未完成。 |
 | P1 觀戰／賽事重播 | `SPECTATE` 只能觀察公開且進行中的房間，不占坦克席位且無法送出操作；`REPLAY_REQUEST` 將最近一局每 2 秒取樣的伺服器權威快照分批傳送，玩家端提供觀戰／重播按鈕與播放。 | **非永久回放庫**：目前每房記憶體保存最近一局、最多 300 影格（約 10 分鐘），重啟或房間清除後會消失；未完成 Supabase Storage 歷史重播上傳與跨裝置檢索。 |
 | P1 聊天／營運管理 | 房主可禁言／解除禁言、踢出房間、慢速聊天；已有玩家檢舉、管理員停權；新 `xtank_liveops_api` 提供管理員建立停用狀態活動、啟用／停用活動與上／下架商店商品，寫入稽核紀錄，後台已接入。 | **仍屬部分完成**：聊天室跨房間禁言與全域審核、內容版本回滾／灰度發布及更細營運權限尚未完整實作。 |
 | P2 更多原版特色、美術、音效 | 新增獨立原創的不同武器發射音型、合成爆炸噪音與 3D 地面脈衝特效；既有自製 3D 3 地圖、8 車、7 武器及 6 道具可繼續擴充。 | **無法合理宣告原版完整復刻**：歷史全部地圖／武器／操作素材尚未有可核實的完整規格與可再散布授權；不會擅自拿原作素材充作已完成。 |
@@ -16,9 +16,9 @@
 ### 本輪程式檔案與遷移
 
 - 核心對戰：`server/host.cjs`、`server/official.cjs`、`src/game.js`、`index.html`。
-- 玩家中心：`src/community.js`（組隊與 MMR 票券）、`src/admin.js`（營運活動與商店上架）。
+- 玩家中心：`src/community.js`（組隊／MMR 票券／配對進房）、`server/official.cjs` 與 `server/host.cjs`（資料庫跨節點配對工作者與身分驗證）、`src/admin.js`（營運活動與商店上架）。
 - 原創音效／特效：`src/audio.js`、`src/game.js`。
-- 資料庫：`supabase/migrations/20261028_xtank_authoritative_item_escrow.sql`、`20261028_xtank_party_and_mmr_tickets.sql`、`20261028_xtank_liveops_content_management.sql`、`20261028_xtank_liveops_name_disambiguation.sql`。
+- 資料庫：`supabase/migrations/20261028_xtank_authoritative_item_escrow.sql`、`20261028_xtank_party_and_mmr_tickets.sql`、`20261028_xtank_liveops_content_management.sql`、`20261028_xtank_liveops_name_disambiguation.sql`、`20261028_xtank_global_mmr_matchmaker_host.sql`、`20261028_xtank_matchmaker_uuid_room_code_fix.sql`。
 - 自動測試程式：`test/spectator-replay.test.cjs` 及既有正式對戰測試調整為新的預留 API。
 - **已進行確認**：新增 SQL 函式在 Game Supabase 已建立；服務身分才能呼叫預留／釋放，匿名角色不可呼叫；開局預留／釋放及組隊建立／退出曾使用 DB rollback 測試；主要修改的 JavaScript 已作語法解析。
 - **未聲稱通過**：最新完整 Node/Windows EXE CI、跨網實機真人遊戲、永久重播儲存、正式上線站點。
