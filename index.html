@@ -86,6 +86,14 @@
           <div id="publicRoomList" role="region" aria-label="公開房間列表" hidden></div>
           <div id="networkLobby" hidden>
             <p id="roomDetails"></p><p id="roomPeople"></p>
+            <div id="roomModeration" hidden>
+              <strong>房主聊天室管理</strong>
+              <label>選擇玩家 <select id="roomModerationTarget"></select></label>
+              <button id="roomMuteButton" class="secondary" type="button">禁言 5 分鐘</button>
+              <button id="roomUnmuteButton" class="secondary" type="button">解除禁言</button>
+              <button id="roomKickButton" class="secondary" type="button">移出房間</button>
+              <label>慢速模式 <select id="roomSlowMode"><option value="0">關閉</option><option value="2000">2 秒</option><option value="5000">5 秒</option><option value="10000">10 秒</option></select></label>
+            </div>
             <div id="roomChatMessages" role="log" aria-live="polite" aria-label="房間聊天" style="max-height:110px;overflow:auto;text-align:left;"></div>
             <form id="roomChatForm" style="display:flex;gap:8px;margin:8px 0">
               <input id="roomChatInput" maxlength="140" placeholder="房間聊天（140 字以內）" required autocomplete="off" style="min-width:0;flex:1">
