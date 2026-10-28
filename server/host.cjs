@@ -58,20 +58,6 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
  });
  const wss=new WebSocketServer({server:httpServer,maxPayload:4096,perMessageDeflate:false});
  const members=r=>[...r.people.values()];
- function sendReplay(ws,r){
-  const frames=r.replay||[];
-  if(!frames.length)return send(ws,{type:'ERROR',code:'REPLAY_NOT_AVAILABLE'});
-  send(ws,{type:'REPLAY_BEGIN',roundId:r.replayRoundId,frameCount:frames.length,sampleIntervalMs:2000});
-  let i=0;
-  const advance=()=>{
-   if(ws.readyState!==WebSocket.OPEN)return;
-   if(i>=frames.length){send(ws,{type:'REPLAY_END',roundId:r.replayRoundId});return;}
-   if(ws.bufferedAmount>256*1024){setTimeout(advance,50);return;}
-   send(ws,{type:'REPLAY_CHUNK',roundId:r.replayRoundId,frames:frames.slice(i,i+4)});
-   i+=4;setTimeout(advance,12);
-  };
-  advance();
- }
  const roomSummary=r=>({roomId:r.id,mode:r.mode,mapId:r.mapId,phase:r.phase,
    players:members(r).filter(p=>p.ws).length,capacity:8,passwordRequired:!!r.password});
  function passwordDigest(password,salt){return new Promise((resolve,reject)=>crypto.scrypt(password,salt,32,(error,key)=>error?reject(error):resolve(key)));}
@@ -148,7 +134,6 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
   if(testRoundSeconds!==null)game.time=testRoundSeconds;
   game.humanIds=new Set();
   r.game=game;r.inputs=new Map();r.phase='live';r.roundId=r.roundId||id();r.events=[];
-   r.replay=[];r.replayRoundId=r.roundId;r.replaySecond=-1;
    r.startedAt=Date.now();r.accountBySlot=new Map();r.persistStarted=false;r.officialMatchId=null;
   const slots=r.mode==='FFA'?[0,1,2,3,4,5,6,7]:[0,4,1,5,2,6,3,7];
   const chosen=new Set();
@@ -202,8 +187,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
    let m;try{m=JSON.parse(raw.toString());}catch{return send(ws,{type:'ERROR',code:'BAD_JSON'});}
    if(!m||typeof m.type!=='string')return;
    if(observedRoom){
-     if(m.type==='REPLAY_REQUEST')sendReplay(ws,observedRoom);
-     else if(m.type==='PING')send(ws,{type:'PONG',serverTime:Date.now()});
+     if(m.type==='PING')send(ws,{type:'PONG',serverTime:Date.now()});
      else send(ws,{type:'ERROR',code:'SPECTATOR_READ_ONLY'});
      return;
    }
@@ -224,14 +208,14 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
        }
     }
     if(m.type==='QUICK_MATCH'&&!p){
-      const candidates=[...rooms.values()].filter(room=>room.phase==='lobby'&&!room.password&&!room.matchmade&&members(room).length<8&&room.mode===m.mode
+      const candidates=[...rooms.values()].filter(room=>room.phase==='lobby'&&!room.password&&members(room).length<8&&room.mode===m.mode
         &&(m.mapId==null||room.mapId===m.mapId));
       candidates.sort((a,b)=>members(b).length-members(a).length);
       if(candidates.length){m.type='JOIN';m.roomId=candidates[0].id;}
       else m.type='CREATE';
     }
     if(m.type==='LIST_ROOMS'&&!p){
-      send(ws,{type:'ROOMS',rooms:[...rooms.values()].filter(room=>room.phase==='lobby'&&!room.password&&!room.matchmade).map(roomSummary).slice(0,32)});
+      send(ws,{type:'ROOMS',rooms:[...rooms.values()].filter(room=>room.phase==='lobby'&&!room.password).map(roomSummary).slice(0,32)});
     }else if(m.type==='SPECTATE'&&!p){
       const target=rooms.get(String(m.roomId||'').toUpperCase());
       if(!target||target.password||target.phase!=='live')return send(ws,{type:'ERROR',code:'SPECTATE_UNAVAILABLE'});
@@ -245,7 +229,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
     }else if(m.type==='CREATE'&&!p){
     if(rooms.size>=32)return send(ws,{type:'ERROR',code:'SERVER_FULL'});
     let code;do{code=crypto.randomBytes(3).toString('hex').toUpperCase();}while(rooms.has(code));
-    r={id:code,spectators:new Set(),replay:[],slowModeMs:0,mode:['FFA','TDM','FLAG_HOLD'].includes(m.mode)?m.mode:'FFA',
+    r={id:code,spectators:new Set(),slowModeMs:0,mode:['FFA','TDM','FLAG_HOLD'].includes(m.mode)?m.mode:'FFA',
       mapId:typeof m.mapId==='string'&&Object.hasOwn(MAPS,m.mapId)?m.mapId:'desk',
       phase:'lobby',people:new Map(),hostId:null,game:null,inputs:null,roundId:null,events:[],snapCount:0,created:Date.now()};
     if(typeof m.password==='string'&&m.password.length>0){
@@ -276,13 +260,6 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
     ws._xtankJoinPending=false;
     if(ws.readyState!==WebSocket.OPEN||p)return;
     if(!correct)return send(ws,{type:'ERROR',code:'BAD_ROOM_PASSWORD'});
-    if(found.matchmade){
-     if(!official||!m.accountUserId)return send(ws,{type:'ERROR',code:'OFFICIAL_LOGIN_REQUIRED'});
-     let allowed=false;
-     try{allowed=await official.validateMatchmadePlayer(found.id,m.accountUserId);}
-     catch(error){return send(ws,{type:'ERROR',code:'MATCHMAKER_LOOKUP_FAILED',message:error.message});}
-     if(!allowed)return send(ws,{type:'ERROR',code:'MATCH_TICKET_REQUIRED'});
-    }
     // Verify mutable room state again after asynchronous password checking.
     if(found.phase!=='lobby')return send(ws,{type:'ERROR',code:'ROUND_RUNNING'});
     if(found.people.size>=8)return send(ws,{type:'ERROR',code:'ROOM_FULL'});
@@ -380,8 +357,6 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
     if(!input)return send(ws,{type:'ERROR',code:'INVALID_INPUT'});
     if(official&&input.weapon&&!p.allowedWeapons?.has(input.weapon))return send(ws,{type:'ERROR',code:'WEAPON_NOT_OWNED'});
      p.seq=m.seq;r.inputs.set(p.slot,input);
-   }else if(m.type==='REPLAY_REQUEST'){
-    sendReplay(ws,r);
    }else if(m.type==='BACK_TO_LOBBY'&&r.phase==='finished'){
     // Any player may return the finished room to lobby. Do not discard an
     // official round until the durable settlement has been acknowledged.
@@ -458,11 +433,6 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
        tanks:g.tanks.map(x=>({...x,ammo:{...x.ammo}})),
        projectiles:g.projectiles.map(x=>({...x})),smokes:g.smokes.map(x=>({...x})),
        repairFields:g.repairFields.map(x=>({...x})),events:r.events.splice(0)};
-     const replaySecond=Math.floor(g.tick/2);
-     if(replaySecond!==r.replaySecond&&r.replay.length<300){
-       r.replaySecond=replaySecond;
-       r.replay.push({...snapshot,events:[],projectiles:snapshot.projectiles.slice(0,24)});
-     }
      broadcast(r,snapshot);broadcastSpectators(r,snapshot);
 
      if(r.phase==='finished')lobby(r);
@@ -481,31 +451,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
  try{await new Promise((ok,fail)=>{
   httpServer.once('error',fail);httpServer.listen(port,host,()=>{httpServer.off('error',fail);ok();});
  });}catch(err){clearInterval(ticking);clearInterval(heartbeat);wss.close();throw err;}
- let brokerServerId=null,brokerBusy=false;
- async function pollBroker(){
-  if(!official||!process.env.XTANK_PUBLIC_WSS_URL||brokerBusy)return;
-  brokerBusy=true;
-  try{
-   const result=await official.matchmakerHeartbeat(brokerServerId);
-   if(!result?.server_id)return;
-   brokerServerId=result.server_id;
-   for(const assignment of result.rooms||[]){
-    const code=String(assignment.room_code||'');
-    if(rooms.has(code)||rooms.size>=32||!['FFA','TDM','FLAG_HOLD'].includes(assignment.mode)
-      ||!Object.hasOwn(MAPS,assignment.map_id))continue;
-    rooms.set(code,{id:code,matchmade:true,spectators:new Set(),replay:[],slowModeMs:0,
-     mode:assignment.mode,mapId:assignment.map_id,phase:'lobby',
-     people:new Map(),hostId:null,game:null,inputs:null,roundId:null,events:[],snapCount:0,created:Date.now()});
-   }
-  }catch(error){console.error('X-TANK global matchmaking heartbeat:',error.message)}
-  finally{brokerBusy=false}
- }
- const brokerTimer=official&&process.env.XTANK_PUBLIC_WSS_URL?
-   setInterval(()=>{void pollBroker()},8000):null;
- brokerTimer?.unref?.();
- if(brokerTimer)void pollBroker();
  return {port:httpServer.address().port,rooms,close:async()=>{
-  if(brokerTimer)clearInterval(brokerTimer);
   official?.close?.();
   clearInterval(ticking);clearInterval(heartbeat);for(const ws of wss.clients)ws.terminate();
   await new Promise(ok=>wss.close(()=>httpServer.close(ok)));
