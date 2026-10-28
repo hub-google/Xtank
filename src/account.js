@@ -71,7 +71,23 @@ async function reload(){
  const nick=$('#playerName');if(nick&&nick.value==='Player')nick.value=dashboard.profile.display_name;
  catalog=await rpc('catalog');
  window.xtankAudio?.setMasterVolume?.(dashboard.settings?.master_volume??0.7);
+ document.dispatchEvent(new CustomEvent('xtank-player-preferences',{detail:{
+  graphics_quality:dashboard.settings?.graphics_quality,
+  keybindings:dashboard.settings?.keybindings
+ }}));
  draw();
+}
+async function savePreferences(patch){
+ if(!session?.access_token)return false;
+ await rpc('settings',patch);
+ if(dashboard?.settings)Object.assign(dashboard.settings,patch);
+ return true;
+}
+async function saveCloudBindings(bindings){
+ if(!session?.access_token)return false;
+ await rpcNamed('xtank_save_keybindings',{p_bindings:bindings});
+ if(dashboard?.settings)dashboard.settings.keybindings={...bindings};
+ return true;
 }
 function button(label,action,klass=''){
  return `<button type="button" data-action="${action}" class="${klass}">${label}</button>`;
@@ -155,6 +171,10 @@ function panel(){
  <label>玩家名稱<input name="name" minlength="3" maxlength="24" value="${escaped(dashboard.profile.display_name)}"></label>
  <label>主音量 (0–1)<input name="master_volume" type="number" min="0" max="1" step=".1" value="${dashboard.settings.master_volume}"></label>
  <label>滑鼠靈敏度<input name="mouse_sensitivity" type="number" min=".1" max="10" step=".1" value="${dashboard.settings.mouse_sensitivity}"></label>
+ <label>畫面品質<select name="graphics_quality">
+ ${[['low','省電'],['balanced','平衡'],['high','高畫質']].map(([value,title])=>`<option value="${value}" ${dashboard.settings.graphics_quality===value?'selected':''}>${title}</option>`).join('')}
+ </select></label>
+ <p>登入時自動載入雲端畫質與快捷鍵設定。修改鍵位後會保存到帳號；高對比仍為本機設定。</p>
  <button type="submit">儲存設定</button></form>
  <form id="xtankChangePassword"><label>新密碼（至少 8 字）<input name="password" type="password" required minlength="8" autocomplete="new-password"></label><button type="submit">變更密碼</button></form>`;
  return '';
@@ -199,7 +219,7 @@ function draw(){
  })});
  $('#xtankSettingsForm')?.addEventListener('submit',e=>{e.preventDefault();run(async()=>{
   const f=e.target;await rpc('rename',{name:f.elements.name.value});
-  await rpc('settings',{master_volume:Number(f.elements.master_volume.value),mouse_sensitivity:Number(f.elements.mouse_sensitivity.value)});
+  await rpc('settings',{master_volume:Number(f.elements.master_volume.value),mouse_sensitivity:Number(f.elements.mouse_sensitivity.value),graphics_quality:f.elements.graphics_quality.value});
   await reload();msg('設定已儲存');
  })});
  content.querySelectorAll('[data-action]').forEach(b=>b.addEventListener('click',()=>{const parts=b.dataset.action.split(':');
@@ -218,4 +238,4 @@ async function run(fn){
 }
 show();
 if(session?.access_token){getToken().then(()=>rpc('initialize',{})).then(reload).catch(()=>{saveSession(null);dashboard=null;catalog=null;draw();msg('登入狀態已過期，請重新登入。')})}
-window.xtankAccount={show,hide,refresh:reload,getAccessToken:getToken,getSignedInPlayerId:()=>dashboard?.profile?.player_id??null};
+window.xtankAccount={show,hide,refresh:reload,getAccessToken:getToken,savePreferences,saveCloudBindings,getSignedInPlayerId:()=>dashboard?.profile?.player_id??null};
