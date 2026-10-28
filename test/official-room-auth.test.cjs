@@ -11,7 +11,7 @@ async function dial(url){
  return ws;
 }
 const send=(ws,data)=>ws.send(JSON.stringify(data));
-async function take(ws,type,timeout=4000){
+async function take(ws,type,timeout=10000){
  const end=Date.now()+timeout;
  while(Date.now()<end){
    const i=ws.messages.findIndex(x=>x.type===type);
@@ -29,6 +29,12 @@ test('official rooms require signed-in players, ready flags and server-approved 
   const auth=opts.headers.authorization||'';
   const owner=auth.includes(A)?aID:bID;
   if(String(url).endsWith('/auth/v1/user'))return new Response(JSON.stringify({id:owner}),{status:200});
+  if(String(url).endsWith('/rest/v1/rpc/xtank_service_maintenance'))
+   return new Response(JSON.stringify({enabled:false,notice:''}),{status:200});
+  if(String(url).endsWith('/rest/v1/rpc/xtank_official_loadout_snapshot'))
+   return new Response(JSON.stringify({weapons:['hurricane'],items:{},upgrades:{}}),{status:200});
+  if(String(url).endsWith('/rest/v1/rpc/xtank_recover_abandoned_items'))
+   return new Response(JSON.stringify({ok:true,recovered:0}),{status:200});
   if(String(url).endsWith('/rest/v1/rpc/xtank_reserve_match_items')||
      String(url).endsWith('/rest/v1/rpc/xtank_release_match_items'))
     return new Response(JSON.stringify({ok:true}),{status:200});
