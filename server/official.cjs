@@ -58,6 +58,21 @@ function officialService({onSettlement}={}){
         body:{p_player_ids:playerIds}
       });
     },
+    async currentConsumables(playerId,tankId){
+      const current=await request('/rest/v1/rpc/xtank_official_item_snapshot',{
+        body:{p_player_id:playerId,p_tank_id:tankId}
+      });
+      const items=current?.items;
+      if(!items||typeof items!=='object'||Array.isArray(items))
+        throw Error('INVALID_LIVE_ITEM_SNAPSHOT');
+      const result={repair:0,speed_boost:0,shield_cell:0,radar_ping:0,smoke:0,team_repair:0};
+      for(const [itemId,quantity] of Object.entries(items)){
+       if(!Object.hasOwn(result,itemId)||!Number.isSafeInteger(quantity)||quantity<0||quantity>30)
+        throw Error('INVALID_LIVE_ITEM_SNAPSHOT');
+       result[itemId]=quantity;
+      }
+      return result;
+    },
     async reserve(roundId,playerId,items){
       // A server-only, durable escrow prevents inventory races across hosts.
       // Reserve before START, including an empty session for players without items.
