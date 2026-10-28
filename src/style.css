@@ -41,3 +41,17 @@
 .xtank-high-contrast .status,.xtank-high-contrast .controls,.xtank-high-contrast .net-status,.xtank-high-contrast label,.xtank-high-contrast .control-binding{color:#fff!important;text-shadow:0 0 3px #000}
 .xtank-high-contrast .meter{outline:2px solid white}
 @media(max-width:700px){.display-settings{flex-wrap:wrap}}
+
+
+/* Always-on official room chat, available during a live match without opening the menu. */
+.xtank-battle-chat[hidden],.xtank-battle-chat [hidden]{display:none!important}
+.xtank-battle-chat{position:fixed;right:14px;bottom:130px;z-index:80;width:min(355px,calc(100vw - 28px));background:#10283de8;color:#eff8ff;border:1px solid #80a5bb;border-radius:12px;box-shadow:0 8px 24px #0009;pointer-events:auto;padding:8px;font:13px system-ui,'Microsoft JhengHei',sans-serif}
+.xtank-battle-chat summary{cursor:pointer;font-weight:700;padding:5px}
+#battleChatLog{max-height:145px;overflow:auto;overflow-wrap:anywhere;padding:5px}
+#battleChatLog p{margin:4px 0;border-bottom:1px solid #ffffff18;padding:3px}
+#battleChatForm{display:flex;gap:6px}
+#battleChatInput{min-width:0;flex:1;padding:7px;border:1px solid #779db4;background:#102235;color:#fff;border-radius:6px}
+.xtank-battle-chat button{background:#e9c675;border:0;border-radius:6px;padding:6px;cursor:pointer}
+#battleChatModeration{margin-top:8px;border-top:1px solid #ffffff55;padding-top:8px}
+#battleChatModeration select{width:100%;margin:4px 0;padding:5px;background:#143955;color:white}
+@media(max-width:670px){.xtank-battle-chat{bottom:70px;max-height:45vh;overflow:auto}}
