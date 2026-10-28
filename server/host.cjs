@@ -436,7 +436,24 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
    if(r.phase==='live'&&r.game){
     const inputs=Object.fromEntries(r.inputs);
     try{const events=r.game.update(.05,{},inputs);r.events.push(...events);}
-    catch(err){console.error('X-TANK room tick:',err);r.phase='finished';}
+    catch(err){
+     console.error('X-TANK room tick:',err);
+     r.phase='aborting';
+     const abortedRound=r.roundId;
+     broadcast(r,{type:'ROUND_ABORTED',reason:'GAME_ENGINE_FAILED'});
+     for(const player of members(r)){player.ready=false;player.slot=null;}
+     r.refundTask=(async()=>{
+      if(official&&abortedRound){
+       try{await official.release(abortedRound);}
+       catch(error){console.error('Aborted round refund deferred to recovery',abortedRound,error.message);}
+      }
+      if(r.phase==='aborting'){
+       r.roundId=null;r.game=null;r.inputs=null;r.events=[];r.phase='lobby';
+       lobby(r);
+      }
+     })();
+     continue;
+    }
     for(const v of r.inputs.values()){v.item=0;v.ability=false;}
     r.snapCount++;
     if(r.game.ended){
@@ -528,13 +545,13 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
    const abandoned=[];
    for(const room of rooms.values()){
     if(!official||!room.roundId)continue;
-    if(room.phase==='allocating'||room.phase==='live'){
+    if(room.phase==='allocating'||room.phase==='live'||room.phase==='aborting'){
       abandoned.push(room);
       room.phase='closing';
     }else if(room.phase==='countdown')room.phase='closing';
    }
    // Finish pending atomic reservations before refunding.
-   await Promise.allSettled(abandoned.map(room=>room.allocationTask).filter(Boolean));
+   await Promise.allSettled(abandoned.flatMap(room=>[room.allocationTask,room.refundTask]).filter(Boolean));
    if(official){
     // Release independent rounds concurrently to meet cloud shutdown grace
     // periods. All DB releases are individually idempotent and transactional.
