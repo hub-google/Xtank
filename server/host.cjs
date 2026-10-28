@@ -177,7 +177,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
   if(wss.clients.size>maxConnections){ws.close(1013,'server full');return;}
   let p=null,r=null,observedRoom=null,received=0,windowStart=Date.now();
   const joinTimeout=setTimeout(()=>{
-   if(!p&&ws.readyState===WebSocket.OPEN)ws.close(1008,'join timeout');
+   if(!p&&!observedRoom&&ws.readyState===WebSocket.OPEN)ws.close(1008,'join timeout');
   },unjoinedTimeoutMs);
   joinTimeout.unref?.();
   ws.isAlive=true;ws.on('pong',()=>{ws.isAlive=true;});
