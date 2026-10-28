@@ -9,8 +9,9 @@
 <body>
   <main id="app">
     <div id="viewport" aria-label="3D 坦克戰場"></div>
+    <div id="startupWarning" role="alert" hidden></div>
     <header id="topbar">
-      <div class="brand"><span class="brand-mark">X</span> X-TANK <b>REVIVAL</b> <small>ALPHA 0.2.2 / 單機 + LAN 連線</small></div>
+      <div class="brand"><span class="brand-mark">X</span> X-TANK <b>REVIVAL</b> <small id="gameVersion">載入版本資訊中…</small></div>
       <div id="matchInfo" class="top-info">未開始</div><span id="cameraModeBadge" class="camera-view-name" aria-live="polite">俯瞰總覽 · C 切換視角</span>
     </header>
     <section id="hud" hidden>
