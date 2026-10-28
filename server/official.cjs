@@ -15,6 +15,19 @@ function officialService({onSettlement}={}){
     if(!r.ok)throw Error((v?.message||v?.error_description||'Supabase request failed')+' ('+r.status+')');
     return v;
   }
+  const chatCache=new Map();
+  async function chatMutedUntil(playerId){
+    if(!playerId)throw Error('CHAT_IDENTITY_MISSING');
+    const cached=chatCache.get(playerId);
+    if(cached&&Date.now()-cached.at<10000)return cached.until;
+    const policy=await request('/rest/v1/rpc/xtank_chat_restriction',
+      {body:{p_player_id:playerId}});
+    const until=policy.muted_until?Date.parse(policy.muted_until):0;
+    if(policy.muted_until&&!Number.isFinite(until))throw Error('INVALID_CHAT_POLICY');
+    chatCache.set(playerId,{at:Date.now(),until});
+    if(chatCache.size>512)chatCache.delete(chatCache.keys().next().value);
+    return until;
+  }
   const outbox=createSettlementOutbox({
     directory:process.env.XTANK_SETTLEMENT_DIR||path.join(process.cwd(),'xtank-settlement-outbox'),
     deliver:async payload=>{
@@ -37,6 +50,7 @@ function officialService({onSettlement}={}){
         body:{p_hours:72,p_limit:50}
       });
     },
+    chatMutedUntil,
     async reserve(roundId,playerId,items){
       // A server-only, durable escrow prevents inventory races across hosts.
       // Reserve before START, including an empty session for players without items.
