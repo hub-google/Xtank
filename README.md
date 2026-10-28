@@ -12,6 +12,7 @@
 - `20261028_xtank_prd_authoritative_round_loadout.sql`
 - `20261028_xtank_prd_admin_compensation.sql`
 - `20261028_xtank_prd_admin_item_compensation.sql`
+- `20261028_xtank_prd_admin_ruleset_status.sql`
 
 **與遊戲程式分開的外部條件**：
 1. 24 小時公網 WSS 主機／TLS 網域／正式服務端私密變數尚未實際配置；不能宣稱正式上線。
