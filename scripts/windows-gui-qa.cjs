@@ -31,7 +31,11 @@ async function launch(i){
  });
  executablePath=exe;exeSha256=require('node:crypto').createHash('sha256').update(fs.readFileSync(exe)).digest('hex');
  const log=fs.openSync(path.join(out,'client-'+i+'.log'),'w');
- const proc=spawn(exe,[`--remote-debugging-port=${9222+i}`,`--user-data-dir=${path.join(require('node:os').tmpdir(),'xtank-qa-profile-'+process.pid+'-'+i)}`,'--no-first-run','--disable-features=CalculateNativeWinOcclusion','--disable-renderer-backgrounding','--disable-background-timer-throttling','--disable-backgrounding-occluded-windows'],{stdio:['ignore',log,log]});
+ const args=[`--remote-debugging-port=${9222+i}`,`--user-data-dir=${path.join(require('node:os').tmpdir(),'xtank-qa-profile-'+process.pid+'-'+i)}`,'--no-first-run','--disable-features=CalculateNativeWinOcclusion','--disable-renderer-backgrounding','--disable-background-timer-throttling','--disable-backgrounding-occluded-windows'];
+ // Windows cloud runners often provide only a single software GPU context.
+ // Force an explicit ANGLE SwiftShader backend for the second native process.
+ if(i>0)args.push('--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader','--enable-logging=stderr');
+ const proc=spawn(exe,args,{stdio:['ignore',log,log],env:{...process.env,ELECTRON_ENABLE_LOGGING:i>0?'1':'0'}});
  clients.push({proc});let browser;
  for(let n=0;n<90;n++){try{browser=await chromium.connectOverCDP('http://127.0.0.1:'+(9222+i));break;}catch{await delay(1000);}}
  if(!browser){
@@ -44,7 +48,25 @@ async function launch(i){
  const c=clients[clients.length-1];Object.assign(c,{browser,context,p});
  p.on('pageerror',e=>fs.appendFileSync(path.join(out,'renderer-errors.log'),e.stack+'\n'));
  p.on('console',m=>{if(m.type()==='error')fs.appendFileSync(path.join(out,'console-errors.log'),m.text()+'\n');});
- await wait(p,()=>window.xtankDiagnostics?.().render.frame>1);if(await p.locator('#xtankAccountOverlay').count() && await p.isVisible('#xtankAccountOverlay')) await p.click('#xtankGuestContinue');try{execFileSync('powershell',['-NoProfile','-Command',`Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $b=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $im=New-Object System.Drawing.Bitmap($b.Width,$b.Height); $g=[System.Drawing.Graphics]::FromImage($im); $g.CopyFromScreen($b.Location,[System.Drawing.Point]::Empty,$b.Size); $im.Save('${path.join(out,'desktop-'+i+'.png').replace(/'/g,"''")}'); $g.Dispose(); $im.Dispose();`]);}catch(e){fs.writeFileSync(path.join(out,'desktop-capture-error.txt'),e.message);}return p;
+ try{await wait(p,()=>window.xtankDiagnostics?.().render.frame>1,25000);}
+ catch(error){
+  // Early renderer exceptions often precede CDP attachment; preserve enough
+  // DOM, location and canvas evidence to distinguish GPU failures from a
+  // missing package rather than returning a generic timeout.
+  let stateOnFailure={error:error.message,exe,client:i};
+  try{stateOnFailure={...stateOnFailure,...await bounded(p.evaluate(()=>({
+   url:location.href,readyState:document.readyState,
+   title:document.title,canvasCount:document.querySelectorAll('canvas').length,
+   viewportText:document.querySelector('#viewport')?.textContent?.slice(0,300),
+   diagnosticsType:typeof window.xtankDiagnostics,
+   startMenuPresent:!!document.querySelector('#startMenu'),
+   webglCanvasCount:[...document.querySelectorAll('canvas')].filter(x=>x.id!=='minimap').length
+  })),8000)}}catch(x){stateOnFailure.diagnosticsError=x.message}
+  fs.writeFileSync(path.join(out,'client-'+i+'-renderer-startup.json'),JSON.stringify(stateOnFailure,null,2));
+  await p.screenshot({path:path.join(out,'client-'+i+'-renderer-startup.png')}).catch(()=>{});
+  throw Error('Native renderer failed on client '+i+': '+JSON.stringify(stateOnFailure));
+ }
+ if(await p.locator('#xtankAccountOverlay').count() && await p.isVisible('#xtankAccountOverlay')) await p.click('#xtankGuestContinue');try{execFileSync('powershell',['-NoProfile','-Command',`Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $b=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $im=New-Object System.Drawing.Bitmap($b.Width,$b.Height); $g=[System.Drawing.Graphics]::FromImage($im); $g.CopyFromScreen($b.Location,[System.Drawing.Point]::Empty,$b.Size); $im.Save('${path.join(out,'desktop-'+i+'.png').replace(/'/g,"''")}'); $g.Dispose(); $im.Dispose();`]);}catch(e){fs.writeFileSync(path.join(out,'desktop-capture-error.txt'),e.message);}return p;
 }
 async function ensureGuestEntry(p){
  // The previous account test deliberately logs out. A visible auth overlay
