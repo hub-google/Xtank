@@ -19,7 +19,7 @@
 1. **跨裝置快捷鍵同步**：新增 `public.xtank_save_keybindings(jsonb)`，先核對登入身分、21 個動作名稱／按鍵合法性／重複鍵，再更新當前玩家的 `xtank.player_settings.keybindings`。 migration：[`20261028_xtank_player_keybindings_cloud_sync.sql`](supabase/migrations/20261028_xtank_player_keybindings_cloud_sync.sql)，已部署至既有 Game Supabase。
 2. **帳號設定同步**：`src/account.js` 登入及重整 Dashboard 時會將雲端鍵位／畫質送給遊戲；`src/game.js` 套用設定並將新的鍵位、畫質保存到玩家帳號。玩家設定表單新增雲端畫質選項；遊客仍可在本機設定。
 3. **配裝全套管理**：已存配裝可「載入編輯」武器和 F1–F6 道具；新 `xtank_manage_loadout` 支援切換使用中配置和刪除，刪除選用中配置時選擇後備方案，所有操作驗證身分與擁有權。資料庫 migration：[`20261028_xtank_manage_loadout.sql`](supabase/migrations/20261028_xtank_manage_loadout.sql)。
-4. **好友黑名單管理**：玩家中心可封鎖好友／邀請人，並在黑名單檢視、解除封鎖；`xtank_social_api('block')` 和新增的 `xtank_blocks_api('list'/'unblock')` 皆限定登入玩家自身的紀錄。 migration：[`20261028_xtank_friend_unblock_api.sql`](supabase/migrations/20261028_xtank_friend_unblock_api.sql)。
+4. **玩家搜尋及黑名單管理**：現在可以按玩家暱稱搜尋（最多 10 人，僅公開暱稱及玩家 ID）並直接發送好友邀請，不必先知道 UUID；玩家中心亦可封鎖好友／邀請人，及在黑名單檢視、解除封鎖。所有 RPC 限定認證玩家。 migration：[`20261028_xtank_friend_unblock_api.sql`](supabase/migrations/20261028_xtank_friend_unblock_api.sql)、[`20261028_xtank_find_players_by_name.sql`](supabase/migrations/20261028_xtank_find_players_by_name.sql)。
 5. **8 車互動式 3D 機庫**：新增 `src/garage-preview.js`，單一 WebGL 預覽畫布、旋轉拖曳、依車種數值呈現不同尺寸及色彩，離開機庫即釋放 GPU 資源；與主畫面選用坦克同步。此為自製造型而非原版素材。
 6. **登入／登出完整性**：首次登入雲端鍵位為空時，將遊客本機鍵位同步至帳號；登出時呼叫 Supabase Auth 本機 session 撤銷 API，再刪本機憑證。網路撤銷失敗會明確提示。
 
