@@ -1,0 +1,51 @@
+name: X-TANK 8-player authoritative server soak
+on:
+  push:
+    branches: [feat/8-player-load-soak-20261028]
+    paths:
+      - scripts/soak-wss.cjs
+      - .github/workflows/server-soak.yml
+  workflow_dispatch:
+    inputs:
+      duration_minutes:
+        description: 'Full eight-client sustained load (1–60 minutes); choose 30 for release acceptance'
+        type: number
+        required: true
+        default: 30
+permissions:
+  contents: read
+jobs:
+  soak:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - name: Real WebSocket eight-client load
+        shell: bash
+        env:
+          REQUEST_MINUTES: ${{ inputs.duration_minutes || '30' }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "push" ]; then
+            seconds=20
+          else
+            if ! [[ "$REQUEST_MINUTES" =~ ^[0-9]+$ ]] || [ "$REQUEST_MINUTES" -lt 1 ] || [ "$REQUEST_MINUTES" -gt 60 ]; then
+              echo "duration_minutes must be between 1 and 60" >&2
+              exit 1
+            fi
+            seconds=$(( REQUEST_MINUTES * 60 ))
+          fi
+          mkdir -p qa-evidence
+          XTANK_SOAK_SECONDS="$seconds" XTANK_SOAK_REPORT=qa-evidence/server-soak.json node scripts/soak-wss.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: XTANK-8Player-WebSocket-Soak
+          path: qa-evidence/server-soak.json
+          if-no-files-found: warn
+          retention-days: 30
