@@ -136,6 +136,11 @@ const sparks=[];
 let models=new Map(), bulletModels=new Map(), zoneModels=new Map(), flagGroup=null, match=null;
 let paused=true,resultShown=false,last=performance.now(),accum=0;
 let online=null,networkSlot=null,networkSeq=0,networkAccumulator=0,networkRoomId=null;
+let spectating=false,replaying=false,replayDispatch=false,replayFrames=[],replayTimer=null;
+function resetReplay(){
+ if(replayTimer!==null)clearInterval(replayTimer);
+ replayTimer=null;replaying=false;replayDispatch=false;replayFrames=[];
+}
 let networkReady=false;
 let officialWeaponAllowlist=null;
 let officialRound=false,roundSettlementSaved=false;
@@ -279,6 +284,7 @@ function clearModels(){
 }
 function start(){
   paused=true;qaEvents.length=0;
+  resetReplay();spectating=false;
   online?.close();online=null;networkSlot=null;
   try {
     clearModels();
@@ -295,6 +301,7 @@ function start(){
   } catch(e){console.error(e);el('matchInfo').textContent='啟動失敗：'+e.message;}
 }
 function goHome(){
+  resetReplay();spectating=false;
   online?.close();online=null;networkSlot=null;networkRoomId=null;officialWeaponAllowlist=null;
   officialRound=false;roundSettlementSaved=false;
   el('networkLobby').hidden=true;
@@ -377,6 +384,7 @@ function tick(dt){
   const dx=paused?0:Number(keyboard.has(bindings.right))-Number(keyboard.has(bindings.left));
   const dz=paused?0:Number(keyboard.has(bindings.backward))-Number(keyboard.has(bindings.forward));
   if(online){
+    if(spectating||replaying)return;
     networkAccumulator+=dt;
     if(networkAccumulator>=.05){
       networkAccumulator=0;
@@ -553,6 +561,30 @@ el('returnButton').addEventListener('click',goHome);
 
 function onlineStatus(message){el('networkStatus').textContent=message;if(match&&online&&message.includes('斷線'))el('statusText').textContent=message;}
 function onlineMessage(msg){
+  if(msg.type==='REPLAY_BEGIN'){
+   resetReplay();replayFrames=[];onlineStatus('正在下載本場重播：'+msg.frameCount+' 影格');
+   return;
+  }
+  if(msg.type==='REPLAY_CHUNK'){
+   if(Array.isArray(msg.frames))replayFrames.push(...msg.frames);
+   return;
+  }
+  if(msg.type==='REPLAY_END'){
+   if(!replayFrames.length){onlineStatus('沒有可播放的重播資料');return;}
+   const frames=[...replayFrames];resetReplay();replaying=true;
+   el('resultMenu').hidden=true;resultShown=false;el('hud').hidden=false;
+   onlineStatus('重播播放中（取樣每 2 秒、約 8 倍速）');
+   let index=0;
+   replayTimer=setInterval(()=>{
+    if(!online||!match||index>=frames.length){
+     resetReplay();if(match)showResult();return;
+    }
+    const frame={...frames[index++],ended:false,events:[]};
+    replayDispatch=true;onlineMessage(frame);replayDispatch=false;
+    if(index>=frames.length){resetReplay();showResult();}
+   },250);
+   return;
+  }
   if(msg.type==='COUNTDOWN'){
     onlineStatus('正式對戰倒數 '+msg.seconds+' 秒，所有玩家保持準備');
     return;
@@ -602,7 +634,9 @@ function onlineMessage(msg){
   return;
  }
  if(msg.type==='JOINED'){
-  networkRoomId=msg.roomId;networkReady=false;el('roomChatMessages').replaceChildren();onlineStatus('已加入房間 '+msg.roomId);
+  networkRoomId=msg.roomId;networkReady=false;spectating=msg.spectator===true;
+  el('roomChatMessages').replaceChildren();
+  onlineStatus((spectating?'正在觀戰 ':'已加入房間 ')+msg.roomId);
   el('roomCode').value=msg.roomId;el('networkLobby').hidden=false;return;
  }
  if(msg.type==='LOBBY'){
@@ -624,6 +658,7 @@ function onlineMessage(msg){
  }
  if(msg.type==='START'){
   officialRound=msg.official===true;roundSettlementSaved=false;
+  spectating=msg.spectator===true;
   qaEvents.length=0;
   networkSlot=msg.slotId;networkSeq=0;networkAccumulator=0;
    officialWeaponAllowlist=msg.official&&Array.isArray(msg.allowedWeapons)?new Set(msg.allowedWeapons):null;
@@ -638,10 +673,11 @@ function onlineMessage(msg){
   selectedWeapon=officialWeaponAllowlist?Math.max(0,weaponKeys.findIndex(k=>officialWeaponAllowlist.has(k))):0;
   el('startMenu').hidden=true;el('resultMenu').hidden=true;el('hud').hidden=false;
   el('pauseBadge').hidden=true;
-  onlineStatus('已進入真正的連線房間 '+msg.roomId);
+  onlineStatus(spectating?'觀戰模式（唯讀）：'+msg.roomId:'已進入真正的連線房間 '+msg.roomId);
   return;
  }
  if(msg.type==='SNAPSHOT'&&online&&networkSlot&&match){
+  if(replaying&&!replayDispatch)return;
   qaNetworkFrames.push(msg);if(qaNetworkFrames.length>10)qaNetworkFrames.shift();
   if(msg.mapId&&msg.mapId!==match.mapId&&MAPS[msg.mapId]){
     match.mapId=msg.mapId;match.obstacles=MAPS[msg.mapId].obstacles;
@@ -663,7 +699,7 @@ function onlineMessage(msg){
 }
 async function establishNetwork(action){
  const accessToken=window.xtankAccount?.getAccessToken?await window.xtankAccount.getAccessToken().catch(()=>null):null;
- online?.close();match=null;paused=true;networkSlot=null;
+ resetReplay();spectating=false;online?.close();match=null;paused=true;networkSlot=null;
  online=new OnlineConnection(onlineMessage,onlineStatus,()=>window.xtankAccount?.getAccessToken?.());
  try{
   online.open(el('serverAddress').value.trim(),{
@@ -674,6 +710,14 @@ async function establishNetwork(action){
  }catch(e){onlineStatus('設定錯誤：'+e.message);online=null;}
 }
 el('makeRoomButton').addEventListener('click',()=>establishNetwork('CREATE'));
+el('spectateRoomButton').addEventListener('click',()=>{
+ if(!el('roomCode').value.trim())return onlineStatus('請先輸入公開房間代碼');
+ establishNetwork('SPECTATE');
+});
+el('watchReplayButton').addEventListener('click',()=>{
+ if(!online)return onlineStatus('需留在該局的房間才能取得重播');
+ online.send({type:'REPLAY_REQUEST'});
+});
 el('joinRoomButton').addEventListener('click',()=>establishNetwork('JOIN'));
  el('listRoomsButton').addEventListener('click',()=>establishNetwork('LIST_ROOMS'));
  el('quickMatchButton').addEventListener('click',()=>establishNetwork('QUICK_MATCH'));
@@ -686,7 +730,7 @@ el('joinRoomButton').addEventListener('click',()=>establishNetwork('JOIN'));
  });
 el('startNetworkButton').addEventListener('click',()=>online?.send({type:'START'}));
 el('leaveNetworkButton').addEventListener('click',()=>{
- online?.close();online=null;networkSlot=null;el('networkLobby').hidden=true;
+ resetReplay();spectating=false;online?.close();online=null;networkSlot=null;el('networkLobby').hidden=true;
  onlineStatus('已離開多人房間');
 });
 el('hostServerButton').addEventListener('click',async()=>{
