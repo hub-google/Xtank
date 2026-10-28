@@ -119,7 +119,7 @@ jobs:
       - name: Extended native EXE QA
         run: node scripts/windows-gui-qa.cjs
         env:
-          XTANK_QA_FILTER: '^D-dual-client-bootstrap
+          XTANK_QA_FILTER: '^D-dual-client-bootstrap$'
           XTANK_QA_OUT: qa-evidence/extended
       - name: Close game processes
         if: always()
