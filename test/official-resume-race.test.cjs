@@ -33,6 +33,10 @@ test('simultaneous official RESUME attempts cannot both consume a live JWT-prote
    if(pending){started();await unblock}
    return new Response(JSON.stringify({id:uid}),{status:200});
   }
+  if(String(url).endsWith('/rest/v1/rpc/xtank_service_maintenance'))
+   return new Response(JSON.stringify({enabled:false,notice:''}),{status:200});
+  if(String(url).endsWith('/rest/v1/rpc/xtank_recover_abandoned_items'))
+   return new Response(JSON.stringify({ok:true,recovered:0}),{status:200});
   if(String(url).endsWith('/rest/v1/rpc/xtank_player_api'))return new Response(JSON.stringify({
    profile:{player_id:uid,display_name:'AuthorizedPlayer'},
    tanks:[{tank_id:'X'}],loadouts:[],slots:[],inventory:[],upgrades:[]
