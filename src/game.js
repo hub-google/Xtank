@@ -1,4 +1,5 @@
 import {battleAudio} from './audio.js';
+import {version as appVersion} from '../package.json';
 import {CAMERA_VIEWS,cameraPose} from './camera-presets.js';
 import {GRAPHICS_PRESETS,loadGraphicsQuality,saveGraphicsQuality,loadHighContrast,saveHighContrast} from './graphics-settings.js';
 import {DEFAULT_BINDINGS,ACTION_LABELS,isAllowedCode,assignBinding,normalizeBindings,loadBindings,saveBindings,displayCode} from './controls.js';
@@ -8,6 +9,7 @@ import {OnlineConnection} from './online.js';
 import {Game, TANKS, WEAPONS, OBSTACLES, MAPS, WIDTH, DEPTH} from './simulation.js';
 
 const el = id => document.getElementById(id);
+el('gameVersion').textContent='ALPHA '+appVersion+' / 單機・LAN・官方 WSS（需部署）';
 function drawMapPreview(){
  const canvas=el('mapPreview'),id=el('mapSelect')?.value||'desk';
  if(!canvas||!MAPS[id])return;
@@ -41,7 +43,13 @@ scene.fog = new THREE.Fog(0x12253e, 50, 98);
 const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, .08, 170);
 camera.position.set(24, 24, 42);
 camera.lookAt(24, 0, 16);
-const renderer = new THREE.WebGLRenderer({antialias:false, powerPreference:'high-performance'});
+let renderer;
+try{renderer=new THREE.WebGLRenderer({antialias:false,powerPreference:'high-performance'});}
+catch(error){
+ const warning=el('startupWarning');warning.hidden=false;
+ warning.textContent='此裝置無法啟動 3D 圖形引擎。請更新顯示驅動程式、開啟硬體加速，或改用支援 WebGL 的環境。原因：'+error.message;
+ throw error;
+}
 const gpuContext=renderer.getContext(),gpuDebug=gpuContext.getExtension('WEBGL_debug_renderer_info');
 const gpuRenderer=gpuDebug?gpuContext.getParameter(gpuDebug.UNMASKED_RENDERER_WEBGL):'unknown';
 const softwareGPU=/swiftshader|llvmpipe|software|microsoft basic|warp/i.test(gpuRenderer);
