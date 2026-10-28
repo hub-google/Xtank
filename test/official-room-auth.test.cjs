@@ -29,6 +29,9 @@ test('official rooms require signed-in players, ready flags and server-approved 
   const auth=opts.headers.authorization||'';
   const owner=auth.includes(A)?aID:bID;
   if(String(url).endsWith('/auth/v1/user'))return new Response(JSON.stringify({id:owner}),{status:200});
+  if(String(url).endsWith('/rest/v1/rpc/xtank_reserve_match_items')||
+     String(url).endsWith('/rest/v1/rpc/xtank_release_match_items'))
+    return new Response(JSON.stringify({ok:true}),{status:200});
   if(String(url).endsWith('/rest/v1/rpc/xtank_player_api'))return new Response(JSON.stringify({
     profile:{player_id:owner,display_name:owner===aID?'QA-A':'QA-B'},
     tanks:[{tank_id:'X'}],loadouts:[],slots:[]
