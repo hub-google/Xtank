@@ -31,6 +31,17 @@ if(menu){
   if(!res.ok)throw Error(data.message||data.error||'HTTP '+res.status);
   return data;
  }
+ async function maintenance(action,enabled=null,notice=''){
+  const token=await window.xtankAccount?.getAccessToken?.();
+  if(!token)throw Error('請先登入管理員');
+  const response=await fetch(URL.replace('xtank_admin_api','xtank_service_maintenance'),{
+   method:'POST',headers:{apikey:KEY,Authorization:'Bearer '+token,'Content-Type':'application/json'},
+   body:JSON.stringify({p_action:action,p_enabled:enabled,p_notice:notice})
+  });
+  const result=await response.json().catch(()=>({}));
+  if(!response.ok)throw Error(result.message||result.error||'HTTP '+response.status);
+  return result;
+ }
  async function chatAdmin(action,payload={}){
   const token=await window.xtankAccount?.getAccessToken?.();
   if(!token)throw Error('請先登入管理員');
@@ -68,9 +79,15 @@ if(menu){
   catch(e){status('操作失敗：'+e.message)}
  }
  async function refresh(){
-  const [d,ops,chat,audit]=await Promise.all([api('overview'),liveops('overview'),chatAdmin('list'),liveEditor('audit')]);
+  const [d,ops,chat,audit,service]=await Promise.all([api('overview'),liveops('overview'),chatAdmin('list'),liveEditor('audit'),maintenance('status')]);
   $('#xtankAdminMain').innerHTML=
     '<p>玩家總數：'+d.total_players+'　正式場次：'+d.total_official_matches+'　未處理檢舉：'+d.unresolved_reports+'</p>'+
+    '<h2>官方伺服器維護</h2><p>目前：'+(service.enabled?'維護中（禁止新玩家加入與開新對局）':'正常服務')+
+    '。既有對局仍會繼續結算，不會直接取消玩家道具。</p>'+
+    '<form id="xtankMaintenanceForm"><label>服務狀態<select name="enabled"><option value="false">正常服務</option>'+
+    '<option value="true" '+(service.enabled?'selected':'')+'>啟用維護模式</option></select></label>'+
+    '<label>公告（最多 200 字）<input name="notice" maxlength="200" value="'+esc(service.notice)+'"></label>'+
+    '<button type="submit">更新官方服務狀態</button></form>'+
     '<h2>玩家檢舉</h2>'+(d.reports||[]).map(r=>'<article><strong>'+esc(r.reason)+'</strong><p>'+esc(r.details)+'／被檢舉：'+esc(r.reported_id)+'</p><small>'+esc(r.status)+'　'+esc(r.created_at)+'</small>　'+(r.status==='open'?'<button data-report="'+esc(r.report_id)+'">結案</button>':'')+'</article>').join('')+
     '<h2>停權名單</h2>'+(d.bans||[]).map(b=>'<article>玩家：'+esc(b.player_id)+'　'+esc(b.reason)+'　'+(b.revoked_at?'已解除':'仍在停權')+'</article>').join('')+
     '<h2>玩家處置</h2><form id="xtankModerationForm"><label>玩家 UUID<input name="player_id" required></label><label>操作<select name="action"><option value="suspend">停權</option><option value="unsuspend">解除停權</option></select></label><label>原因<input name="reason" minlength="5" maxlength="300" required></label><button type="submit">確認處置</button></form>'+
@@ -142,6 +159,12 @@ if(menu){
    e.preventDefault();const a=editOffer.elements;
    run(()=>liveEditor('edit_offer',{offer_id:a.offer_id.value,
      unit_price:Number(a.unit_price.value),stock_limit:a.stock_limit.value||null}));
+  };
+  $('#xtankMaintenanceForm').onsubmit=e=>{
+   e.preventDefault();
+   const form=e.target;
+   if(!confirm('確定變更官方服務狀態？這會影響新玩家加入或開局。'))return;
+   run(()=>maintenance('set',form.elements.enabled.value==='true',form.elements.notice.value.trim()));
   };
   $('#xtankModerationForm').onsubmit=e=>{e.preventDefault();const f=e.target;run(()=>api(f.elements.action.value,{player_id:f.elements.player_id.value,reason:f.elements.reason.value}))};
   $('#xtankAdminMain').querySelectorAll('[data-report]').forEach(b=>b.onclick=()=>run(()=>api('resolve_report',{report_id:b.dataset.report})));
