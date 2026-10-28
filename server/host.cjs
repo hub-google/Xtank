@@ -48,10 +48,14 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
  const httpServer=http.createServer((req,res)=>{
   if(req.url==='/health'){
     const states=[...rooms.values()];
+    const settlementQueue=official?.outboxStats?.()||null;
     res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'});
     res.end(JSON.stringify({ok:true,rooms:rooms.size,connectedClients:[...wss.clients].filter(ws=>ws.readyState===WebSocket.OPEN).length,
       liveMatches:states.filter(room=>room.phase==='live').length,
       pendingSettlements:official?states.filter(room=>room.phase==='finished'&&!room.officialMatchId).length:0,
+      pendingSettlementFiles:settlementQueue?.pendingFiles||0,
+      oldestPendingSettlementSeconds:settlementQueue?.oldestPendingSeconds??null,
+      refundPendingRooms:states.filter(room=>room.phase==='aborting'||room.phase==='closing').length,
       uptimeSeconds:Math.floor(process.uptime()),rssMb:Math.round(process.memoryUsage().rss/1048576)}));
    }
   else{res.writeHead(404);res.end();}
