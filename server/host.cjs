@@ -536,10 +536,12 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
    // Finish pending atomic reservations before refunding.
    await Promise.allSettled(abandoned.map(room=>room.allocationTask).filter(Boolean));
    if(official){
-    for(const room of abandoned){
-     try{await official.release(room.roundId);}
-     catch(error){console.error('Item refund deferred to abandoned-round recovery:',room.roundId,error.message);}
-    }
+    // Release independent rounds concurrently to meet cloud shutdown grace
+    // periods. All DB releases are individually idempotent and transactional.
+    await Promise.allSettled(abandoned.map(async room=>{
+      try{await official.release(room.roundId);}
+      catch(error){console.error('Item refund deferred to abandoned-round recovery:',room.roundId,error.message);}
+    }));
    }
    official?.close?.();
    for(const socket of wss.clients)socket.terminate();
