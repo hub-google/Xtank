@@ -51,10 +51,14 @@ async function ensureGuestEntry(p){
  // intercepts clicks on subsequent scenarios; explicitly choose guest mode.
  const overlay=p.locator('#xtankAccountOverlay');
  if(!await overlay.count()||!await overlay.isVisible())return;
- const guest=p.locator('#xtankGuestContinue');
- await guest.waitFor({state:'visible',timeout:10000});
- await guest.click();
- await overlay.waitFor({state:'hidden',timeout:10000});
+ if(await p.locator('#xtankGuestContinue').isVisible()){
+  await p.locator('#xtankGuestContinue').click();
+ }else{
+  // A failed prior account test may leave a signed-in account panel open.
+  // Close the panel without silently altering authentication state.
+  await p.locator('#xtankAccountClose').click();
+ }
+ await overlay.waitFor({state:'hidden',timeout:20000});
 }
 async function home(p){
  await ensureGuestEntry(p);
@@ -139,7 +143,14 @@ async function testMockedNativeAccount(p){
   await p.click('[data-action="tab:garage"]');
   assert.equal(await p.locator('.xtank-card-grid article').count(),8);
   await p.click('[data-action="tab:shop"]');
-  await p.click('[data-action="buy:'+offer+'"]');
+  // The production shop now requires explicit human confirmation.
+  // Accept the real native confirmation once, rather than bypassing
+  // the purchase control or expecting payment without consent.
+  const confirmation=p.waitForEvent('dialog',{timeout:10000});
+  await p.click('[data-action="buy:'+offer+'"]',{noWaitAfter:true});
+  const dialog=await confirmation;
+  assert.match(dialog.message(),/確定購買/);
+  await dialog.accept();
   await p.waitForFunction(()=>document.querySelector('#xtankAccountStatus')?.textContent?.includes('購買成功'));
   assert.equal(wallet.balance,900);
   await p.click('[data-action="tab:inventory"]');
