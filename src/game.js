@@ -742,6 +742,17 @@ async function establishNetwork(action){
   });
  }catch(e){onlineStatus('設定錯誤：'+e.message);online=null;}
 }
+window.xtankJoinMatchedRoom=(endpoint,roomCode,mode)=>{
+ if(typeof endpoint!=='string'||!/^wss:\/\/[^\s]+$/.test(endpoint)
+    ||typeof roomCode!=='string'||!/^[A-Z0-9]{6}$/.test(roomCode))
+  throw Error('無效的官方配對地址或房碼');
+ if(!['FFA','TDM','FLAG_HOLD'].includes(mode))throw Error('無效的配對模式');
+ el('serverAddress').value=endpoint;
+ el('roomCode').value=roomCode;el('modeSelect').value=mode;
+ el('roomPassword').value='';
+ const social=document.getElementById('xtankCommunityOverlay');if(social)social.hidden=true;
+ void establishNetwork('JOIN');
+};
 el('makeRoomButton').addEventListener('click',()=>establishNetwork('CREATE'));
 el('spectateRoomButton').addEventListener('click',()=>{
  if(!el('roomCode').value.trim())return onlineStatus('請先輸入公開房間代碼');
