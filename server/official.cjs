@@ -38,20 +38,6 @@ function officialService({onSettlement}={}){
     async release(roundId){
       return request('/rest/v1/rpc/xtank_release_match_items',{body:{p_round_id:roundId}});
     },
-    async matchmakerHeartbeat(serverId){
-      const endpoint=process.env.XTANK_PUBLIC_WSS_URL;
-      if(!endpoint)return null;
-      return request('/rest/v1/rpc/xtank_matchmaker_host',{
-       body:{p_action:'heartbeat',p_server_id:serverId||null,
-        p_endpoint:endpoint,p_region:process.env.XTANK_REGION||'asia-east'}
-      });
-    },
-    async validateMatchmadePlayer(roomCode,playerId){
-      const data=await request('/rest/v1/rpc/xtank_matchmaker_host',{
-       body:{p_action:'validate',p_room_code:roomCode,p_player_id:playerId}
-      });
-      return data.allowed===true;
-    },
     async authenticate(token,tankId){
       if(typeof token!=='string'||token.length<80)throw Error('LOGIN_REQUIRED');
       const u=await request('/auth/v1/user',{token,method:'GET'});
