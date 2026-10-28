@@ -85,7 +85,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
  }
  function broadcast(r,msg){for(const p of members(r))send(p.ws,msg);}
  function broadcastSpectators(r,msg){for(const ws of r.spectators||[])send(ws,msg);}
- function lobby(r){broadcast(r,{type:'LOBBY',roomId:r.id,mode:r.mode,mapId:r.mapId,phase:r.phase,hostId:r.hostId,
+ function lobby(r){broadcast(r,{type:'LOBBY',roomId:r.id,mode:r.mode,mapId:r.mapId,phase:r.phase,hostId:r.hostId,slowModeMs:r.slowModeMs||0,
   people:members(r).map(p=>({id:p.id,name:p.name,tank:p.tank,team:p.team,connected:!!p.ws,ready:!!p.ready,host:p.id===r.hostId}))});}
  function selectTeam(r,requested){
    if(r.mode==='FFA')return 0;
@@ -245,7 +245,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
     }else if(m.type==='CREATE'&&!p){
     if(rooms.size>=32)return send(ws,{type:'ERROR',code:'SERVER_FULL'});
     let code;do{code=crypto.randomBytes(3).toString('hex').toUpperCase();}while(rooms.has(code));
-    r={id:code,spectators:new Set(),replay:[],mode:['FFA','TDM','FLAG_HOLD'].includes(m.mode)?m.mode:'FFA',
+    r={id:code,spectators:new Set(),replay:[],slowModeMs:0,mode:['FFA','TDM','FLAG_HOLD'].includes(m.mode)?m.mode:'FFA',
       mapId:typeof m.mapId==='string'&&Object.hasOwn(MAPS,m.mapId)?m.mapId:'desk',
       phase:'lobby',people:new Map(),hostId:null,game:null,inputs:null,roundId:null,events:[],snapCount:0,created:Date.now()};
     if(typeof m.password==='string'&&m.password.length>0){
@@ -330,15 +330,42 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
       if(teamSize>=4)return send(ws,{type:'ERROR',code:'TEAM_FULL'});
       p.team=m.team;p.ready=false;lobby(r);
     }
-    else if(m.type==='CHAT'&&r.phase==='lobby'){
+    else if(m.type==='CHAT'&&(r.phase==='lobby'||r.phase==='live')){
+      if((p.mutedUntil||0)>Date.now())
+        return send(ws,{type:'ERROR',code:'ROOM_CHAT_MUTED',until:p.mutedUntil});
       const text=typeof m.text==='string'?m.text.trim():'';
       if(text.length<1||text.length>140||/[\u0000-\u001f\u007f]/.test(text))
         return send(ws,{type:'ERROR',code:'INVALID_CHAT'});
-      if(Date.now()-(p.lastChatAt||0)<950)
+      if(Date.now()-(p.lastChatAt||0)<Math.max(950,r.slowModeMs||0))
         return send(ws,{type:'ERROR',code:'CHAT_RATE_LIMIT'});
       p.lastChatAt=Date.now();
       broadcast(r,{type:'ROOM_CHAT',playerId:p.id,name:p.name,text,at:Date.now()});
     }
+   else if(m.type==='MODERATE'&&(r.phase==='lobby'||r.phase==='live')){
+     if(p.id!==r.hostId)return send(ws,{type:'ERROR',code:'HOST_ONLY'});
+     if(m.action==='slowmode'){
+       if(![0,2000,5000,10000].includes(m.milliseconds))return send(ws,{type:'ERROR',code:'INVALID_CHAT_SLOWMODE'});
+       r.slowModeMs=m.milliseconds;
+       lobby(r);
+       return;
+     }
+     const target=members(r).find(member=>member.id===m.targetId&&member.id!==p.id);
+     if(!target)return send(ws,{type:'ERROR',code:'PLAYER_NOT_FOUND'});
+     if(m.action==='mute'){
+       if(![0,60,300,900].includes(m.seconds))return send(ws,{type:'ERROR',code:'INVALID_MUTE_LENGTH'});
+       target.mutedUntil=m.seconds?Date.now()+m.seconds*1000:0;
+       send(target.ws,{type:'ROOM_MODERATION',action:'mute',until:target.mutedUntil});
+       return;
+     }
+     if(m.action==='kick'){
+       send(target.ws,{type:'ROOM_MODERATION',action:'kick'});
+       target.ws?.close(1008,'removed by room host');
+       target.ws=null;target.lastSeen=Date.now()-31000;
+       if(r.phase==='countdown')cancelCountdown(r);
+       lobby(r);return;
+     }
+     send(ws,{type:'ERROR',code:'INVALID_MODERATION'});
+   }
    else if(m.type==='INPUT'&&r.phase==='live'&&p.slot){
     if(!Number.isSafeInteger(m.seq)||m.seq<=p.seq)return;
     const input=sanitizeInput(m);
