@@ -120,6 +120,9 @@ function officialService({onSettlement}={}){
       if(typeof token!=='string'||token.length<80)throw Error('LOGIN_REQUIRED');
       const u=await request('/auth/v1/user',{token,method:'GET'});
       if(!u.id)throw Error('INVALID_LOGIN');
+      // Anonymous guests may keep temporary progress, but official ranked
+      // rewards require a verified, recoverable permanent identity.
+      if(u.is_anonymous===true)throw Error('UPGRADE_ACCOUNT_REQUIRED');
       const dash=await request('/rest/v1/rpc/xtank_player_api',{token,body:{p_action:'dashboard',p_payload:{}}});
       if(dash.profile?.player_id!==u.id)throw Error('UNAUTHORIZED_PLAYER');
       if(!dash.tanks?.some(t=>t.tank_id===tankId))throw Error('TANK_NOT_OWNED');
