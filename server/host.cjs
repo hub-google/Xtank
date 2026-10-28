@@ -39,6 +39,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
   engine=await import(pathToFileURL(path.join(__dirname,'../src/simulation.js')).href);}
  const {Game,TANKS,MAPS}=engine;
  const rooms=new Map();
+ let shuttingDown=false;
  const official=officialService({onSettlement:(payload,saved)=>{
    const room=[...rooms.values()].find(r=>r.roundId===payload.round_id);
    if(!room||room.officialMatchId||!saved?.match_id)return;
@@ -48,9 +49,15 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
  const httpServer=http.createServer((req,res)=>{
   if(req.url==='/health'){
     const states=[...rooms.values()];
-    const settlementQueue=official?.outboxStats?.()||null;
-    res.writeHead(200,{'content-type':'application/json','cache-control':'no-store'});
-    res.end(JSON.stringify({ok:true,rooms:rooms.size,connectedClients:[...wss.clients].filter(ws=>ws.readyState===WebSocket.OPEN).length,
+    let settlementQueue=null,storageHealthy=true;
+    try{settlementQueue=official?.outboxStats?.()||null;}
+    catch(error){
+     storageHealthy=false;
+     console.error('Official settlement storage unavailable:',error.message);
+    }
+    const ready=storageHealthy&&!shuttingDown;
+    res.writeHead(ready?200:503,{'content-type':'application/json','cache-control':'no-store'});
+    res.end(JSON.stringify({ok:ready,rooms:rooms.size,connectedClients:[...wss.clients].filter(ws=>ws.readyState===WebSocket.OPEN).length,
       liveMatches:states.filter(room=>room.phase==='live').length,
       pendingSettlements:official?states.filter(room=>room.phase==='finished'&&!room.officialMatchId).length:0,
       pendingSettlementFiles:settlementQueue?.pendingFiles||0,
@@ -219,6 +226,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
    roundId:r.roundId,roomId:r.id,official:!!official,spectator:true});
  }
  wss.on('connection',ws=>{
+  if(shuttingDown){ws.close(1012,'server restarting');return;}
   // Limit anonymous sockets before they can use game / authentication state.
   if(wss.clients.size>maxConnections){ws.close(1013,'server full');return;}
   let p=null,r=null,observedRoom=null,received=0,windowStart=Date.now();
@@ -593,6 +601,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
  let shutdownPromise=null;
  async function shutdown(){
   if(shutdownPromise)return shutdownPromise;
+  shuttingDown=true;
   shutdownPromise=(async()=>{
    clearInterval(ticking);
    clearInterval(heartbeat);
