@@ -1,8 +1,7 @@
 name: Windows EXE build and 72-case GUI QA
+# Development commits do not build or test Windows packages automatically.
+# Run manually only when explicitly requested.
 on:
-  push:
-    branches: [main, 'release-validation/**']
-    paths: ['src/**', 'server/**', 'scripts/**', 'test/**', 'electron/**', 'index.html', 'package.json', 'vite.config.js', 'Dockerfile', '.dockerignore', 'compose.official.example.yml', '.github/workflows/windows-exe.yml']
   workflow_dispatch:
     inputs:
       qa_filter:
