@@ -585,6 +585,11 @@ function onlineMessage(msg){
    },250);
    return;
   }
+  if(msg.type==='ROOM_MODERATION'){
+   onlineStatus(msg.action==='kick'?'你已被房主移出房間':'已被房主禁言至 '+new Date(msg.until).toLocaleTimeString('zh-TW'));
+   if(msg.action==='kick')goHome();
+   return;
+  }
   if(msg.type==='COUNTDOWN'){
     onlineStatus('正式對戰倒數 '+msg.seconds+' 秒，所有玩家保持準備');
     return;
@@ -644,6 +649,19 @@ function onlineMessage(msg){
   el('roomDetails').textContent='房間 '+msg.roomId+' · '+msg.mode+' · '+(MAPS[msg.mapId]?.name||'地圖')+' · '+msg.phase;
   el('roomPeople').textContent=msg.people.map(p=>(p.host?'房主 ':'')+p.name+(msg.mode==='FFA'?'':p.team===0?' [紅隊]':' [藍隊]')+(p.ready?' ✓已準備':' · 未準備')+(p.connected?' ●':' ○')).join('、');
   const me=msg.people.find(player=>player.id===online?.playerId);
+  const moderator=el('roomModeration');
+  moderator.hidden=!me?.host||spectating||msg.phase!=='lobby';
+  if(!moderator.hidden){
+   const target=el('roomModerationTarget');
+   const current=target.value;
+   target.replaceChildren();
+   for(const person of msg.people.filter(person=>person.id!==me.id)){
+     const option=document.createElement('option');
+     option.value=person.id;option.textContent=person.name;target.append(option);
+   }
+   if([...target.options].some(option=>option.value===current))target.value=current;
+   el('roomSlowMode').value=String(msg.slowModeMs||0);
+  }
   el('teamChoose').hidden=msg.mode==='FFA'||msg.phase!=='lobby';
   if(me&&msg.mode!=='FFA')el('teamChoose').value=String(me.team);
    networkReady=!!msg.people.find(p=>p.id===online?.playerId)?.ready;
@@ -722,6 +740,12 @@ el('joinRoomButton').addEventListener('click',()=>establishNetwork('JOIN'));
  el('listRoomsButton').addEventListener('click',()=>establishNetwork('LIST_ROOMS'));
  el('quickMatchButton').addEventListener('click',()=>establishNetwork('QUICK_MATCH'));
  el('readyNetworkButton').addEventListener('click',()=>online?.send({type:'READY',ready:!networkReady}));
+el('roomMuteButton').addEventListener('click',()=>online?.send({type:'MODERATE',action:'mute',seconds:300,targetId:el('roomModerationTarget').value}));
+el('roomUnmuteButton').addEventListener('click',()=>online?.send({type:'MODERATE',action:'mute',seconds:0,targetId:el('roomModerationTarget').value}));
+el('roomKickButton').addEventListener('click',()=>{
+ if(confirm('確定將此玩家移出房間？'))online?.send({type:'MODERATE',action:'kick',targetId:el('roomModerationTarget').value});
+});
+el('roomSlowMode').addEventListener('change',()=>online?.send({type:'MODERATE',action:'slowmode',milliseconds:Number(el('roomSlowMode').value)}));
  el('teamChoose').addEventListener('change',()=>online?.send({type:'TEAM',team:Number(el('teamChoose').value)}));
  el('roomChatForm').addEventListener('submit',event=>{
    event.preventDefault();
