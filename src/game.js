@@ -575,6 +575,11 @@ el('returnButton').addEventListener('click',goHome);
 function onlineStatus(message){el('networkStatus').textContent=message;if(match&&online&&message.includes('斷線'))el('statusText').textContent=message;}
 function onlineMessage(msg){
   if(msg.type==='ROOM_MODERATION'){
+   if(msg.action==='suspend'){
+    goHome();
+    onlineStatus('帳號已被管理員停權，請透過客服申訴');
+    return;
+   }
    onlineStatus(msg.action==='kick'?'你已被房主移出房間':'已被房主禁言至 '+new Date(msg.until).toLocaleTimeString('zh-TW'));
    if(msg.action==='kick')goHome();
    return;
