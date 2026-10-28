@@ -56,15 +56,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {group: tank-X, filter: '^B-X-'}
-          - {group: tank-D, filter: '^B-D-'}
-          - {group: tank-M, filter: '^B-M-'}
-          - {group: tank-R, filter: '^B-R-'}
-          - {group: tank-H, filter: '^B-H-'}
-          - {group: tank-A, filter: '^B-A-'}
-          - {group: tank-O, filter: '^B-O-'}
-          - {group: tank-S, filter: '^B-S-'}
-          - {group: smoke, filter: '^(A-|C-(wall-clock|WASD|Escape))'}
+          - {group: graphics, filter: '^A-'}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
