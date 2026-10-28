@@ -574,6 +574,16 @@ el('returnButton').addEventListener('click',goHome);
 
 function onlineStatus(message){el('networkStatus').textContent=message;if(match&&online&&message.includes('斷線'))el('statusText').textContent=message;}
 function onlineMessage(msg){
+ if(msg.type==='REMATCH_WAITING'){
+  const remaining=Math.max(0,Number(msg.playersRemaining)||0);
+  onlineStatus('等待其他 '+remaining+' 位仍在線上的玩家確認返回房間。');
+  if(resultShown){
+   const summary=el('resultStats');
+   summary.textContent=summary.textContent.replace(/\s*\/\s*等待其他玩家：\d+ 人/g,'')+
+     '  /  等待其他玩家：'+remaining+' 人';
+  }
+  return;
+ }
  if(msg.type==='ROUND_REFUND_PENDING'){
   onlineStatus('對戰異常，正在處理道具退還；伺服器將於 '+(msg.retrySeconds||5)+' 秒後重新嘗試。請勿開始新一場。');
   return;
