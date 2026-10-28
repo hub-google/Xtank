@@ -451,7 +451,15 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
  try{await new Promise((ok,fail)=>{
   httpServer.once('error',fail);httpServer.listen(port,host,()=>{httpServer.off('error',fail);ok();});
  });}catch(err){clearInterval(ticking);clearInterval(heartbeat);wss.close();throw err;}
+ // Periodically reconcile abandoned consumables across crashed official hosts.
+ // Skip recovery while this host has any undelivered result on disk.
+ const recoveryTimer=official?setInterval(()=>{
+   official.recoverConsumables().catch(e=>console.error('Official escrow maintenance:',e.message));
+ },60*60*1000):null;
+ recoveryTimer?.unref?.();
+ if(official)void official.recoverConsumables().catch(e=>console.error('Escrow startup recovery:',e.message));
  return {port:httpServer.address().port,rooms,close:async()=>{
+  if(recoveryTimer)clearInterval(recoveryTimer);
   official?.close?.();
   clearInterval(ticking);clearInterval(heartbeat);for(const ws of wss.clients)ws.terminate();
   await new Promise(ok=>wss.close(()=>httpServer.close(ok)));
