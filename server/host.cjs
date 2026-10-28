@@ -227,6 +227,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
       if(!target.spectators)target.spectators=new Set();
       if(target.spectators.size>=8)return send(ws,{type:'ERROR',code:'SPECTATOR_LIMIT'});
       observedRoom=target;target.spectators.add(ws);
+      if(official)ws._xtankAccountUserId=m.accountUserId;
       send(ws,{type:'JOINED',roomId:target.id,playerId:null,token:null,host:false,spectator:true});
       send(ws,{type:'START',mode:target.mode,mapId:target.mapId,
         slotId:target.game?.tanks[0]?.id||null,roundId:target.roundId,roomId:target.id,
@@ -510,11 +511,22 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
        .filter(player=>player.ws?.readyState===WebSocket.OPEN&&player.accountUserId)
        .map(player=>({room,player})));
      if(!online.length)return;
-     const uniqueIds=[...new Set(online.map(({player})=>player.accountUserId))];
+     const observing=[...rooms.values()].flatMap(room=>[...(room.spectators||[])]
+       .filter(ws=>ws.readyState===WebSocket.OPEN&&ws._xtankAccountUserId)
+       .map(ws=>({ws,accountUserId:ws._xtankAccountUserId})));
+     const uniqueIds=[...new Set([...online.map(({player})=>player.accountUserId),
+       ...observing.map(x=>x.accountUserId)])];
      for(let i=0;i<uniqueIds.length;i+=512){
        const ids=uniqueIds.slice(i,i+512);
        const result=await official.onlineModeration(ids);
        const suspended=new Set(result.suspended||[]);
+       for(const observer of observing){
+         if(ids.includes(observer.accountUserId)&&suspended.has(observer.accountUserId)
+           &&observer.ws.readyState===WebSocket.OPEN){
+           send(observer.ws,{type:'ROOM_MODERATION',action:'suspend'});
+           observer.ws.close(1008,'account suspended');
+         }
+       }
        for(const {room,player} of online){
          if(!ids.includes(player.accountUserId)||player.ws?.readyState!==WebSocket.OPEN)continue;
          if(suspended.has(player.accountUserId)){
