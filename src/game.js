@@ -628,6 +628,11 @@ function onlineMessage(msg){
     onlineStatus('已取得 '+rooms.length+' 間公開房間');return;
   }
  if(msg.type==='ERROR'){
+  if(msg.code==='GLOBAL_CHAT_MUTED'||msg.code==='ROOM_CHAT_MUTED'){
+   const time=msg.until?new Date(msg.until).toLocaleString('zh-TW'):'目前';
+   onlineStatus((msg.code==='GLOBAL_CHAT_MUTED'?'全域':'房間')+'禁言中，至 '+time);
+   return;
+  }
   onlineStatus('伺服器拒絕：'+msg.code);
   if(resultShown&&msg.code==='MATCH_SETTLEMENT_PENDING')updateRematchAvailability();
   return;
