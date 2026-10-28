@@ -1,0 +1,52 @@
+# Production single-host 24/7 X-TANK WSS stack with automatic HTTPS.
+# This config does NOT rent a host or register a domain.
+# Required environment: XTANK_DOMAIN, XTANK_TLS_EMAIL, SUPABASE_URL,
+# SUPABASE_SERVICE_ROLE_KEY (server-side only).
+services:
+  xtank:
+    build: .
+    restart: unless-stopped
+    expose:
+      - "8787"
+    environment:
+      NODE_ENV: production
+      XTANK_OFFICIAL_MODE: "1"
+      BIND_HOST: 0.0.0.0
+      PORT: "8787"
+      XTANK_SETTLEMENT_DIR: /data/settlements
+      SUPABASE_URL: ${SUPABASE_URL:?Set HTTPS Supabase URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?Set service key in private server environment}
+    volumes:
+      - xtank-settlements:/data/settlements
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+  caddy:
+    image: caddy:2.8.4-alpine
+    restart: unless-stopped
+    depends_on:
+      xtank:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      XTANK_DOMAIN: ${XTANK_DOMAIN:?A real domain is required}
+      XTANK_TLS_EMAIL: ${XTANK_TLS_EMAIL:?An email is required for TLS}
+    volumes:
+      - ./Caddyfile.xtank:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    security_opt:
+      - no-new-privileges:true
+volumes:
+  xtank-settlements:
+  caddy-data:
+  caddy-config:
