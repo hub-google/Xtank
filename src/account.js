@@ -1,4 +1,5 @@
 import './account.css';
+import {mountGaragePreview} from './garage-preview.js';
 
 const URL='https://fanffwnhkxpfhttylntw.supabase.co';
 const KEY='sb_publishable_fsrieSLUXlq-_WDpPY9K_w_eO-dN_jT';
@@ -23,11 +24,15 @@ overlay.innerHTML=`<section class="xtank-account-dialog" role="dialog" aria-moda
 </section>`;
 document.body.append(overlay);
 const content=$('#xtankAccountContent');
+let disposeGaragePreview=null;
 const status=$('#xtankAccountStatus');
 const escaped=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const msg=t=>{status.textContent=String(t||'')};
 const show=()=>{overlay.hidden=false;draw()};
-const hide=()=>{overlay.hidden=true;msg('')};
+const hide=()=>{
+ if(disposeGaragePreview){disposeGaragePreview();disposeGaragePreview=null;}
+ overlay.hidden=true;msg('');
+};
 open.addEventListener('click',show);
 $('#xtankAccountClose').addEventListener('click',hide);
 overlay.addEventListener('click',e=>{if(e.target===overlay)hide()});
@@ -128,7 +133,10 @@ function bar(){
 function panel(){
  if(tab==='home')return `<h2>玩家總覽</h2><dl class="xtank-stats">${Object.entries({等級:dashboard.progress.level,經驗:dashboard.progress.total_xp,剩餘升級點:dashboard.progress.unspent_points,已玩場次:dashboard.stats.matches_played,勝場:dashboard.stats.wins,擊殺:dashboard.stats.kills}).map(([k,v])=>`<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
  <p>此處資料會永久保存至 Supabase；單機與玩家自架 LAN 不發放官方獎勵。</p>`;
- if(tab==='garage')return `<h2>機庫：8 種坦克</h2><div class="xtank-card-grid">${dashboard.tanks.map(x=>{
+ if(tab==='garage')return `<h2>機庫：8 種坦克</h2>
+  <p>可拖曳旋轉查看自製坦克 3D 模型，選擇款式會同步更新準備出戰的坦克。</p>
+  <div id="xtankGaragePreview" class="xtank-garage-preview" role="group" aria-label="可旋轉坦克模型"></div>
+  <div class="xtank-card-grid">${dashboard.tanks.map(x=>{
  const t=catalog.tanks.find(t=>t.tank_id===x.tank_id),levels=dashboard.upgrades.filter(u=>u.tank_id===x.tank_id);
  return `<article><h3>${escaped(x.tank_id)}-TANK · Lv.${x.level}</h3>
  <p>HP ${t?.base_hp??'-'}／護盾 ${t?.base_shield??'-'}／速度 ${t?.speed??'-'}</p>
@@ -180,10 +188,21 @@ function panel(){
  return '';
 }
 function draw(){
+ if(disposeGaragePreview){disposeGaragePreview();disposeGaragePreview=null;}
  if(overlay.hidden)return;
  if(!session?.access_token){authView();return}
  if(!dashboard||!catalog){content.innerHTML='<p>玩家資料載入中…</p>';return}
  content.innerHTML=bar()+`<section class="xtank-account-panel">${panel()}</section>`;
+ if(tab==='garage'){
+  try{
+   const selected=$('#tankSelect')?.value||dashboard.tanks[0]?.tank_id||'X';
+   disposeGaragePreview=mountGaragePreview($('#xtankGaragePreview'),selected,kind=>{
+    const tank=$('#tankSelect');if(tank)tank.value=kind;
+   });
+  }catch(error){
+   const root=$('#xtankGaragePreview');if(root)root.textContent='此裝置無法開啟 3D 機庫預覽：'+error.message;
+  }
+ }
  if(tab==='friends')rpcNamed('xtank_social_api',{p_action:'list'}).then(data=>{
   const target=$('#xtankFriendsList');
   if(target)target.innerHTML=(data.friends||[]).map(f=>`<p>${escaped(f.friend_name)}　${escaped(f.status)} ${f.status==='pending'&&f.friend_id===dashboard.profile.player_id?button('接受邀請','accept:'+f.player_id):''} ${button('封鎖','block:'+(f.player_id===dashboard.profile.player_id?f.friend_id:f.player_id))}</p>`).join('')||'<p>目前沒有好友邀請</p>';
