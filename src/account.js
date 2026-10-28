@@ -183,7 +183,7 @@ function panel(){
  <div id="xtankRankContent">讀取賽季排行榜中…</div>`;
  if(tab==='friends')return `<h2>好友</h2><div id="xtankFriendsList">讀取好友中…</div>
  <form id="xtankFriendForm"><label>玩家 UUID <input name="player_id" placeholder="輸入好友玩家 ID" required></label>
- <button type="submit">送出好友邀請</button></form>`;
+ <button type="submit">送出好友邀請</button></form><h3>黑名單</h3><div id="xtankBlockedList">讀取中…</div>`;
  if(tab==='settings')return `<h2>設定</h2><form id="xtankSettingsForm">
  <label>玩家名稱<input name="name" minlength="3" maxlength="24" value="${escaped(dashboard.profile.display_name)}"></label>
  <label>主音量 (0–1)<input name="master_volume" type="number" min="0" max="1" step=".1" value="${dashboard.settings.master_volume}"></label>
@@ -212,18 +212,32 @@ function draw(){
    const root=$('#xtankGaragePreview');if(root)root.textContent='此裝置無法開啟 3D 機庫預覽：'+error.message;
   }
  }
- if(tab==='friends')rpcNamed('xtank_social_api',{p_action:'list'}).then(data=>{
-  const target=$('#xtankFriendsList');
-  if(target)target.innerHTML=(data.friends||[]).map(f=>`<p>${escaped(f.friend_name)}　${escaped(f.status)} ${f.status==='pending'&&f.friend_id===dashboard.profile.player_id?button('接受邀請','accept:'+f.player_id):''} ${button('封鎖','block:'+(f.player_id===dashboard.profile.player_id?f.friend_id:f.player_id))}</p>`).join('')||'<p>目前沒有好友邀請</p>';
-  target?.querySelectorAll('[data-action]').forEach(b=>b.onclick=()=>{
-   const [action,targetId]=b.dataset.action.split(':');
-   if(action==='block'&&!confirm('確定要封鎖這名玩家並解除好友關係？'))return;
-   run(async()=>{
-    await rpcNamed('xtank_social_api',{p_action:action,p_target:targetId});
-    draw();msg(action==='block'?'已封鎖玩家':'已接受好友邀請');
+ if(tab==='friends')Promise.all([
+   rpcNamed('xtank_social_api',{p_action:'list'}),
+   rpcNamed('xtank_blocks_api',{p_action:'list'})
+  ]).then(([data,blocklist])=>{
+   const target=$('#xtankFriendsList');
+   if(target)target.innerHTML=(data.friends||[]).map(f=>`<p>${escaped(f.friend_name)}　${escaped(f.status)} ${f.status==='pending'&&f.friend_id===dashboard.profile.player_id?button('接受邀請','accept:'+f.player_id):''} ${button('封鎖','block:'+(f.player_id===dashboard.profile.player_id?f.friend_id:f.player_id))}</p>`).join('')||'<p>目前沒有好友邀請</p>';
+   target?.querySelectorAll('[data-action]').forEach(b=>b.onclick=()=>{
+    const [action,targetId]=b.dataset.action.split(':');
+    if(action==='block'&&!confirm('確定要封鎖這名玩家並解除好友關係？'))return;
+    run(async()=>{
+     await rpcNamed('xtank_social_api',{p_action:action,p_target:targetId});
+     draw();msg(action==='block'?'已封鎖玩家':'已接受好友邀請');
+    });
    });
-  });
- }).catch(e=>msg(e.message));
+   const blocked=$('#xtankBlockedList');
+   if(blocked)blocked.innerHTML=(blocklist.blocked||[]).map(x=>
+    `<p>${escaped(x.name)}（${escaped(x.player_id)}）${button('解除封鎖','unblock:'+x.player_id)}</p>`
+   ).join('')||'<p>黑名單為空</p>';
+   blocked?.querySelectorAll('[data-action]').forEach(b=>b.onclick=()=>{
+    const id=b.dataset.action.slice('unblock:'.length);
+    run(async()=>{
+     await rpcNamed('xtank_blocks_api',{p_action:'unblock',p_target:id});
+     draw();msg('已解除封鎖，玩家可以重新發送好友邀請');
+    });
+   });
+  }).catch(e=>msg(e.message));
  $('#xtankFriendForm')?.addEventListener('submit',e=>{e.preventDefault();const f=e.target;run(async()=>{await rpcNamed('xtank_social_api',{p_action:'invite',p_target:f.elements.player_id.value.trim()});draw();msg('已送出邀請')})});
  const loadoutForm=$('#xtankLoadoutForm');
  if(loadoutForm){
