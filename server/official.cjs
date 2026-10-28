@@ -162,7 +162,7 @@ function officialService({onSettlement}={}){
           items_used:owner?{...(t.itemsUsed||{})}:{}};
       });
       const winner=g.mode!=='FFA'&&g.scores[0]!==g.scores[1]?(g.scores[0]>g.scores[1]?0:1):null;
-      const payload={round_id:room.roundId,reservation_version:'1',mode_id:g.mode,map_id:g.mapId,
+      const payload={round_id:room.roundId,reservation_version:'1',seed:room.seed,mode_id:g.mode,map_id:g.mapId,
         elapsed_s:Math.min(600,Math.round((Date.now()-(room.startedAt||Date.now()))/1000)),
         winning_team:winner,participants:players};
       return outbox.settle(payload);
