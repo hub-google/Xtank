@@ -75,7 +75,14 @@ async function home(p){
   if(await p.isVisible('#resultMenu'))await p.click('#returnButton');
   else if(await p.locator('#pauseHomeButton').count()){
    if(!await p.isVisible('#pauseBadge'))await p.keyboard.press('Escape');
-   await p.click('#pauseHomeButton');
+   const homeButton=p.locator('#pauseHomeButton');
+   await homeButton.waitFor({state:'visible',timeout:60000});
+   const box=await homeButton.boundingBox();
+   assert(box&&box.width>0&&box.height>0,'Pause return button has no visible hit area');
+   // Send a genuine CDP mouse click on the already-visible button. Avoid
+   // Playwright's automatic scrollIntoView action freezing under Windows
+   // software GPU load, without bypassing the DOM click handler.
+   await p.mouse.click(box.x+box.width/2,box.y+box.height/2);
   }else await p.reload();
  }
  // On Windows software rendering the app can finish the transition on a
