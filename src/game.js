@@ -691,7 +691,7 @@ function onlineMessage(msg){
    onlineStatus((msg.code==='GLOBAL_CHAT_MUTED'?'全域':'房間')+'禁言中，至 '+time);
    return;
   }
-  onlineStatus('伺服器拒絕：'+msg.code);
+  onlineStatus(msg.code==='SERVER_MAINTENANCE'?'官方服務維護中：'+(msg.message||'暫時不接受新對局'):'伺服器拒絕：'+msg.code);
   if(resultShown&&msg.code==='MATCH_SETTLEMENT_PENDING')updateRematchAvailability();
   return;
  }
