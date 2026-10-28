@@ -80,6 +80,7 @@
             <button id="joinRoomButton" class="secondary" type="button">加入房間</button>
             <button id="quickMatchButton" class="primary" type="button">快速加入／建立公開房</button>
             <button id="listRoomsButton" class="secondary" type="button">公開房間列表</button>
+            <button id="spectateRoomButton" class="secondary" type="button">觀戰公開房（輸入房碼）</button>
           </div>
           <p class="net-status" id="networkStatus" role="status" aria-live="polite">先開啟 LAN 伺服器，或輸入可連線的其他伺服器網址。</p>
           <div id="publicRoomList" role="region" aria-label="公開房間列表" hidden></div>
@@ -103,6 +104,7 @@
       <div class="panel"><p class="eyebrow">MATCH COMPLETE</p><h1 id="resultTitle">對戰結束</h1>
         <div id="resultStats"></div><button id="againButton" class="primary">重新開戰</button>
         <button id="returnButton" class="secondary">返回主畫面</button>
+        <button id="watchReplayButton" class="secondary" type="button">觀看本局重播（每 2 秒取樣）</button>
       </div>
     </section>
     <div id="pauseBadge" hidden><p id="pauseTitle">暫停中 · 按 P 繼續</p><button id="resumeButton" class="primary">繼續對戰</button><button id="pauseHomeButton" class="secondary">返回主畫面</button></div>
