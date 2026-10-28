@@ -69,7 +69,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
  });
  const wss=new WebSocketServer({server:httpServer,maxPayload:4096,perMessageDeflate:false});
  const members=r=>[...r.people.values()];
- const roomSummary=r=>({roomId:r.id,mode:r.mode,mapId:r.mapId,phase:r.phase,
+ const roomSummary=r=>({roomId:r.id,name:r.name||'未命名房間',mode:r.mode,mapId:r.mapId,phase:r.phase,
    players:members(r).filter(p=>p.ws).length,capacity:8,passwordRequired:!!r.password});
  function passwordDigest(password,salt){return new Promise((resolve,reject)=>crypto.scrypt(password,salt,32,(error,key)=>error?reject(error):resolve(key)));}
  async function roomPasswordValid(r,password){
@@ -82,7 +82,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
  }
  function broadcast(r,msg){for(const p of members(r))send(p.ws,msg);}
  function broadcastSpectators(r,msg){for(const ws of r.spectators||[])send(ws,msg);}
- function lobby(r){broadcast(r,{type:'LOBBY',roomId:r.id,mode:r.mode,mapId:r.mapId,phase:r.phase,hostId:r.hostId,slowModeMs:r.slowModeMs||0,
+ function lobby(r){broadcast(r,{type:'LOBBY',roomId:r.id,name:r.name||'未命名房間',mode:r.mode,mapId:r.mapId,phase:r.phase,hostId:r.hostId,slowModeMs:r.slowModeMs||0,
   people:members(r).map(p=>({id:p.id,name:p.name,tank:p.tank,team:p.team,connected:!!p.ws,ready:!!p.ready,host:p.id===r.hostId}))});}
  function selectTeam(r,requested){
    if(r.mode==='FFA')return 0;
@@ -284,7 +284,9 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
     }else if(m.type==='CREATE'&&!p){
     if(rooms.size>=32)return send(ws,{type:'ERROR',code:'SERVER_FULL'});
     let code;do{code=crypto.randomBytes(3).toString('hex').toUpperCase();}while(rooms.has(code));
-    r={id:code,spectators:new Set(),slowModeMs:0,mode:['FFA','TDM','FLAG_HOLD'].includes(m.mode)?m.mode:'FFA',
+    const requestedName=typeof m.roomName==='string'?m.roomName.trim():'';
+    if(requestedName.length>32||/[\u0000-\u001f\u007f]/.test(requestedName))return send(ws,{type:'ERROR',code:'INVALID_ROOM_NAME'});
+    r={id:code,name:requestedName||String(m.name||'Player').slice(0,20)+' 的房間',spectators:new Set(),slowModeMs:0,mode:['FFA','TDM','FLAG_HOLD'].includes(m.mode)?m.mode:'FFA',
       mapId:typeof m.mapId==='string'&&Object.hasOwn(MAPS,m.mapId)?m.mapId:'desk',
       phase:'lobby',people:new Map(),hostId:null,game:null,inputs:null,roundId:null,events:[],snapCount:0,created:Date.now()};
     if(typeof m.password==='string'&&m.password.length>0){
@@ -359,6 +361,25 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
     }
    }else if(!p||p.ws!==ws){send(ws,{type:'ERROR',code:'NOT_JOINED'});}
    else if(m.type==='START')start(r,p);
+   else if(m.type==='ROOM_SETTINGS'){
+    if(r.phase!=='lobby'||p.id!==r.hostId)return send(ws,{type:'ERROR',code:'ROOM_SETTINGS_DENIED'});
+    if(typeof m.name!=='string'||m.name.trim().length<2||m.name.trim().length>32||/[\u0000-\u001f\u007f]/.test(m.name))
+      return send(ws,{type:'ERROR',code:'INVALID_ROOM_NAME'});
+    if(!['FFA','TDM','FLAG_HOLD'].includes(m.mode)||!Object.hasOwn(MAPS,m.mapId))
+      return send(ws,{type:'ERROR',code:'INVALID_ROOM_RULES'});
+    const previousMode=r.mode;
+    const changed=r.mode!==m.mode||r.mapId!==m.mapId;
+    r.name=m.name.trim();r.mode=m.mode;r.mapId=m.mapId;
+    if(changed){
+      let nextTeam=0;
+      for(const member of members(r)){
+        member.ready=false;
+        if(r.mode==='FFA')member.team=0;
+        else if((member.team!==0&&member.team!==1)||previousMode!==r.mode){member.team=nextTeam;nextTeam=1-nextTeam;}
+      }
+    }
+    lobby(r);
+   }
     else if(m.type==='READY'&&(r.phase==='lobby'||r.phase==='countdown')){
       if(r.phase==='countdown'&&m.ready!==true)cancelCountdown(r);
       p.ready=m.ready===true;lobby(r);
