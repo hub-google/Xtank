@@ -299,7 +299,8 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
     }
     if(m.type==='QUICK_MATCH'&&!p){
       const candidates=[...rooms.values()].filter(room=>room.phase==='lobby'&&!room.password&&members(room).length<8&&room.mode===m.mode
-        &&(m.mapId==null||room.mapId===m.mapId));
+        &&(m.mapId==null||room.mapId===m.mapId)
+        &&(!m.ruleClass||room.ruleClass===m.ruleClass));
       candidates.sort((a,b)=>members(b).length-members(a).length);
       if(candidates.length){m.type='JOIN';m.roomId=candidates[0].id;}
       else m.type='CREATE';
