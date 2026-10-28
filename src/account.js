@@ -138,9 +138,9 @@ function panel(){
  </article>`}).join('')}</div>`;
  if(tab==='inventory')return `<h2>背包及配裝</h2><p>已持有物品：</p>
  <div class="xtank-inventory">${dashboard.inventory.length?dashboard.inventory.map(x=>`<span>${escaped(x.weapon_id||x.item_id||x.cosmetic_id)} × ${x.quantity}</span>`).join(''):'目前沒有購買的物品'}</div>
- <h3>已儲存配裝</h3>${dashboard.loadouts.length?dashboard.loadouts.map(x=>`<p>${escaped(x.tank_id)} / ${escaped(x.name)} (${x.is_selected?'使用中':'未選'})</p>`).join(''):'尚未儲存配裝'}
+ <h3>已儲存配裝</h3>${dashboard.loadouts.length?dashboard.loadouts.map(x=>`<p>${escaped(x.tank_id)} / ${escaped(x.name)} (${x.is_selected?'使用中':'未選'}) <button type="button" data-edit-loadout="${escaped(x.loadout_id)}">載入編輯</button></p>`).join(''):'尚未儲存配裝'}
  <p>戰鬥內仍可按數字鍵 1–7 切換武器；正式對戰需由伺服器讀取已保存的配裝。</p>
- <h3>新增配裝方案</h3><form id="xtankLoadoutForm">
+ <h3>建立或編輯配裝方案</h3><form id="xtankLoadoutForm">
  <label>坦克<select name="tank_id">${dashboard.tanks.map(t=>`<option value="${escaped(t.tank_id)}">${escaped(t.tank_id)}-TANK</option>`).join('')}</select></label>
  <label>配裝名稱<input name="name" maxlength="40" value="標準配置" required></label>
  <div class="xtank-slot-grid">${Array.from({length:7},(_,i)=>`<label>武器 ${i+1}<select name="weapon_${i+1}">
@@ -186,15 +186,36 @@ function draw(){
  content.innerHTML=bar()+`<section class="xtank-account-panel">${panel()}</section>`;
  if(tab==='friends')rpcNamed('xtank_social_api',{p_action:'list'}).then(data=>{
   const target=$('#xtankFriendsList');
-  if(target)target.innerHTML=(data.friends||[]).map(f=>`<p>${escaped(f.friend_name)}　${escaped(f.status)} ${f.status==='pending'&&f.friend_id===dashboard.profile.player_id?button('接受邀請','accept:'+f.player_id):''}</p>`).join('')||'<p>目前沒有好友邀請</p>';
+  if(target)target.innerHTML=(data.friends||[]).map(f=>`<p>${escaped(f.friend_name)}　${escaped(f.status)} ${f.status==='pending'&&f.friend_id===dashboard.profile.player_id?button('接受邀請','accept:'+f.player_id):''} ${button('封鎖','block:'+(f.player_id===dashboard.profile.player_id?f.friend_id:f.player_id))}</p>`).join('')||'<p>目前沒有好友邀請</p>';
   target?.querySelectorAll('[data-action]').forEach(b=>b.onclick=()=>run(async()=>{await rpcNamed('xtank_social_api',{p_action:'accept',p_target:b.dataset.action.split(':')[1]});draw();msg('已接受好友邀請')}));
  }).catch(e=>msg(e.message));
  $('#xtankFriendForm')?.addEventListener('submit',e=>{e.preventDefault();const f=e.target;run(async()=>{await rpcNamed('xtank_social_api',{p_action:'invite',p_target:f.elements.player_id.value.trim()});draw();msg('已送出邀請')})});
+ const loadoutForm=$('#xtankLoadoutForm');
+ if(loadoutForm){
+  loadoutForm.elements.tank_id.addEventListener('change',()=>{delete loadoutForm.dataset.editLoadout});
+  content.querySelectorAll('[data-edit-loadout]').forEach(button=>button.addEventListener('click',()=>{
+   const selected=dashboard.loadouts.find(x=>x.loadout_id===button.dataset.editLoadout);
+   if(!selected)return;
+   loadoutForm.elements.tank_id.value=selected.tank_id;
+   loadoutForm.elements.name.value=selected.name;
+   loadoutForm.dataset.editLoadout=selected.loadout_id;
+   for(let i=1;i<=7;i++)loadoutForm.elements['weapon_'+i].value='';
+   for(let i=1;i<=6;i++)loadoutForm.elements['item_'+i].value='';
+   for(const slot of dashboard.slots.filter(x=>x.loadout_id===selected.loadout_id)){
+    const field=loadoutForm.elements[slot.slot_type+'_'+slot.slot_number];
+    if(field){
+     const value=slot.slot_type==='weapon'?slot.weapon_id:slot.item_id;
+     if([...field.options].some(option=>option.value===value))field.value=value;
+    }
+   }
+   msg('目前正在編輯：'+selected.name+'；儲存後將更新原配裝，而非另外新增。');
+  }));
+ }
  $('#xtankLoadoutForm')?.addEventListener('submit',e=>{e.preventDefault();const f=e.target;
  run(async()=>{
   const slots=[...Array.from({length:7},(_,i)=>({slot_type:'weapon',slot_number:i+1,ref:f.elements['weapon_'+(i+1)].value})),
    ...Array.from({length:6},(_,i)=>({slot_type:'item',slot_number:i+1,ref:f.elements['item_'+(i+1)].value}))].filter(v=>v.ref);
-  const saved=await rpcNamed('xtank_save_loadout',{p_tank_id:f.elements.tank_id.value,p_name:f.elements.name.value.trim(),p_slots:slots});
+  const saved=await rpcNamed('xtank_save_loadout',{p_tank_id:f.elements.tank_id.value,p_name:f.elements.name.value.trim(),p_slots:slots,p_loadout_id:f.dataset.editLoadout||null});
   await reload();msg('配裝已儲存：'+saved);
  });
  });
