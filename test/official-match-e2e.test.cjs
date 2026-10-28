@@ -113,7 +113,12 @@ test('two authenticated WebSocket players naturally finish a short official matc
   assert.equal(fs.readdirSync(dir).filter(f=>f.endsWith('.json')).length,0,'successful delivery clears durable outbox');
   // A non-host player may start the next lobby, but only after the
   // official result is durable. Neither player should become disconnected.
+  // A finished match returns to lobby only after *each* connected player
+  // explicitly leaves the result screen. One player's click must not
+  // dismiss somebody else's match summary.
   send(b,{type:'BACK_TO_LOBBY'});
+  await waitFor(a,'REMATCH_WAITING',{check:m=>m.playersRemaining===1});
+  send(a,{type:'BACK_TO_LOBBY'});
   const lobbyA=await waitFor(a,'LOBBY',{check:m=>m.phase==='lobby'});
   const lobbyB=await waitFor(b,'LOBBY',{check:m=>m.phase==='lobby'});
   assert.equal(lobbyA.people.length,2);
