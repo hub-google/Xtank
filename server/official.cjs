@@ -51,6 +51,13 @@ function officialService({onSettlement}={}){
       });
     },
     chatMutedUntil,
+    async onlineModeration(playerIds){
+      if(!Array.isArray(playerIds)||playerIds.length>512)throw Error('INVALID_PLAYER_IDS');
+      if(!playerIds.length)return {suspended:[],muted:{}};
+      return request('/rest/v1/rpc/xtank_official_online_moderation',{
+        body:{p_player_ids:playerIds}
+      });
+    },
     async reserve(roundId,playerId,items){
       // A server-only, durable escrow prevents inventory races across hosts.
       // Reserve before START, including an empty session for players without items.
