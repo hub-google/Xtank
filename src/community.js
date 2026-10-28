@@ -42,6 +42,32 @@ if(menu){
   const friends=()=>friendData?.friends?.filter(f=>f.status==='accepted').map(f=>({
     id:f.player_id===window.xtankAccount?.getSignedInPlayerId?.()?f.friend_id:f.player_id,
     name:f.friend_name}))||[];
+  async function refreshMatchTickets(){
+    if(layer.hidden||tab!=='party')return;
+    const display=qs('#xtankQueueStatus');
+    if(!display)return;
+    try{
+      const result=await rpc('xtank_match_ticket_status',{});
+      if(!display.isConnected)return;
+      const latest=(result.tickets||[])[0];
+      display.replaceChildren();
+      if(!latest){display.textContent='尚未進入排位佇列';return;}
+      const message=document.createElement('p');
+      message.textContent=latest.status==='matched'?'已分配跨伺服器房間 '+(latest.room_code||''):
+        latest.status==='queued'?'正在等待 MMR 配對，持續查詢中…':'配對狀態：'+latest.status;
+      display.append(message);
+      if(latest.status==='matched'&&latest.endpoint&&latest.room_code){
+       const join=document.createElement('button');
+       join.type='button';join.textContent='進入配對房間';
+       join.onclick=()=>{
+        try{window.xtankJoinMatchedRoom?.(latest.endpoint,latest.room_code,latest.mode)}
+        catch(error){status('加入房間失敗：'+error.message)}
+       };
+       display.append(join);
+      }
+    }catch(error){if(display.isConnected)display.textContent='配對狀態讀取失敗：'+error.message}
+  }
+  setInterval(()=>{if(!layer.hidden&&tab==='party')void refreshMatchTickets()},4000);
   function render(){
     const nav=qs('#xtankCommunityNav'),main=qs('#xtankCommunityMain');
     nav.innerHTML=[['party','組隊配對'],['clans','公會'],['chat','好友私訊'],['mail','信件'],['notifications','通知'],['report','檢舉']].map(([id,name])=>'<button type="button" data-tab="'+id+'" class="'+(tab===id?'active':'')+'">'+name+'</button>').join('');
@@ -62,6 +88,10 @@ if(menu){
        run(()=>rpc('xtank_party_queue_api',{p_action:'queue',p_payload:{mode:form.elements.mode.value,region:form.elements.region.value}}));
       };
       main.querySelector('#xtankCancelQueue').onclick=()=>run(()=>rpc('xtank_party_queue_api',{p_action:'cancel'}));
+      const queueStatus=document.createElement('div');
+      queueStatus.id='xtankQueueStatus';queueStatus.setAttribute('role','status');
+      main.querySelector('#xtankCancelQueue').after(queueStatus);
+      void refreshMatchTickets();
       rpc('xtank_party_queue_api',{p_action:'overview'}).then(d=>{
        const target=qs('#xtankPartyInfo');if(!target||!target.isConnected||tab!=='party')return;
        const me=window.xtankAccount?.getSignedInPlayerId?.();
