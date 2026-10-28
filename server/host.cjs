@@ -110,6 +110,8 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
    // Reserve per-player stocks in the database before any client enters the
    // official match. Failure rolls back all previously reserved players.
    for(const p of prepared){
+    if(r.phase!=='allocating'||r.roundId!==roundId)
+      throw Error('RESERVATION_CANCELLED_DURING_SHUTDOWN');
     if(!p.accountUserId)throw Error('PLAYER_NOT_AUTHENTICATED');
     // Refetch from DB every round: last round's consumed/refunded stock
     // cannot be reused as the next round's authoritative quantity.
