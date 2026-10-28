@@ -31,6 +31,17 @@ if(menu){
   if(!res.ok)throw Error(data.message||data.error||'HTTP '+res.status);
   return data;
  }
+ async function rulesetInfo(){
+  const token=await window.xtankAccount?.getAccessToken?.();
+  if(!token)throw Error('請先登入管理員');
+  const response=await fetch(URL.replace('xtank_admin_api','xtank_admin_ruleset_info'),{
+   method:'POST',headers:{apikey:KEY,Authorization:'Bearer '+token,'Content-Type':'application/json'},
+   body:'{}'
+  });
+  const result=await response.json().catch(()=>({}));
+  if(!response.ok)throw Error(result.message||result.error||'HTTP '+response.status);
+  return result;
+ }
  async function compensateItem(payload){
   const token=await window.xtankAccount?.getAccessToken?.();
   if(!token)throw Error('請先登入管理員');
@@ -104,9 +115,13 @@ if(menu){
   finally{adminBusy=false}
  }
  async function refresh(){
-  const [d,ops,chat,audit,service]=await Promise.all([api('overview'),liveops('overview'),chatAdmin('list'),liveEditor('audit'),maintenance('status')]);
+  const [d,ops,chat,audit,service,rules]=await Promise.all([api('overview'),liveops('overview'),chatAdmin('list'),liveEditor('audit'),maintenance('status'),rulesetInfo()]);
   $('#xtankAdminMain').innerHTML=
     '<p>玩家總數：'+d.total_players+'　正式場次：'+d.total_official_matches+'　未處理檢舉：'+d.unresolved_reports+'</p>'+
+    '<h2>目前遊戲規則版本</h2><p>目前權威引擎規則碼：'+esc(rules.engine_ruleset_code)+
+    '。歷史規則保留版本，變更實際戰鬥規則必須配合遊戲程式版本部署，不可直接修改正在進行的賽事。</p>'+
+    (rules.versions||[]).map(v=>'<article>'+esc(v.code)+'　'+esc(v.version)+
+      '　'+esc(v.source_status)+(v.is_active?'（資料庫標記啟用）':'（未啟用）')+'</article>').join('')+
     '<h2>官方伺服器維護</h2><p>目前：'+(service.enabled?'維護中（禁止新玩家加入與開新對局）':'正常服務')+
     '。既有對局仍會繼續結算，不會直接取消玩家道具。</p>'+
     '<form id="xtankMaintenanceForm"><label>服務狀態<select name="enabled"><option value="false">正常服務</option>'+
