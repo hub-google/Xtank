@@ -416,18 +416,24 @@ function showResult(){
   el('pauseBadge').hidden=true;
   resultShown=true;paused=true;
   const info=match.summary();
-  el('resultTitle').textContent=info.title;
-  el('resultStats').textContent='你的擊殺 '+info.kills+'  /  被擊毀 '+info.deaths+
-    (info.rank?'  /  名次 第 '+info.rank+' 名':'')+
-    (info.teamScore?'  /  紅隊 '+info.teamScore[0]+' : '+info.teamScore[1]+' 藍隊':'');
+  const own=match.tanks.find(t=>t.id==='player');
+  el('resultTitle').textContent=spectating?'觀戰結束':info.title;
+  el('resultStats').textContent=(spectating?'觀戰紀錄':('擊破 '+info.kills+' / 被擊破 '+info.deaths+
+    ' / 助攻 '+(own?.assists||0)+' / 傷害 '+Math.round(own?.damage||0)+
+    (match.mode==='FLAG_HOLD'?' / 旗分 '+(own?.score||0):'')))+
+    (!spectating&&info.rank?' / 名次 第 '+info.rank+' 名':'')+
+    (info.teamScore?' / 紅隊 '+info.teamScore[0]+' : '+info.teamScore[1]+' 藍隊':'');
+  el('resultRewards').textContent=spectating?'觀戰不會獲得正式獎勵':
+    !online?'單機練習不發放正式獎勵':
+    !officialRound?'LAN 練習不發放正式獎勵':'等待官方資料庫結算與入帳…';
   el('resultMenu').hidden=false;
   updateRematchAvailability();
 }
 function updateRematchAvailability(){
-  const pending=!!online&&officialRound&&!roundSettlementSaved;
+  const pending=!!online&&officialRound&&!roundSettlementSaved&&!spectating;
   const button=el('againButton');
   button.disabled=pending;
-  button.textContent=pending?'官方獎勵入帳中…':'重新開戰';
+  button.textContent=spectating?'結束觀戰':pending?'官方獎勵入帳中…':'重新開戰';
   if(resultShown&&pending&&!el('resultStats').textContent.includes('獎勵結算中'))
     el('resultStats').textContent+='  /  獎勵結算中，請保留此畫面';
 }
@@ -565,6 +571,7 @@ document.addEventListener('keydown',()=>battleAudio.unlock(),{passive:true});
 el('startButton').addEventListener('click',start);
 el('againButton').addEventListener('click',()=>{
  if(!online)return start();
+ if(spectating)return goHome();
  // The authoritative room must accept the transition before UI leaves results.
  // Official rewards may still be settling; keeping the result visible prevents
  // a false appearance that the next round is ready.
@@ -642,8 +649,20 @@ function onlineMessage(msg){
   if(msg.type==='MATCH_SAVED'){
     roundSettlementSaved=true;
     onlineStatus('官方戰績及獎勵已寫入永久資料庫 · '+msg.matchId);
-    if(resultShown&&el('resultStats')&&!el('resultStats').textContent.includes('官方獎勵已入帳'))
-      el('resultStats').textContent+='  /  官方獎勵已入帳';
+    if(resultShown&&!spectating){
+      el('resultRewards').textContent='官方賽果已入帳，正在讀取本人實際獎勵明細…';
+      window.xtankAccount?.getMatchReceipt?.(msg.matchId)
+        .then(receipt=>{
+          if(!resultShown||spectating||!match)return;
+          el('resultRewards').textContent='官方已入帳：經驗 +'+receipt.xp+
+            ' ／ '+(receipt.currency_code||'COIN')+' +'+receipt.currency_amount+
+            ' （資料庫確認）';
+        })
+        .catch(error=>{
+          if(resultShown)el('resultRewards').textContent=
+            '官方賽果已入帳，但獎勵明細讀取失敗：'+error.message;
+        });
+    }
     updateRematchAvailability();
     window.xtankAccount?.refresh?.().catch(e=>console.warn('Profile refresh after match:',e.message));
     return;
