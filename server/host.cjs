@@ -39,6 +39,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
   engine=await import(pathToFileURL(path.join(__dirname,'../src/simulation.js')).href);}
  const {Game,TANKS,MAPS}=engine;
  const rooms=new Map();
+ const serverRegion=String(process.env.XTANK_SERVER_REGION||'').trim().slice(0,40).replace(/[\u0000-\u001f\u007f]/g,'');
  let shuttingDown=false;
  const official=officialService({onSettlement:(payload,saved)=>{
    const room=[...rooms.values()].find(r=>r.roundId===payload.round_id);
@@ -67,7 +68,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
     }
     const ready=storageHealthy&&!shuttingDown;
     res.writeHead(ready?200:503,{'content-type':'application/json','cache-control':'no-store'});
-    res.end(JSON.stringify({ok:ready,maintenance:serviceStatus.enabled,
+    res.end(JSON.stringify({ok:ready,region:serverRegion||null,maintenance:serviceStatus.enabled,
       maintenanceNotice:serviceStatus.notice,rooms:rooms.size,connectedClients:[...wss.clients].filter(ws=>ws.readyState===WebSocket.OPEN).length,
       liveMatches:states.filter(room=>room.phase==='live').length,
       pendingSettlements:official?states.filter(room=>room.phase==='finished'&&!room.officialMatchId).length:0,
@@ -80,7 +81,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
  });
  const wss=new WebSocketServer({server:httpServer,maxPayload:4096,perMessageDeflate:false});
  const members=r=>[...r.people.values()];
- const roomSummary=r=>({roomId:r.id,name:r.name||'未命名房間',mode:r.mode,mapId:r.mapId,ruleClass:r.ruleClass||'growth',phase:r.phase,
+ const roomSummary=r=>({roomId:r.id,name:r.name||'未命名房間',mode:r.mode,mapId:r.mapId,ruleClass:r.ruleClass||'growth',region:serverRegion||null,phase:r.phase,
    players:members(r).filter(p=>p.ws).length,capacity:8,passwordRequired:!!r.password});
  function passwordDigest(password,salt){return new Promise((resolve,reject)=>crypto.scrypt(password,salt,32,(error,key)=>error?reject(error):resolve(key)));}
  async function roomPasswordValid(r,password){
@@ -93,7 +94,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
  }
  function broadcast(r,msg){for(const p of members(r))send(p.ws,msg);}
  function broadcastSpectators(r,msg){for(const ws of r.spectators||[])send(ws,msg);}
- function lobby(r){broadcast(r,{type:'LOBBY',roomId:r.id,name:r.name||'未命名房間',mode:r.mode,mapId:r.mapId,ruleClass:r.ruleClass||'growth',phase:r.phase,hostId:r.hostId,slowModeMs:r.slowModeMs||0,
+ function lobby(r){broadcast(r,{type:'LOBBY',roomId:r.id,name:r.name||'未命名房間',mode:r.mode,mapId:r.mapId,ruleClass:r.ruleClass||'growth',region:serverRegion||null,phase:r.phase,hostId:r.hostId,slowModeMs:r.slowModeMs||0,
   people:members(r).map(p=>({id:p.id,name:p.name,tank:p.tank,team:p.team,connected:!!p.ws,ready:!!p.ready,host:p.id===r.hostId}))});}
  function selectTeam(r,requested){
    if(r.mode==='FFA')return 0;
