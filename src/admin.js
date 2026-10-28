@@ -31,6 +31,17 @@ if(menu){
   if(!res.ok)throw Error(data.message||data.error||'HTTP '+res.status);
   return data;
  }
+ async function compensate(payload){
+  const token=await window.xtankAccount?.getAccessToken?.();
+  if(!token)throw Error('請先登入管理員');
+  const response=await fetch(URL.replace('xtank_admin_api','xtank_admin_compensate'),{
+   method:'POST',headers:{apikey:KEY,Authorization:'Bearer '+token,'Content-Type':'application/json'},
+   body:JSON.stringify(payload)
+  });
+  const result=await response.json().catch(()=>({}));
+  if(!response.ok)throw Error(result.message||result.error||'HTTP '+response.status);
+  return result;
+ }
  async function maintenance(action,enabled=null,notice=''){
   const token=await window.xtankAccount?.getAccessToken?.();
   if(!token)throw Error('請先登入管理員');
@@ -73,10 +84,13 @@ if(menu){
  }
  document.addEventListener('xtank-auth-changed',()=>{verify().catch(()=>{open.hidden=true})});
  setTimeout(()=>verify().catch(()=>{}),350);
+ let adminBusy=false;
  async function run(f){
-  status('處理中…');
+  if(adminBusy)return;
+  adminBusy=true;status('處理中…');
   try{await f();await refresh();status('操作已完成，稽核紀錄已寫入')}
   catch(e){status('操作失敗：'+e.message)}
+  finally{adminBusy=false}
  }
  async function refresh(){
   const [d,ops,chat,audit,service]=await Promise.all([api('overview'),liveops('overview'),chatAdmin('list'),liveEditor('audit'),maintenance('status')]);
@@ -88,6 +102,14 @@ if(menu){
     '<option value="true" '+(service.enabled?'selected':'')+'>啟用維護模式</option></select></label>'+
     '<label>公告（最多 200 字）<input name="notice" maxlength="200" value="'+esc(service.notice)+'"></label>'+
     '<button type="submit">更新官方服務狀態</button></form>'+
+    '<h2>管理員經濟補償（限額、永久稽核）</h2>'+
+    '<p>只支援正數的遊戲金幣／經驗補償，不直接修改餘額；資料庫會產生交易流水與管理員稽核。</p>'+
+    '<form id="xtankAdminCompensation">'+
+    '<label>玩家 UUID<input name="player_id" required></label>'+
+    '<label>補償金幣（0～50000）<input name="coins" type="number" min="0" max="50000" value="0" required></label>'+
+    '<label>補償經驗（0～20000）<input name="xp" type="number" min="0" max="20000" value="0" required></label>'+
+    '<label>原因／處理單號（10～300 字）<input name="reason" minlength="10" maxlength="300" required></label>'+
+    '<button type="submit">確認補償並寫入稽核</button></form>'+
     '<h2>玩家檢舉</h2>'+(d.reports||[]).map(r=>'<article><strong>'+esc(r.reason)+'</strong><p>'+esc(r.details)+'／被檢舉：'+esc(r.reported_id)+'</p><small>'+esc(r.status)+'　'+esc(r.created_at)+'</small>　'+(r.status==='open'?'<button data-report="'+esc(r.report_id)+'">結案</button>':'')+'</article>').join('')+
     '<h2>停權名單</h2>'+(d.bans||[]).map(b=>'<article>玩家：'+esc(b.player_id)+'　'+esc(b.reason)+'　'+(b.revoked_at?'已解除':'仍在停權')+'</article>').join('')+
     '<h2>玩家處置</h2><form id="xtankModerationForm"><label>玩家 UUID<input name="player_id" required></label><label>操作<select name="action"><option value="suspend">停權</option><option value="unsuspend">解除停權</option></select></label><label>原因<input name="reason" minlength="5" maxlength="300" required></label><button type="submit">確認處置</button></form>'+
@@ -159,6 +181,17 @@ if(menu){
    e.preventDefault();const a=editOffer.elements;
    run(()=>liveEditor('edit_offer',{offer_id:a.offer_id.value,
      unit_price:Number(a.unit_price.value),stock_limit:a.stock_limit.value||null}));
+  };
+  $('#xtankAdminCompensation').onsubmit=e=>{
+   e.preventDefault();
+   const form=e.target,coins=Number(form.elements.coins.value),xp=Number(form.elements.xp.value);
+   if(!Number.isSafeInteger(coins)||!Number.isSafeInteger(xp)||coins+xp<=0){
+    status('補償金幣或經驗至少需有一項大於零');return;
+   }
+   if(!confirm('確定補償玩家 '+form.elements.player_id.value+'：金幣 '+coins+'／經驗 '+xp+'？此操作將永久記錄。'))return;
+   const requestId=crypto.randomUUID();
+   run(()=>compensate({p_player_id:form.elements.player_id.value,
+    p_coins:coins,p_xp:xp,p_reason:form.elements.reason.value.trim(),p_request_id:requestId}));
   };
   $('#xtankMaintenanceForm').onsubmit=e=>{
    e.preventDefault();
