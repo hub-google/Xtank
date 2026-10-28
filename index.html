@@ -25,6 +25,21 @@
       <canvas id="minimap" width="192" height="128" aria-label="戰場小地圖"></canvas>
       <div class="weapons"><div id="weaponList"></div><div class="controls" id="controlHint">WASD 移動 · 滑鼠瞄準 · 左鍵射擊 · 1–7 換武器 · F1–F6 道具 · E 技能 · P 暫停 · Esc 選單</div></div>
     </section>
+    <aside id="battleChat" class="xtank-battle-chat" hidden aria-label="線上戰鬥聊天室">
+      <details open><summary>戰鬥聊天室</summary>
+        <div id="battleChatLog" role="log" aria-live="polite"></div>
+        <form id="battleChatForm">
+          <input id="battleChatInput" autocomplete="off" maxlength="140" placeholder="輸入訊息（最多 140 字）" required>
+          <button type="submit">發送</button>
+        </form>
+        <div id="battleChatModeration" hidden>
+          <label>管理玩家<select id="battleChatTarget"></select></label>
+          <button id="battleChatMute" type="button">禁言 5 分鐘</button>
+          <button id="battleChatUnmute" type="button">解除禁言</button>
+          <button id="battleChatKick" type="button">移出房間</button>
+        </div>
+      </details>
+    </aside>
     <section id="startMenu" class="overlay">
       <div class="panel">
         <p class="eyebrow">致敬 2000 年代的迷你坦克遊戲</p>
