@@ -211,3 +211,10 @@ X-TANK 是一款最多 8 人同場的 3D 第三人稱即時坦克射擊遊戲。
 - 伺服器限縮慢速 WebSocket 客戶端的累積輸出緩衝（超過 1 MiB 斷線），避免慢客戶端拖垮權威伺服器記憶體；`/health` 增加匿名連線量、進行中賽事、尚待入帳賽事、RSS 記憶體等統計，不輸出玩家個資或伺服器憑證。
 - [isolated backend run #40604857910](https://github.com/hub-google/Xtank/actions/runs/40604857910) **59/59 Node tests PASS**、Vite/server build PASS，包含上述重連競態、慢客戶端、健康檢查與雙 EXE 選路回歸。
 - 尚未實際取得官方公開長駐 WSS/TLS 託管、跨不同公網 Windows 真人對局 → 真實 Supabase 發獎 → 關閉重開同步、30 分鐘 8 人壓力驗收；這些仍列為未完成，不能標記正式發行。
+
+
+## 2026-10-28 新增權威遊戲伺服器 8 人 WebSocket 壓測工具
+- `npm run soak:server`：預設使用 8 個獨立 WebSocket 客戶端，每人以 20Hz 輸入到本地權威引擎，收集每位玩家收到的 SNAPSHOT、最大間隔、斷線數及 Node RSS/heap 記憶體；輸出 JSON 到 `qa-evidence/server-soak.json`。
+- `XTANK_SOAK_SECONDS=1800 npm run soak:server`：完整 30 分鐘負載測試；此外已新增可於 GitHub Actions 手動指定 1–60 分鐘的 `server-soak.yml`。該工具**刻意不使用 Supabase 正式伺服器金鑰、不連接公網、不產生真玩家獎勵**。
+- 初次 20 秒雲端 Linux 實跑：[Actions #40606890813](https://github.com/hub-google/Xtank/actions/runs/40606890813) **SUCCESS**，8 客戶端共 1,600 個 SNAPSHOT、每人 200 個（每人約 10Hz）、零斷線、零錯誤、最大快照間隔 126ms，程序 RSS 約 68MB。
+- **30 分鐘完整 soak 尚未實際執行；跨兩個公網的原生 EXE/公網 WSS/Supabase 正式結算也尚未實際通過。** 短版成功不可替代上述完整交付門檻。
