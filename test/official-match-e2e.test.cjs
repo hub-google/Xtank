@@ -47,6 +47,9 @@ test('two authenticated WebSocket players naturally finish a short official matc
     inventory:[{item_id:'repair',quantity:2},{item_id:'smoke',quantity:9}],
     upgrades:player===UID_A?[{tank_id:'X',attribute:'energy',level:5},{tank_id:'X',attribute:'speed',level:6}]:[]
    }),{status:200});
+   if(endpoint.endsWith('/rest/v1/rpc/xtank_reserve_match_items')||
+       endpoint.endsWith('/rest/v1/rpc/xtank_release_match_items'))
+     return new Response(JSON.stringify({ok:true}),{status:200});
    if(endpoint.endsWith('/rest/v1/rpc/xtank_record_official_match')){
     const body=JSON.parse(opts.body).p_result;
     settlements.push(body);
@@ -96,6 +99,7 @@ test('two authenticated WebSocket players naturally finish a short official matc
   assert.equal(settlements.length,1,'match must be delivered exactly once when DB works');
   const payload=settlements[0];
   assert.equal(payload.round_id,gameA.roundId);
+  assert.equal(payload.reservation_version,'1');
   assert.equal(payload.mode_id,'FFA');assert.equal(payload.map_id,'desk');
   assert.equal(payload.participants.length,8);
   assert(payload.participants.some(p=>p.player_id===UID_A));
