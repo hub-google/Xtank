@@ -46,6 +46,16 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
    room.officialMatchId=saved.match_id;
    broadcast(room,{type:'MATCH_SAVED',matchId:saved.match_id,players:saved.players});
  }});
+ let serviceStatus={enabled:!!official,notice:'正在確認官方服務狀態'};
+ async function refreshMaintenance(){
+  if(!official)return;
+  try{serviceStatus=await official.maintenanceStatus();}
+  catch(error){
+   serviceStatus={enabled:true,notice:'官方服務狀態暫時無法確認，已停止接受新對戰'};
+   console.error('Official maintenance status:',error.message);
+  }
+ }
+ if(official)await refreshMaintenance();
  const httpServer=http.createServer((req,res)=>{
   if(req.url==='/health'){
     const states=[...rooms.values()];
@@ -57,7 +67,8 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
     }
     const ready=storageHealthy&&!shuttingDown;
     res.writeHead(ready?200:503,{'content-type':'application/json','cache-control':'no-store'});
-    res.end(JSON.stringify({ok:ready,rooms:rooms.size,connectedClients:[...wss.clients].filter(ws=>ws.readyState===WebSocket.OPEN).length,
+    res.end(JSON.stringify({ok:ready,maintenance:serviceStatus.enabled,
+      maintenanceNotice:serviceStatus.notice,rooms:rooms.size,connectedClients:[...wss.clients].filter(ws=>ws.readyState===WebSocket.OPEN).length,
       liveMatches:states.filter(room=>room.phase==='live').length,
       pendingSettlements:official?states.filter(room=>room.phase==='finished'&&!room.officialMatchId).length:0,
       pendingSettlementFiles:settlementQueue?.pendingFiles||0,
@@ -110,6 +121,8 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
    broadcast(r,{type:'COUNTDOWN_CANCELLED'});lobby(r);
  }
  function start(r,p){
+  if(official&&serviceStatus.enabled)
+   return send(p.ws,{type:'ERROR',code:'SERVER_MAINTENANCE',message:serviceStatus.notice});
   if(p.id!==r.hostId||r.phase!=='lobby')return send(p.ws,{type:'ERROR',code:'NOT_HOST_OR_PHASE'});
   if(members(r).filter(v=>v.ws).length<2)return send(p.ws,{type:'ERROR',code:'NEED_TWO_PLAYERS'});
    if(official&&members(r).some(v=>v.ws&&!v.ready))return send(p.ws,{type:'ERROR',code:'PLAYERS_NOT_READY'});
@@ -242,6 +255,8 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
    if(++received>60){ws.close(1008,'rate limit');return;}
    let m;try{m=JSON.parse(raw.toString());}catch{return send(ws,{type:'ERROR',code:'BAD_JSON'});}
    if(!m||typeof m.type!=='string')return;
+   if(official&&serviceStatus.enabled&&['CREATE','JOIN','QUICK_MATCH','SPECTATE'].includes(m.type))
+    return send(ws,{type:'ERROR',code:'SERVER_MAINTENANCE',message:serviceStatus.notice});
    if(observedRoom){
      if(m.type==='PING')send(ws,{type:'PONG',serverTime:Date.now(),clientTime:Number.isSafeInteger(m.clientTime)?m.clientTime:null});
      else send(ws,{type:'ERROR',code:'SPECTATOR_READ_ONLY'});
@@ -612,6 +627,8 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
    }catch(error){console.error('Official live moderation:',error.message);}
    finally{moderationBusy=false;}
  }
+ const maintenanceTimer=official?setInterval(()=>void refreshMaintenance(),15000):null;
+ maintenanceTimer?.unref?.();
  const moderationTimer=official?setInterval(()=>void refreshOnlineModeration(),15000):null;
  moderationTimer?.unref?.();
  // Periodically reconcile abandoned consumables across crashed official hosts.
@@ -630,6 +647,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
    clearInterval(heartbeat);
    if(recoveryTimer)clearInterval(recoveryTimer);
    if(moderationTimer)clearInterval(moderationTimer);
+   if(maintenanceTimer)clearInterval(maintenanceTimer);
    const abandoned=[];
    for(const room of rooms.values()){
     if(!official||!room.roundId)continue;
