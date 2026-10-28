@@ -323,8 +323,25 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
         return send(ws,{type:'ERROR',code:'INVALID_CHAT'});
       if(Date.now()-(p.lastChatAt||0)<Math.max(950,r.slowModeMs||0))
         return send(ws,{type:'ERROR',code:'CHAT_RATE_LIMIT'});
-      p.lastChatAt=Date.now();
-      broadcast(r,{type:'ROOM_CHAT',playerId:p.id,name:p.name,text,at:Date.now()});
+      if(p.chatPending)return send(ws,{type:'ERROR',code:'CHAT_REQUEST_PENDING'});
+      p.chatPending=true;
+      try{
+       if(official){
+        const globalUntil=await official.chatMutedUntil(p.accountUserId);
+        if(globalUntil>Date.now())
+          return send(ws,{type:'ERROR',code:'GLOBAL_CHAT_MUTED',until:globalUntil});
+       }
+       if(p.ws!==ws||r.people.get(p.id)!==p)return;
+       if((p.mutedUntil||0)>Date.now())
+         return send(ws,{type:'ERROR',code:'ROOM_CHAT_MUTED',until:p.mutedUntil});
+       if(Date.now()-(p.lastChatAt||0)<Math.max(950,r.slowModeMs||0))
+         return send(ws,{type:'ERROR',code:'CHAT_RATE_LIMIT'});
+       p.lastChatAt=Date.now();
+       broadcast(r,{type:'ROOM_CHAT',playerId:p.id,name:p.name,text,at:Date.now()});
+      }catch(error){
+       send(ws,{type:'ERROR',code:'CHAT_POLICY_UNAVAILABLE'});
+       console.error('Global chat moderation lookup:',error.message);
+      }finally{p.chatPending=false;}
     }
    else if(m.type==='MODERATE'&&(r.phase==='lobby'||r.phase==='live')){
      if(p.id!==r.hostId)return send(ws,{type:'ERROR',code:'HOST_ONLY'});
@@ -345,7 +362,10 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
      if(m.action==='kick'){
        send(target.ws,{type:'ROOM_MODERATION',action:'kick'});
        target.ws?.close(1008,'removed by room host');
-       target.ws=null;target.lastSeen=Date.now()-31000;
+       target.ws=null;target.token=null;target.lastSeen=Date.now()-31000;
+       if(r.inputs&&target.slot)r.inputs.set(target.slot,{dx:0,dz:0,aimYaw:0,fire:false,item:0,ability:false});
+       // A kicked player's reconnect token must not recreate a room seat.
+       r.people.delete(target.id);
        if(r.phase==='countdown')cancelCountdown(r);
        lobby(r);return;
      }
