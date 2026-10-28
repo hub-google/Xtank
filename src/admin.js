@@ -42,6 +42,21 @@ if(menu){
   if(!response.ok)throw Error(result.message||result.error||'HTTP '+response.status);
   return result;
  }
+ async function liveEditor(action,payload={}){
+  const token=await window.xtankAccount?.getAccessToken?.();
+  if(!token)throw Error('請先登入管理員');
+  const res=await fetch(URL.replace('xtank_admin_api','xtank_liveops_editor'),{
+   method:'POST',headers:{apikey:KEY,Authorization:'Bearer '+token,'Content-Type':'application/json'},
+   body:JSON.stringify({p_action:action,p_payload:payload})
+  });
+  const data=await res.json().catch(()=>({}));
+  if(!res.ok)throw Error(data.message||data.error||'HTTP '+res.status);
+  return data;
+ }
+ const localDateTime=iso=>{
+  const d=new Date(iso),pad=n=>String(n).padStart(2,'0');
+  return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes());
+ };
  async function verify(){
   try{await api('overview');open.hidden=false}catch{open.hidden=true}
  }
@@ -53,7 +68,7 @@ if(menu){
   catch(e){status('操作失敗：'+e.message)}
  }
  async function refresh(){
-  const [d,ops,chat]=await Promise.all([api('overview'),liveops('overview'),chatAdmin('list')]);
+  const [d,ops,chat,audit]=await Promise.all([api('overview'),liveops('overview'),chatAdmin('list'),liveEditor('audit')]);
   $('#xtankAdminMain').innerHTML=
     '<p>玩家總數：'+d.total_players+'　正式場次：'+d.total_official_matches+'　未處理檢舉：'+d.unresolved_reports+'</p>'+
     '<h2>玩家檢舉</h2>'+(d.reports||[]).map(r=>'<article><strong>'+esc(r.reason)+'</strong><p>'+esc(r.details)+'／被檢舉：'+esc(r.reported_id)+'</p><small>'+esc(r.status)+'　'+esc(r.created_at)+'</small>　'+(r.status==='open'?'<button data-report="'+esc(r.report_id)+'">結案</button>':'')+'</article>').join('')+
@@ -82,7 +97,52 @@ if(menu){
     '<h2>商城上架管理</h2>'+
     (ops.offers||[]).map(o=>'<article>'+esc(o.offer_key)+'　'+esc(o.unit_price)+' '+esc(o.currency_code)+
      '　'+(o.enabled?'上架中':'已下架')+' <button data-offer-id="'+esc(o.offer_id)+'" data-enable="'+(!o.enabled)+'">'+
-     (o.enabled?'下架':'上架')+'</button></article>').join('');
+     (o.enabled?'下架':'上架')+'</button></article>').join('')+
+    '<details><summary>編輯未上架活動草稿</summary><form id="xtankEditEvent">'+
+      '<label>選擇活動<select name="event_id" required><option value="">選擇未啟用活動</option>'+
+      (ops.events||[]).filter(e=>!e.enabled).map(e=>'<option value="'+esc(e.event_id)+'">'+esc(e.code)+'</option>').join('')+
+      '</select></label><label>名稱<input name="name" maxlength="80" minlength="3" required></label>'+
+      '<label>條件<select name="kind"><option value="matches">場次</option><option value="wins">勝場</option><option value="kills">擊破</option></select></label>'+
+      '<label>完成目標<input name="target" type="number" min="1" max="1000" required></label>'+
+      '<label>金幣獎勵<input name="reward" type="number" min="0" max="100000" required></label>'+
+      '<label>開始時間<input name="start" type="datetime-local" required></label>'+
+      '<label>結束時間<input name="end" type="datetime-local" required></label>'+
+      '<button type="submit">儲存活動草稿</button></form></details>'+
+    '<details><summary>編輯已下架商城商品</summary><form id="xtankEditOffer">'+
+      '<label>選擇商品<select name="offer_id" required><option value="">選擇未上架商品</option>'+
+      (ops.offers||[]).filter(o=>!o.enabled).map(o=>'<option value="'+esc(o.offer_id)+'">'+esc(o.offer_key)+'</option>').join('')+
+      '</select></label><label>價格<input name="unit_price" type="number" min="0" max="100000000" required></label>'+
+      '<label>總庫存限制（留空為不限）<input name="stock_limit" type="number" min="0" max="1000000"></label>'+
+      '<button type="submit">儲存商品</button></form></details>'+
+    '<details><summary>最近管理操作紀錄</summary>'+
+      (audit.history||[]).map(a=>'<article>'+esc(a.created_at)+'　'+esc(a.operation)+'　'+esc(a.entity_type)+
+      '　'+esc(a.entity_id)+'</article>').join('')+'</details>';
+  const editEvent=$('#xtankEditEvent'),editOffer=$('#xtankEditOffer');
+  editEvent.elements.event_id.onchange=()=>{
+   const event=(ops.events||[]).find(e=>e.event_id===editEvent.elements.event_id.value);
+   if(!event)return;
+   editEvent.elements.name.value=event.display_name;
+   editEvent.elements.kind.value=event.config?.type||'matches';
+   editEvent.elements.target.value=event.config?.target||1;
+   editEvent.elements.reward.value=event.config?.coin_reward||0;
+   editEvent.elements.start.value=localDateTime(event.starts_at);
+   editEvent.elements.end.value=localDateTime(event.ends_at);
+  };
+  editEvent.onsubmit=e=>{
+   e.preventDefault();const a=editEvent.elements;
+   run(()=>liveEditor('edit_event',{event_id:a.event_id.value,name:a.name.value,kind:a.kind.value,
+     target:Number(a.target.value),reward:Number(a.reward.value),
+     starts_at:new Date(a.start.value).toISOString(),ends_at:new Date(a.end.value).toISOString()}));
+  };
+  editOffer.elements.offer_id.onchange=()=>{
+   const offer=(ops.offers||[]).find(o=>o.offer_id===editOffer.elements.offer_id.value);
+   if(offer)editOffer.elements.unit_price.value=offer.unit_price;
+  };
+  editOffer.onsubmit=e=>{
+   e.preventDefault();const a=editOffer.elements;
+   run(()=>liveEditor('edit_offer',{offer_id:a.offer_id.value,
+     unit_price:Number(a.unit_price.value),stock_limit:a.stock_limit.value||null}));
+  };
   $('#xtankModerationForm').onsubmit=e=>{e.preventDefault();const f=e.target;run(()=>api(f.elements.action.value,{player_id:f.elements.player_id.value,reason:f.elements.reason.value}))};
   $('#xtankAdminMain').querySelectorAll('[data-report]').forEach(b=>b.onclick=()=>run(()=>api('resolve_report',{report_id:b.dataset.report})));
   $('#xtankGlobalMute').onsubmit=e=>{
