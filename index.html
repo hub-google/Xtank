@@ -19,7 +19,7 @@
         <div class="meter"><div id="hpBar" class="fill hp"></div></div>
         <div class="stat-label">護盾 <strong id="shieldText">65/65</strong></div>
         <div class="meter"><div id="shieldBar" class="fill shield"></div></div>
-        <div id="statusText" class="status">就緒</div>
+        <div id="statusText" class="status">就緒</div><div id="hudLatency" class="status" aria-label="線上連線延遲"></div>
       </div>
       <div class="score" id="scoreText"></div>
       <canvas id="minimap" width="192" height="128" aria-label="戰場小地圖"></canvas>
@@ -63,6 +63,10 @@
             <option value="circuit">電路板戰場</option>
           </select></label>
         </div>
+        <section class="map-preview" aria-label="目前選取的戰場預覽">
+          <strong id="mapPreviewTitle">巨型書桌</strong>
+          <canvas id="mapPreview" width="240" height="160" aria-label="地圖障礙與出生位置預覽"></canvas>
+        </section>
         <details class="control-settings">
           <summary>自訂鍵位（儲存於本機）</summary>
           <div id="controlsEditor" class="controls-grid"></div>
