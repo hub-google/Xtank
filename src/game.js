@@ -687,7 +687,8 @@ function onlineMessage(msg){
     onlineStatus('官方戰績及獎勵已寫入永久資料庫 · '+msg.matchId);
     if(resultShown&&!spectating){
       el('resultRewards').textContent='官方賽果已入帳，正在讀取本人實際獎勵明細…';
-      window.xtankAccount?.getMatchReceipt?.(msg.matchId)
+      const lookup=window.xtankAccount?.getMatchReceipt;
+      if(typeof lookup==='function')lookup(msg.matchId)
         .then(receipt=>{
           if(!resultShown||spectating||!match)return;
           el('resultRewards').textContent='官方已入帳：經驗 +'+receipt.xp+
@@ -698,6 +699,7 @@ function onlineMessage(msg){
           if(resultShown)el('resultRewards').textContent=
             '官方賽果已入帳，但獎勵明細讀取失敗：'+error.message;
         });
+      else el('resultRewards').textContent='已儲存正式戰績；請在玩家中心查看交易紀錄';
     }
     updateRematchAvailability();
     window.xtankAccount?.refresh?.().catch(e=>console.warn('Profile refresh after match:',e.message));
