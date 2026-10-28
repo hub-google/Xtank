@@ -1,7 +1,7 @@
 import {battleAudio} from './audio.js';
 import {CAMERA_VIEWS,cameraPose} from './camera-presets.js';
 import {GRAPHICS_PRESETS,loadGraphicsQuality,saveGraphicsQuality,loadHighContrast,saveHighContrast} from './graphics-settings.js';
-import {DEFAULT_BINDINGS,ACTION_LABELS,isAllowedCode,assignBinding,loadBindings,saveBindings,displayCode} from './controls.js';
+import {DEFAULT_BINDINGS,ACTION_LABELS,isAllowedCode,assignBinding,normalizeBindings,loadBindings,saveBindings,displayCode} from './controls.js';
 import * as THREE from 'three';
 import './style.css';
 import {OnlineConnection} from './online.js';
@@ -143,6 +143,13 @@ const keyboard = new Set();
 let bindings;
 try{bindings=loadBindings(window.localStorage)}catch{bindings={...DEFAULT_BINDINGS}}
 let waitingForBinding=null;
+let pendingCloudBindings=Promise.resolve();
+function persistBindings(){
+ const snapshot={...bindings};
+ pendingCloudBindings=pendingCloudBindings.catch(()=>{}).then(()=>
+   window.xtankAccount?.saveCloudBindings?.(snapshot)
+ ).catch(error=>console.warn('無法同步雲端快捷鍵：',error.message));
+}
 function renderBindings(){
  const editor=el('controlsEditor');
  if(!editor)return;
@@ -164,6 +171,7 @@ function renderBindings(){
 el('resetControlBindings')?.addEventListener('click',()=>{
  waitingForBinding=null;bindings={...DEFAULT_BINDINGS};keyboard.clear();
  try{saveBindings(window.localStorage,bindings)}catch{}
+ persistBindings();
  renderBindings();
 });
 window.addEventListener('keydown',event=>{
@@ -174,6 +182,7 @@ window.addEventListener('keydown',event=>{
  bindings=assignBinding(bindings,waitingForBinding,event.code);
  waitingForBinding=null;keyboard.clear();fireHeld=false;
  try{saveBindings(window.localStorage,bindings)}catch{}
+ persistBindings();
  renderBindings();
 },true);
 renderBindings();
@@ -478,6 +487,9 @@ if(graphicsChoice){
   graphicsQuality=saveGraphicsQuality(window.localStorage,graphicsChoice.value);
   qualityReduced=false;slowFrames=0;sessionStorage.removeItem('xtankLowPower');
   applyGraphicsQuality();
+  // A guest's local choice is retained; authenticated players also sync to their account.
+  window.xtankAccount?.savePreferences?.({graphics_quality:graphicsQuality})
+    ?.catch(error=>console.warn('無法同步雲端畫質：',error.message));
  });
 }
 const contrastChoice=el('highContrastToggle');
@@ -490,6 +502,21 @@ if(contrastChoice){
 }
 document.body.classList.toggle('xtank-high-contrast',highContrast);
 applyGraphicsQuality();
+document.addEventListener('xtank-player-preferences',event=>{
+ const settings=event.detail||{};
+ if(settings.keybindings&&typeof settings.keybindings==='object'
+     &&Object.keys(settings.keybindings).length===Object.keys(DEFAULT_BINDINGS).length){
+   bindings=normalizeBindings(settings.keybindings);
+   keyboard.clear();fireHeld=false;waitingForBinding=null;
+   try{saveBindings(window.localStorage,bindings)}catch{}
+   renderBindings();
+ }
+ if(Object.hasOwn(GRAPHICS_PRESETS,settings.graphics_quality)){
+   graphicsQuality=saveGraphicsQuality(window.localStorage,settings.graphics_quality);
+   if(graphicsChoice)graphicsChoice.value=graphicsQuality;
+   applyGraphicsQuality();
+ }
+});
 function animate(now){
   requestAnimationFrame(animate);
   const elapsed=Math.max(0,(now-last)/1000||0);
