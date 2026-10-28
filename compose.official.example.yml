@@ -7,9 +7,6 @@ services:
     environment:
       NODE_ENV: production
       XTANK_OFFICIAL_MODE: "1"
-      XTANK_REGION: ${XTANK_REGION:-asia-east}
-      # Required for cross-server ticket allocation, never guess the hostname.
-      XTANK_PUBLIC_WSS_URL: ${XTANK_PUBLIC_WSS_URL:-}
       PORT: "8787"
       BIND_HOST: 0.0.0.0
       XTANK_SETTLEMENT_DIR: /data/settlements
