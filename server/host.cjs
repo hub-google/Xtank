@@ -100,6 +100,31 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
   }
   launch(r);
  }
+ async function refundAbortedRoom(r){
+  if(r.phase!=='aborting'||r.refundTask)return r.refundTask;
+  const roundId=r.roundId;
+  const task=(async()=>{
+   try{
+    if(official&&roundId)await official.release(roundId);
+    else await Promise.resolve();
+    if(r.phase!=='aborting'||r.roundId!==roundId)return;
+    r.roundId=null;r.game=null;r.inputs=null;r.events=[];r.phase='lobby';
+    r.refundAttempts=0;r.nextRefundAt=0;
+    for(const player of members(r)){player.slot=null;player.ready=false;}
+    broadcast(r,{type:'ROUND_REFUNDED'});
+    lobby(r);
+   }catch(error){
+    console.error('Aborted round refund awaiting retry:',roundId,error.message);
+    if(r.phase!=='aborting'||r.roundId!==roundId)return;
+    r.refundAttempts=(r.refundAttempts||0)+1;
+    const retryMs=Math.min(60000,5000*Math.pow(2,Math.min(r.refundAttempts-1,4)));
+    r.nextRefundAt=Date.now()+retryMs;
+    broadcast(r,{type:'ROUND_REFUND_PENDING',retrySeconds:Math.ceil(retryMs/1000)});
+   }
+  })();
+  r.refundTask=task;
+  try{await task}finally{if(r.refundTask===task)r.refundTask=null;}
+ }
  async function prepareOfficialLaunch(r){
   if(!official||r.phase!=='countdown')return;
   r.phase='allocating';
@@ -124,13 +149,10 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
    launch(r);
   }catch(error){
    console.error('Official reservation rejected:',error.message);
-   try{await official.release(roundId);}
-   catch(releaseError){console.error('Escrow release requires operator recovery:',releaseError.message);}
-   if(r.roundId===roundId){
-    r.phase='lobby';r.roundId=null;
-    broadcast(r,{type:'ERROR',code:'MATCH_RESERVATION_FAILED',message:error.message});
-    lobby(r);
-   }
+   if(r.roundId!==roundId||r.phase==='closing')return;
+   r.phase='aborting';
+   broadcast(r,{type:'ERROR',code:'MATCH_RESERVATION_FAILED',message:error.message});
+   await refundAbortedRoom(r);
   }
  }
  function launch(r){
@@ -371,7 +393,8 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
        send(target.ws,{type:'ROOM_MODERATION',action:'kick'});
        target.ws?.close(1008,'removed by room host');
        target.ws=null;target.token=null;target.lastSeen=Date.now()-31000;
-       if(r.inputs&&target.slot)r.inputs.set(target.slot,{dx:0,dz:0,aimYaw:0,fire:false,item:0,ability:false});
+       if(r.inputs&&target.slot)r.inputs.delete(target.slot);
+       if(r.game&&target.slot)r.game.humanIds.delete(target.slot);
        // A kicked player's reconnect token must not recreate a room seat.
        r.people.delete(target.id);
        if(r.phase==='countdown')cancelCountdown(r);
@@ -417,6 +440,8 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
  const ticking=setInterval(()=>{
   const steps=elapsedSteps();
   for(let step=0;step<steps;step++)for(const r of rooms.values()){
+   if(r.phase==='aborting'&&!r.refundTask&&Date.now()>=(r.nextRefundAt||0))
+    void refundAbortedRoom(r);
    if(r.phase==='countdown'){
      const live=members(r).filter(member=>member.ws);
      if(live.length<2||live.some(member=>!member.ready))cancelCountdown(r);
@@ -445,19 +470,8 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
     catch(err){
      console.error('X-TANK room tick:',err);
      r.phase='aborting';
-     const abortedRound=r.roundId;
      broadcast(r,{type:'ROUND_ABORTED',reason:'GAME_ENGINE_FAILED'});
-     for(const player of members(r)){player.ready=false;player.slot=null;}
-     r.refundTask=(async()=>{
-      if(official&&abortedRound){
-       try{await official.release(abortedRound);}
-       catch(error){console.error('Aborted round refund deferred to recovery',abortedRound,error.message);}
-      }
-      if(r.phase==='aborting'){
-       r.roundId=null;r.game=null;r.inputs=null;r.events=[];r.phase='lobby';
-       lobby(r);
-      }
-     })();
+     void refundAbortedRoom(r);
      continue;
     }
     for(const v of r.inputs.values()){v.item=0;v.ability=false;}
@@ -489,7 +503,10 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
    }
    // Do not discard an active round just because every socket timed out: the
    // authoritative engine must finish it and persist official results first.
-   if(!r.people.size&&!(r.spectators?.size)&&r.phase!=='live'&&Date.now()-r.created>20000)rooms.delete(r.id);
+   if(!r.people.size&&!(r.spectators?.size)&&
+      !['live','allocating','aborting','closing'].includes(r.phase)&&
+      (!official||r.phase!=='finished'||r.officialMatchId)&&
+      Date.now()-r.created>20000)rooms.delete(r.id);
   }
  },25);
  ticking.unref?.();
