@@ -52,7 +52,8 @@ async function getToken(){
  if(validSession())return session.access_token;
  if(!session?.refresh_token)throw Error('請先登入');
  const data=await rest('/auth/v1/token?grant_type=refresh_token',{body:{refresh_token:session.refresh_token}});
- saveSession({...data,expires_at:Math.floor(Date.now()/1000)+(data.expires_in||3600)});
+ saveSession({...data,user:data.user||session.user,needsAccountUpgrade:session.needsAccountUpgrade===true,
+  expires_at:Math.floor(Date.now()/1000)+(data.expires_in||3600)});
  return session.access_token;
 }
 async function rpc(action,payload={}){
@@ -124,7 +125,7 @@ function authView(){
   const data=await rest('/auth/v1/signup',{body:{}});
   if(!data.access_token||!data.user?.id||data.user?.is_anonymous!==true)
     throw Error('匿名登入尚未在專案啟用，請先使用本機遊客練習');
-  saveSession({...data,expires_at:Math.floor(Date.now()/1000)+(data.expires_in||3600)});
+  saveSession({...data,needsAccountUpgrade:true,expires_at:Math.floor(Date.now()/1000)+(data.expires_in||3600)});
   await rpc('initialize',{});
   await reload();
   msg('匿名玩家資料已建立。請在登出或換裝置前，先將帳號升級並完成信箱驗證。');
@@ -147,7 +148,7 @@ function bar(){
  return `<div class="xtank-account-user"><strong>${escaped(profile.display_name)}</strong>
  <span>Lv. ${progress.level}</span><span>XP ${progress.total_xp}</span><span>金幣 ${balance}</span>
  <button type="button" data-action="logout">登出</button></div>
- <nav class="xtank-account-nav">${[...[['home','總覽'],['garage','機庫'],['inventory','背包配裝'],['shop','商店'],['ledger','交易紀錄'],['rank','排行榜'],['friends','好友'],['settings','設定']],...(session?.user?.is_anonymous?[['upgrade','升級正式帳號']]:[])].map(([id,t])=>button(t,'tab:'+id,id===tab?'active':'')).join('')}</nav>`;
+ <nav class="xtank-account-nav">${[...[['home','總覽'],['garage','機庫'],['inventory','背包配裝'],['shop','商店'],['ledger','交易紀錄'],['rank','排行榜'],['friends','好友'],['settings','設定']],...(session?.needsAccountUpgrade||session?.user?.is_anonymous?[['upgrade','升級正式帳號']]:[])].map(([id,t])=>button(t,'tab:'+id,id===tab?'active':'')).join('')}</nav>`;
 }
 function panel(){
  if(tab==='upgrade')return `<h2>將匿名遊客升級成正式帳號</h2>
@@ -364,7 +365,7 @@ function draw(){
  }
  $('#xtankLinkAnonymousEmail')?.addEventListener('submit',e=>{
   e.preventDefault();run(async()=>{
-   if(!session?.user?.is_anonymous)throw Error('目前不是匿名帳號');
+   if(!session?.needsAccountUpgrade&&!session?.user?.is_anonymous)throw Error('目前不是匿名帳號');
    const token=await getToken();
    await rest('/auth/v1/user',{method:'PUT',token,body:{email:e.target.elements.email.value.trim()}});
    msg('綁定信已送出。請完成信箱驗證，再回遊戲設定密碼；玩家 ID 不會改變。');
@@ -377,7 +378,7 @@ function draw(){
    if(verified.is_anonymous===true||!verified.email_confirmed_at)
     throw Error('尚未完成信箱驗證，請先按郵件內的連結驗證');
    const changed=await rest('/auth/v1/user',{method:'PUT',token,body:{password:e.target.elements.password.value}});
-   saveSession({...session,user:changed.user||changed});
+   saveSession({...session,user:changed.user||changed,needsAccountUpgrade:false});
    await reload();tab='home';draw();
    msg('已升級為正式玩家，原本的玩家 ID 與進度保留。');
   });
