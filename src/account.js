@@ -187,7 +187,14 @@ function draw(){
  if(tab==='friends')rpcNamed('xtank_social_api',{p_action:'list'}).then(data=>{
   const target=$('#xtankFriendsList');
   if(target)target.innerHTML=(data.friends||[]).map(f=>`<p>${escaped(f.friend_name)}　${escaped(f.status)} ${f.status==='pending'&&f.friend_id===dashboard.profile.player_id?button('接受邀請','accept:'+f.player_id):''} ${button('封鎖','block:'+(f.player_id===dashboard.profile.player_id?f.friend_id:f.player_id))}</p>`).join('')||'<p>目前沒有好友邀請</p>';
-  target?.querySelectorAll('[data-action]').forEach(b=>b.onclick=()=>run(async()=>{await rpcNamed('xtank_social_api',{p_action:'accept',p_target:b.dataset.action.split(':')[1]});draw();msg('已接受好友邀請')}));
+  target?.querySelectorAll('[data-action]').forEach(b=>b.onclick=()=>{
+   const [action,targetId]=b.dataset.action.split(':');
+   if(action==='block'&&!confirm('確定要封鎖這名玩家並解除好友關係？'))return;
+   run(async()=>{
+    await rpcNamed('xtank_social_api',{p_action:action,p_target:targetId});
+    draw();msg(action==='block'?'已封鎖玩家':'已接受好友邀請');
+   });
+  });
  }).catch(e=>msg(e.message));
  $('#xtankFriendForm')?.addEventListener('submit',e=>{e.preventDefault();const f=e.target;run(async()=>{await rpcNamed('xtank_social_api',{p_action:'invite',p_target:f.elements.player_id.value.trim()});draw();msg('已送出邀請')})});
  const loadoutForm=$('#xtankLoadoutForm');
