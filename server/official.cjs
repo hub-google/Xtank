@@ -40,6 +40,7 @@ function officialService({onSettlement}={}){
   outbox.retry().catch(e=>console.error('Recover official match outbox:',e.message));
   return {
     close:()=>outbox.close(),
+    outboxStats:()=>outbox.stats(),
     recover:()=>outbox.retry(),
     async recoverConsumables(){
       // Retry any durable results first. If settlement outbox files remain,
