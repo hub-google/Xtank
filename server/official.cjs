@@ -116,6 +116,18 @@ function officialService({onSettlement}={}){
     async release(roundId){
       return request('/rest/v1/rpc/xtank_release_match_items',{body:{p_round_id:roundId}});
     },
+    async authenticateSpectator(token){
+      if(typeof token!=='string'||token.length<80)throw Error('LOGIN_REQUIRED');
+      const user=await request('/auth/v1/user',{token,method:'GET'});
+      if(!user.id||user.is_anonymous===true)throw Error('UPGRADE_ACCOUNT_REQUIRED');
+      // Spectators must authenticate, but do not need to own the tank currently
+      // selected in their local UI: they are read-only participants.
+      const dash=await request('/rest/v1/rpc/xtank_player_api',{
+        token,body:{p_action:'dashboard',p_payload:{}}
+      });
+      if(dash.profile?.player_id!==user.id)throw Error('UNAUTHORIZED_PLAYER');
+      return {player_id:user.id,name:dash.profile.display_name};
+    },
     async authenticate(token,tankId){
       if(typeof token!=='string'||token.length<80)throw Error('LOGIN_REQUIRED');
       const u=await request('/auth/v1/user',{token,method:'GET'});
