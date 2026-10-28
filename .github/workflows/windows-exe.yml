@@ -2,6 +2,9 @@ name: Windows EXE build and 72-case GUI QA
 # Development commits do not build or test Windows packages automatically.
 # Run manually only when explicitly requested.
 on:
+  push:
+    branches:
+      - 'release-validation/**'
   workflow_dispatch:
     inputs:
       qa_filter:
@@ -94,7 +97,7 @@ jobs:
 
   windows-extended-qa:
     name: Real EXE - additional weapons, items and multiplayer
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/heads/release-validation/')
     needs: windows-build
     runs-on: windows-latest
     timeout-minutes: 115
