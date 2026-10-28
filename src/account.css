@@ -36,3 +36,8 @@
 .xtank-stats dt{font-size:12px;color:#b2cbdf}.xtank-stats dd{font-size:22px;font-weight:700;color:#ffdf85;margin:0}
 #xtankAccountOpen{margin:12px 0;width:100%;padding:10px;border-radius:8px;border:1px solid #8ca6c2;background:#244a65;color:#fff;cursor:pointer}
 @media(max-width:640px){.xtank-account-dialog main{padding:12px}.xtank-stats{grid-template-columns:repeat(2,minmax(90px,1fr))}.xtank-account-dialog{font-size:13px}}
+
+.xtank-garage-preview{width:100%;margin:12px 0 18px;padding:10px;border:1px solid #456b82;border-radius:11px;background:#142d46;overflow:hidden}
+.xtank-garage-preview select{max-width:240px;margin:0 0 8px}
+.xtank-garage-preview canvas{display:block;width:100%;height:220px;touch-action:none;cursor:grab;border-radius:8px}
+.xtank-garage-preview canvas:active{cursor:grabbing}
