@@ -31,6 +31,17 @@ if(menu){
   if(!res.ok)throw Error(data.message||data.error||'HTTP '+res.status);
   return data;
  }
+ async function compensateItem(payload){
+  const token=await window.xtankAccount?.getAccessToken?.();
+  if(!token)throw Error('請先登入管理員');
+  const response=await fetch(URL.replace('xtank_admin_api','xtank_admin_compensate_item'),{
+   method:'POST',headers:{apikey:KEY,Authorization:'Bearer '+token,'Content-Type':'application/json'},
+   body:JSON.stringify(payload)
+  });
+  const result=await response.json().catch(()=>({}));
+  if(!response.ok)throw Error(result.message||result.error||'HTTP '+response.status);
+  return result;
+ }
  async function compensate(payload){
   const token=await window.xtankAccount?.getAccessToken?.();
   if(!token)throw Error('請先登入管理員');
@@ -110,6 +121,14 @@ if(menu){
     '<label>補償經驗（0～20000）<input name="xp" type="number" min="0" max="20000" value="0" required></label>'+
     '<label>原因／處理單號（10～300 字）<input name="reason" minlength="10" maxlength="300" required></label>'+
     '<button type="submit">確認補償並寫入稽核</button></form>'+
+    '<form id="xtankAdminItemCompensation"><label>玩家 UUID<input name="player_id" required></label>'+
+    '<label>補償道具<select name="item_id"><option value="repair">維修包</option>'+
+    '<option value="speed_boost">加速</option><option value="shield_cell">護盾補充</option>'+
+    '<option value="radar_ping">雷達</option><option value="smoke">煙霧</option>'+
+    '<option value="team_repair">團隊維修</option></select></label>'+
+    '<label>數量（1～30）<input type="number" name="quantity" min="1" max="30" value="1" required></label>'+
+    '<label>處理原因（10～300 字）<input name="reason" minlength="10" maxlength="300" required></label>'+
+    '<button type="submit">補償道具並寫入庫存流水</button></form>'+
     '<h2>玩家檢舉</h2>'+(d.reports||[]).map(r=>'<article><strong>'+esc(r.reason)+'</strong><p>'+esc(r.details)+'／被檢舉：'+esc(r.reported_id)+'</p><small>'+esc(r.status)+'　'+esc(r.created_at)+'</small>　'+(r.status==='open'?'<button data-report="'+esc(r.report_id)+'">結案</button>':'')+'</article>').join('')+
     '<h2>停權名單</h2>'+(d.bans||[]).map(b=>'<article>玩家：'+esc(b.player_id)+'　'+esc(b.reason)+'　'+(b.revoked_at?'已解除':'仍在停權')+'</article>').join('')+
     '<h2>玩家處置</h2><form id="xtankModerationForm"><label>玩家 UUID<input name="player_id" required></label><label>操作<select name="action"><option value="suspend">停權</option><option value="unsuspend">解除停權</option></select></label><label>原因<input name="reason" minlength="5" maxlength="300" required></label><button type="submit">確認處置</button></form>'+
@@ -192,6 +211,16 @@ if(menu){
    const requestId=crypto.randomUUID();
    run(()=>compensate({p_player_id:form.elements.player_id.value,
     p_coins:coins,p_xp:xp,p_reason:form.elements.reason.value.trim(),p_request_id:requestId}));
+  };
+  $('#xtankAdminItemCompensation').onsubmit=e=>{
+   e.preventDefault();
+   const form=e.target,quantity=Number(form.elements.quantity.value);
+   if(!Number.isSafeInteger(quantity)||quantity<1||quantity>30){status('道具數量須為 1～30');return;}
+   if(!confirm('確認將 '+quantity+' 個 '+form.elements.item_id.value+' 補償給指定玩家？'))return;
+   const requestId=crypto.randomUUID();
+   run(()=>compensateItem({p_player_id:form.elements.player_id.value,
+    p_item_id:form.elements.item_id.value,p_quantity:quantity,
+    p_reason:form.elements.reason.value.trim(),p_request_id:requestId}));
   };
   $('#xtankMaintenanceForm').onsubmit=e=>{
    e.preventDefault();
