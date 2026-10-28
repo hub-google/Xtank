@@ -1,5 +1,6 @@
 import {battleAudio} from './audio.js';
 import {CAMERA_VIEWS,cameraPose} from './camera-presets.js';
+import {GRAPHICS_PRESETS,loadGraphicsQuality,saveGraphicsQuality,loadHighContrast,saveHighContrast} from './graphics-settings.js';
 import {DEFAULT_BINDINGS,ACTION_LABELS,isAllowedCode,assignBinding,loadBindings,saveBindings,displayCode} from './controls.js';
 import * as THREE from 'three';
 import './style.css';
@@ -453,12 +454,42 @@ function drawMap(){
   }
 }
 let hudAccumulator=0,slowFrames=0,frameMs=0,qualityReduced=softwareGPU||sessionStorage.getItem('xtankLowPower')==='1';
-function reduceGraphics(){
- renderer.shadowMap.enabled=false;
- scene.traverse(o=>{if(o.isPointLight)o.visible=false;});
- renderer.setPixelRatio(.75);renderer.setSize(innerWidth,innerHeight);
+let graphicsQuality=loadGraphicsQuality(window.localStorage);
+let highContrast=loadHighContrast(window.localStorage);
+function applyGraphicsQuality(){
+ const quality=GRAPHICS_PRESETS[graphicsQuality];
+ const shadows=quality.shadows&&!qualityReduced;
+ renderer.shadowMap.enabled=shadows;
+ sun.castShadow=shadows;
+ if(sun.shadow.mapSize.width!==quality.shadowSize||sun.shadow.mapSize.height!==quality.shadowSize){
+  sun.shadow.map?.dispose();sun.shadow.map=null;
+  sun.shadow.mapSize.set(quality.shadowSize,quality.shadowSize);
+ }
+ renderer.shadowMap.needsUpdate=true;
+ scene.traverse(object=>{if(object.isPointLight)object.visible=shadows;});
+ renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,qualityReduced ? .75 : quality.pixelRatioCap));
+ renderer.setSize(innerWidth,innerHeight);
 }
-if(qualityReduced)reduceGraphics();
+function reduceGraphics(){applyGraphicsQuality();}
+const graphicsChoice=el('graphicsQuality');
+if(graphicsChoice){
+ graphicsChoice.value=graphicsQuality;
+ graphicsChoice.addEventListener('change',()=>{
+  graphicsQuality=saveGraphicsQuality(window.localStorage,graphicsChoice.value);
+  qualityReduced=false;slowFrames=0;sessionStorage.removeItem('xtankLowPower');
+  applyGraphicsQuality();
+ });
+}
+const contrastChoice=el('highContrastToggle');
+if(contrastChoice){
+ contrastChoice.checked=highContrast;
+ contrastChoice.addEventListener('change',()=>{
+  highContrast=saveHighContrast(window.localStorage,contrastChoice.checked);
+  document.body.classList.toggle('xtank-high-contrast',highContrast);
+ });
+}
+document.body.classList.toggle('xtank-high-contrast',highContrast);
+applyGraphicsQuality();
 function animate(now){
   requestAnimationFrame(animate);
   const elapsed=Math.max(0,(now-last)/1000||0);
@@ -677,7 +708,7 @@ handleEvents=function(events){
  return qaHandle(events);
 };
 Object.defineProperty(window,'xtankDiagnostics',{value:()=>JSON.parse(JSON.stringify({
- now:performance.now()/1000,gpuRenderer,softwareGPU,frameMs,viewport:{width:innerWidth,height:innerHeight},qualityReduced,paused,online:!!online,networkSlot,networkRoomId,
+ now:performance.now()/1000,gpuRenderer,softwareGPU,frameMs,viewport:{width:innerWidth,height:innerHeight},qualityReduced,graphics:{quality:graphicsQuality,pixelRatio:renderer.getPixelRatio(),shadows:renderer.shadowMap.enabled,highContrast},paused,online:!!online,networkSlot,networkRoomId,
  match:match?{mode:match.mode,mapId:match.mapId,time:match.time,tick:match.tick,ended:match.ended,
  tanks:match.tanks,projectiles:match.projectiles,scores:match.scores,flag:match.flag,
  smokes:match.smokes,repairFields:match.repairFields}:null,

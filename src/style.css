@@ -31,3 +31,13 @@
 
 .camera-view-name{font-size:12px;color:#d4e9fc;margin-left:10px;white-space:nowrap}
 @media(max-width:960px){.camera-view-name{display:none}}
+
+.display-settings{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:10px 0 16px;font-size:13px;color:#d6e7ff}
+.display-settings label{display:flex;align-items:center;gap:9px}
+.display-settings select{font-size:13px;min-width:115px;padding:6px;border:1px solid #7199b6;border-radius:6px;background:#122943;color:white}
+.display-settings .contrast-option{white-space:nowrap}
+.display-settings input[type=checkbox]{width:17px;height:17px;accent-color:#fff08c}
+.xtank-high-contrast .panel,.xtank-high-contrast #networkLobby,.xtank-high-contrast #pauseBadge{background:#02080d!important;border-color:#f1f5ff!important}
+.xtank-high-contrast .status,.xtank-high-contrast .controls,.xtank-high-contrast .net-status,.xtank-high-contrast label,.xtank-high-contrast .control-binding{color:#fff!important;text-shadow:0 0 3px #000}
+.xtank-high-contrast .meter{outline:2px solid white}
+@media(max-width:700px){.display-settings{flex-wrap:wrap}}

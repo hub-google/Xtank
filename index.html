@@ -53,6 +53,18 @@
           <div id="controlsEditor" class="controls-grid"></div>
           <button id="resetControlBindings" class="secondary" type="button">恢復預設鍵位</button>
         </details>
+        <div class="display-settings" aria-label="畫面及無障礙設定">
+          <label for="graphicsQuality">畫面品質
+            <select id="graphicsQuality">
+              <option value="low">省電模式</option>
+              <option value="balanced">平衡模式</option>
+              <option value="high">高畫質</option>
+            </select>
+          </label>
+          <label class="contrast-option" for="highContrastToggle">
+            <input type="checkbox" id="highContrastToggle"> 高對比介面
+          </label>
+        </div>
         <button id="startButton" class="primary">單機開始戰鬥 ▶</button>
         <section class="online-box" aria-label="多人連線">
           <h2>真人連線對戰 <small>LAN / 自備伺服器</small></h2>
