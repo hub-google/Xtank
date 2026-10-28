@@ -137,7 +137,7 @@ function bar(){
  return `<div class="xtank-account-user"><strong>${escaped(profile.display_name)}</strong>
  <span>Lv. ${progress.level}</span><span>XP ${progress.total_xp}</span><span>金幣 ${balance}</span>
  <button type="button" data-action="logout">登出</button></div>
- <nav class="xtank-account-nav">${[['home','總覽'],['garage','機庫'],['inventory','背包配裝'],['shop','商店'],['rank','排行榜'],['friends','好友'],['settings','設定']].map(([id,t])=>button(t,'tab:'+id,id===tab?'active':'')).join('')}</nav>`;
+ <nav class="xtank-account-nav">${[['home','總覽'],['garage','機庫'],['inventory','背包配裝'],['shop','商店'],['ledger','交易紀錄'],['rank','排行榜'],['friends','好友'],['settings','設定']].map(([id,t])=>button(t,'tab:'+id,id===tab?'active':'')).join('')}</nav>`;
 }
 function panel(){
  if(tab==='home')return `<h2>玩家總覽</h2><dl class="xtank-stats">${Object.entries({等級:dashboard.progress.level,經驗:dashboard.progress.total_xp,剩餘升級點:dashboard.progress.unspent_points,已玩場次:dashboard.stats.matches_played,勝場:dashboard.stats.wins,擊殺:dashboard.stats.kills}).map(([k,v])=>`<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
@@ -178,6 +178,7 @@ function panel(){
  const item=catalog.weapons.find(x=>x.weapon_id===o.weapon_id)||catalog.items.find(x=>x.item_id===o.item_id);
  return `<article><h3>${escaped(item?.display_name||o.offer_key)}</h3><p>${o.unit_price} ${escaped(o.currency_code)} / ${o.quantity} 個</p>
  ${button('購買','buy:'+o.offer_id)}</article>`;}).join('')||'<p>商店暫無上架商品</p>'}</div>`;
+ if(tab==='ledger')return `<h2>交易紀錄與歷史戰績</h2><p>以下皆由正式資料庫讀取，單機與自架 LAN 對戰不產生正式獎勵。</p><div id="xtankLedgerContent">正在讀取交易紀錄…</div>`;
  if(tab==='rank')return `<h2>2026 賽季排行榜</h2>
  <label>模式 <select id="xtankRankMode"><option value="FFA">個人混戰</option><option value="TDM">團隊戰</option><option value="FLAG_HOLD">搶旗戰</option></select></label>
  <div id="xtankRankContent">讀取賽季排行榜中…</div>`;
@@ -300,6 +301,32 @@ function draw(){
   await reload();msg('配裝已儲存：'+saved);
  });
  });
+ if(tab==='ledger'){
+  const ledger=$('#xtankLedgerContent');
+  rpcNamed('xtank_player_history',{p_limit:25}).then(data=>{
+   if(!ledger.isConnected)return;
+   const date=value=>value?new Date(value).toLocaleString('zh-TW'):'—';
+   const signed=n=>(Number(n)>0?'+':'')+Number(n||0);
+   const rows=(data.wallet||[]).map(item=>
+     '<article><strong>'+escaped(item.currency_code)+' '+signed(item.amount)+'</strong>　'+
+     escaped(item.source_type)+'<small>　餘額 '+escaped(item.balance_after)+'／'+escaped(date(item.created_at))+'</small></article>').join('');
+   const xpRows=(data.xp||[]).map(item=>
+     '<article>經驗 '+signed(item.xp_delta)+'　'+escaped(item.source_type)+
+     '<small>　累計 '+escaped(item.xp_after)+'／'+escaped(date(item.created_at))+'</small></article>').join('');
+   const items=(data.inventory||[]).map(item=>
+     '<article>'+escaped(item.item_kind)+' '+escaped(item.item_ref)+' × '+signed(item.quantity_delta)+
+     '<small>　'+escaped(item.source_type)+'／'+escaped(date(item.created_at))+'</small></article>').join('');
+   const battles=(data.matches||[]).map(item=>
+     '<article>'+escaped(item.mode_id)+'／'+escaped(item.map_id)+
+     '　擊破 '+escaped(item.kills)+'／被擊破 '+escaped(item.deaths)+
+     '　XP '+signed(item.xp)+'／金幣 '+signed(item.currency_amount)+
+     '<small>　'+escaped(item.reward_status||'—')+'／'+escaped(date(item.ended_at))+'</small></article>').join('');
+   ledger.innerHTML='<h3>金幣異動</h3>'+(rows||'<p>尚無紀錄</p>')+
+    '<h3>經驗異動</h3>'+(xpRows||'<p>尚無紀錄</p>')+
+    '<h3>物品異動</h3>'+(items||'<p>尚無紀錄</p>')+
+    '<h3>歷史正式對戰</h3>'+(battles||'<p>尚無紀錄</p>');
+  }).catch(error=>{if(ledger.isConnected)ledger.textContent='讀取失敗：'+error.message});
+ }
  if(tab==='rank'){
    const select=$('#xtankRankMode');
    select.value=rankMode;
@@ -352,4 +379,6 @@ async function run(fn){
 }
 show();
 if(session?.access_token){getToken().then(()=>rpc('initialize',{})).then(reload).catch(()=>{saveSession(null);dashboard=null;catalog=null;draw();msg('登入狀態已過期，請重新登入。')})}
-window.xtankAccount={show,hide,refresh:reload,getAccessToken:getToken,savePreferences,saveCloudBindings,getSignedInPlayerId:()=>dashboard?.profile?.player_id??null};
+window.xtankAccount={show,hide,refresh:reload,getAccessToken:getToken,savePreferences,saveCloudBindings,
+ getMatchReceipt:matchId=>rpcNamed('xtank_player_match_receipt',{p_match_id:matchId}),
+ getSignedInPlayerId:()=>dashboard?.profile?.player_id??null};
