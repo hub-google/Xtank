@@ -191,10 +191,14 @@ function panel(){
  </select></label>`).join('')}
  <label>道具 7 · 保留<select disabled><option>尚未開放</option></select></label></div>
  <button type="submit">儲存為使用中的配裝</button></form>`;
- if(tab==='shop')return `<h2>坦克軍火商店</h2><div class="xtank-card-grid">${catalog.offers.map(o=>{
+ if(tab==='shop')return `<h2>坦克軍火商店</h2><p>購買將從永久帳號扣除金幣；可在「交易紀錄」查到每一筆異動。</p><div class="xtank-card-grid">${catalog.offers.map(o=>{
  const item=catalog.weapons.find(x=>x.weapon_id===o.weapon_id)||catalog.items.find(x=>x.item_id===o.item_id);
- return `<article><h3>${escaped(item?.display_name||o.offer_key)}</h3><p>${o.unit_price} ${escaped(o.currency_code)} / ${o.quantity} 個</p>
- ${button('購買','buy:'+o.offer_id)}</article>`;}).join('')||'<p>商店暫無上架商品</p>'}</div>`;
+ const detail=[item?.category&&'類型：'+item.category,item?.cooldown_ms!=null&&'冷卻：'+item.cooldown_ms+' 毫秒',
+  item?.max_stack!=null&&'堆疊上限：'+item.max_stack].filter(Boolean).join('／');
+ return `<article><h3>${escaped(item?.display_name||o.offer_key)}</h3>
+ <p>單次獲得 ${escaped(o.quantity)} 個；售價 ${escaped(o.unit_price)} ${escaped(o.currency_code)}</p>
+ <small>${escaped(detail||'詳情以遊戲內裝備欄為準')}</small>
+ ${button('確認購買','buy:'+o.offer_id)}</article>`;}).join('')||'<p>商店暫無上架商品</p>'}</div>`;
  if(tab==='ledger')return `<h2>交易紀錄與歷史戰績</h2><p>以下皆由正式資料庫讀取，單機與自架 LAN 對戰不產生正式獎勵。</p><div id="xtankLedgerContent">正在讀取交易紀錄…</div>`;
  if(tab==='rank')return `<h2>2026 賽季排行榜</h2>
  <label>模式 <select id="xtankRankMode"><option value="FFA">個人混戰</option><option value="TDM">團隊戰</option><option value="FLAG_HOLD">搶旗戰</option></select></label>
@@ -406,8 +410,14 @@ function draw(){
  if(parts[0]==='tank'){const sel=$('#tankSelect');if(sel)sel.value=parts[1];hide();return}
  if(parts[0]==='upgrade')run(async()=>{await rpc('upgrade',{tank_id:parts[1],attribute:parts[2]});await reload();msg('坦克升級成功');return});
  if(parts[0]==='buy')run(async()=>{
+  const offer=catalog?.offers?.find(o=>o.offer_id===parts[1]);
+  if(!offer)throw Error('商品已下架或尚未載入');
+  const item=catalog.weapons.find(x=>x.weapon_id===offer.weapon_id)||
+    catalog.items.find(x=>x.item_id===offer.item_id);
+  if(!confirm('確定購買 '+(item?.display_name||offer.offer_key)+' × '+offer.quantity+
+    '，支付 '+offer.unit_price+' '+offer.currency_code+'？'))return;
   const key=crypto.randomUUID();await rpc('buy',{offer_id:parts[1],quantity:1,key});
-  await reload();msg('購買成功，金幣與背包已更新');return});
+  await reload();msg('購買成功，金幣與背包已更新；可在交易紀錄查看');return});
  }));
 }
 async function run(fn){
