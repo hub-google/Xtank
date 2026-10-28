@@ -146,9 +146,12 @@ let waitingForBinding=null;
 let pendingCloudBindings=Promise.resolve();
 function persistBindings(){
  const snapshot={...bindings};
- pendingCloudBindings=pendingCloudBindings.catch(()=>{}).then(()=>
-   window.xtankAccount?.saveCloudBindings?.(snapshot)
- ).catch(error=>console.warn('無法同步雲端快捷鍵：',error.message));
+ const playerId=window.xtankAccount?.getSignedInPlayerId?.();
+ pendingCloudBindings=pendingCloudBindings.catch(()=>{}).then(()=>{
+   // Queued guest or previous-account changes must not overwrite another player.
+   if(!playerId||window.xtankAccount?.getSignedInPlayerId?.()!==playerId)return;
+   return window.xtankAccount?.saveCloudBindings?.(snapshot);
+ }).catch(error=>console.warn('無法同步雲端快捷鍵：',error.message));
 }
 function renderBindings(){
  const editor=el('controlsEditor');
