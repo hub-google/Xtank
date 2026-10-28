@@ -83,6 +83,20 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
    if((requested===0||requested===1)&&counts[requested]<4)return requested;
    return counts[0]<=counts[1]&&counts[0]<4?0:1;
  }
+ function maybeReturnToLobby(r){
+  if(r.phase!=='finished'||(official&&!r.officialMatchId))return false;
+  const connected=members(r).filter(player=>player.ws?.readyState===WebSocket.OPEN);
+  if(connected.length&&connected.some(player=>!player.returned))return false;
+  r.phase='lobby';r.game=null;r.inputs=null;r.events=[];r.roundId=null;
+  r.persistStarted=false;r.officialMatchId=null;r.accountBySlot=null;
+  for(const player of members(r)){
+   if(player.ws?.readyState!==WebSocket.OPEN)r.people.delete(player.id);
+   else{player.slot=null;player.ready=false;player.returned=false;}
+  }
+  if(!r.hostId||!r.people.has(r.hostId))r.hostId=connected[0]?.id||null;
+  lobby(r);
+  return true;
+ }
  function cancelCountdown(r){
    if(r.phase!=='countdown')return;
    r.phase='lobby';delete r.countdownDeadline;
@@ -414,12 +428,13 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
     if(official&&input.weapon&&!p.allowedWeapons?.has(input.weapon))return send(ws,{type:'ERROR',code:'WEAPON_NOT_OWNED'});
      p.seq=m.seq;r.inputs.set(p.slot,input);
    }else if(m.type==='BACK_TO_LOBBY'&&r.phase==='finished'){
-    // Any player may return the finished room to lobby. Do not discard an
-    // official round until the durable settlement has been acknowledged.
+    // A player cannot force everyone else's results screen to close.
     if(official&&!r.officialMatchId)return send(ws,{type:'ERROR',code:'MATCH_SETTLEMENT_PENDING'});
-    r.phase='lobby';r.game=null;r.inputs=null;r.events=[];
-    for(const other of members(r))if(!other.ws)r.people.delete(other.id);else{other.slot=null;other.ready=false;}
-    lobby(r);
+    p.returned=true;
+    if(!maybeReturnToLobby(r)){
+      const waiting=members(r).filter(v=>v.ws?.readyState===WebSocket.OPEN&&!v.returned).length;
+      broadcast(r,{type:'REMATCH_WAITING',playersRemaining:waiting});
+    }
    }else if(m.type==='PING')send(ws,{type:'PONG',serverTime:Date.now()});
   });
   ws.on('close',()=>{
@@ -429,7 +444,8 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
    p.ws=null;p.lastSeen=Date.now();
    if(r.inputs&&p.slot)r.inputs.set(p.slot,{dx:0,dz:0,aimYaw:0,fire:false});
    if(r.phase==='countdown')cancelCountdown(r);
-   if(p.id===r.hostId)r.hostId=members(r).find(x=>x.ws)?.id||null;
+   if(p.id===r.hostId)r.hostId=members(r).find(x=>x.ws?.readyState===WebSocket.OPEN)?.id||null;
+   if(r.phase==='finished'&&maybeReturnToLobby(r))return;
    lobby(r);
   });
   ws.on('error',()=>{});
