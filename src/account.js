@@ -1,5 +1,6 @@
 import './account.css';
 import {mountGaragePreview} from './garage-preview.js';
+import {loadBindings} from './controls.js';
 
 const URL='https://fanffwnhkxpfhttylntw.supabase.co';
 const KEY='sb_publishable_fsrieSLUXlq-_WDpPY9K_w_eO-dN_jT';
@@ -73,6 +74,14 @@ async function signIn(email,password,signup=false){
 }
 async function reload(){
  dashboard=await rpc('dashboard');
+ // Import a guest's existing local bindings the first time this account has no cloud mapping.
+ if(dashboard.settings&&Object.keys(dashboard.settings.keybindings||{}).length===0){
+  try{
+   const local=loadBindings(window.localStorage);
+   await rpcNamed('xtank_save_keybindings',{p_bindings:local});
+   dashboard.settings.keybindings=local;
+  }catch(error){console.warn('雲端快捷鍵初始同步未完成：',error.message)}
+ }
  const nick=$('#playerName');if(nick&&nick.value==='Player')nick.value=dashboard.profile.display_name;
  catalog=await rpc('catalog');
  window.xtankAudio?.setMasterVolume?.(dashboard.settings?.master_volume??0.7);
