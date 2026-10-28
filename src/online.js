@@ -8,6 +8,9 @@ export class OnlineConnection {
  open(url,intent){
   if(!/^wss?:\/\/[^/\s]+(?:\/[^\s]*)?$/.test(url))throw Error('伺服器必須是 ws:// 或 wss:// 網址');
   this.close();
+  // A new JOIN/CREATE/SPECTATE intent must never reuse a previous room's
+  // resume token, particularly if the new server rejects the first attempt.
+  this.roomId=null;this.playerId=null;this.token=null;this.disconnectedAt=0;
   this.url=url;this.intent=intent;this.manual=false;
   return this._connect(false);
  }
