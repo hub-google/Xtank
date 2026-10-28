@@ -316,6 +316,8 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
       p.team=m.team;p.ready=false;lobby(r);
     }
     else if(m.type==='CHAT'&&(r.phase==='lobby'||r.phase==='live')){
+      if((p.globalMutedUntil||0)>Date.now())
+        return send(ws,{type:'ERROR',code:'GLOBAL_CHAT_MUTED',until:p.globalMutedUntil});
       if((p.mutedUntil||0)>Date.now())
         return send(ws,{type:'ERROR',code:'ROOM_CHAT_MUTED',until:p.mutedUntil});
       const text=typeof m.text==='string'?m.text.trim():'';
@@ -471,6 +473,39 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
  try{await new Promise((ok,fail)=>{
   httpServer.once('error',fail);httpServer.listen(port,host,()=>{httpServer.off('error',fail);ok();});
  });}catch(err){clearInterval(ticking);clearInterval(heartbeat);wss.close();throw err;}
+ // Live moderator enforcement (suspension, chat mute) across room changes.
+ // Clients cannot spoof server-level policies; the official server queries DB itself.
+ let moderationBusy=false;
+ async function refreshOnlineModeration(){
+   if(!official||moderationBusy)return;
+   moderationBusy=true;
+   try{
+     const online=[...rooms.values()].flatMap(room=>members(room)
+       .filter(player=>player.ws?.readyState===WebSocket.OPEN&&player.accountUserId)
+       .map(player=>({room,player})));
+     if(!online.length)return;
+     const uniqueIds=[...new Set(online.map(({player})=>player.accountUserId))];
+     for(let i=0;i<uniqueIds.length;i+=512){
+       const ids=uniqueIds.slice(i,i+512);
+       const result=await official.onlineModeration(ids);
+       const suspended=new Set(result.suspended||[]);
+       for(const {room,player} of online){
+         if(!ids.includes(player.accountUserId)||player.ws?.readyState!==WebSocket.OPEN)continue;
+         if(suspended.has(player.accountUserId)){
+           send(player.ws,{type:'ROOM_MODERATION',action:'suspend'});
+           player.ws.close(1008,'account suspended');
+           // 'close' listener transfers host rights and cancels countdown.
+         }else{
+           const until=result.muted?.[player.accountUserId];
+           player.globalMutedUntil=until?Date.parse(until)||0:0;
+         }
+       }
+     }
+   }catch(error){console.error('Official live moderation:',error.message);}
+   finally{moderationBusy=false;}
+ }
+ const moderationTimer=official?setInterval(()=>void refreshOnlineModeration(),15000):null;
+ moderationTimer?.unref?.();
  // Periodically reconcile abandoned consumables across crashed official hosts.
  // Skip recovery while this host has any undelivered result on disk.
  const recoveryTimer=official?setInterval(()=>{
@@ -480,6 +515,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
  if(official)void official.recoverConsumables().catch(e=>console.error('Escrow startup recovery:',e.message));
  return {port:httpServer.address().port,rooms,close:async()=>{
   if(recoveryTimer)clearInterval(recoveryTimer);
+  if(moderationTimer)clearInterval(moderationTimer);
   official?.close?.();
   clearInterval(ticking);clearInterval(heartbeat);for(const ws of wss.clients)ws.terminate();
   await new Promise(ok=>wss.close(()=>httpServer.close(ok)));
