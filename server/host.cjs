@@ -156,6 +156,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
    if(r.roundId!==roundId||r.phase==='closing')return;
    r.phase='aborting';
    broadcast(r,{type:'ERROR',code:'MATCH_RESERVATION_FAILED',message:error.message});
+   lobby(r);
    await refundAbortedRoom(r);
   }
  }
@@ -475,6 +476,7 @@ async function createHost({port=8787,host='0.0.0.0',testRoundSeconds=null,maxCon
      console.error('X-TANK room tick:',err);
      r.phase='aborting';
      broadcast(r,{type:'ROUND_ABORTED',reason:'GAME_ENGINE_FAILED'});
+     lobby(r);
      void refundAbortedRoom(r);
      continue;
     }
