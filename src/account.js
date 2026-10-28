@@ -182,6 +182,10 @@ function panel(){
  <label>模式 <select id="xtankRankMode"><option value="FFA">個人混戰</option><option value="TDM">團隊戰</option><option value="FLAG_HOLD">搶旗戰</option></select></label>
  <div id="xtankRankContent">讀取賽季排行榜中…</div>`;
  if(tab==='friends')return `<h2>好友</h2><div id="xtankFriendsList">讀取好友中…</div>
+ <h3>搜尋玩家並邀請</h3>
+ <form id="xtankFindPlayerForm"><label>玩家名稱<input name="query" placeholder="輸入至少 3 個字元" minlength="3" maxlength="24" required></label>
+ <button type="submit">搜尋玩家</button></form>
+ <div id="xtankPlayerSearchResults" role="status"></div>
  <form id="xtankFriendForm"><label>玩家 UUID <input name="player_id" placeholder="輸入好友玩家 ID" required></label>
  <button type="submit">送出好友邀請</button></form><h3>黑名單</h3><div id="xtankBlockedList">讀取中…</div>`;
  if(tab==='settings')return `<h2>設定</h2><form id="xtankSettingsForm">
@@ -238,6 +242,25 @@ function draw(){
     });
    });
   }).catch(e=>msg(e.message));
+ $('#xtankFindPlayerForm')?.addEventListener('submit',async event=>{
+  event.preventDefault();
+  const output=$('#xtankPlayerSearchResults');
+  if(!output)return;
+  output.textContent='搜尋中…';
+  try{
+   const query=event.target.elements.query.value.trim();
+   const found=await rpcNamed('xtank_find_players',{p_query:query});
+   if(!output.isConnected)return;
+   output.innerHTML=(found.players||[]).map(player=>`<p>${escaped(player.name)} <small>${escaped(player.player_id)}</small> ${button('送出好友邀請','invite:'+player.player_id)}</p>`).join('')||'<p>找不到符合的玩家</p>';
+   output.querySelectorAll('[data-action]').forEach(button=>button.onclick=()=>{
+    const [,id]=button.dataset.action.split(':');
+    run(async()=>{
+     await rpcNamed('xtank_social_api',{p_action:'invite',p_target:id});
+     draw();msg('已送出好友邀請');
+    });
+   });
+  }catch(error){if(output.isConnected)output.textContent='搜尋失敗：'+error.message}
+ });
  $('#xtankFriendForm')?.addEventListener('submit',e=>{e.preventDefault();const f=e.target;run(async()=>{await rpcNamed('xtank_social_api',{p_action:'invite',p_target:f.elements.player_id.value.trim()});draw();msg('已送出邀請')})});
  content.querySelectorAll('[data-manage-loadout]').forEach(button=>button.addEventListener('click',()=>{
   const [action,id]=button.dataset.manageLoadout.split(':');
