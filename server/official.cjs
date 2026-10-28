@@ -65,6 +65,32 @@ function officialService({onSettlement}={}){
         body:{p_player_ids:playerIds}
       });
     },
+    async currentLoadout(playerId,tankId){
+      const state=await request('/rest/v1/rpc/xtank_official_loadout_snapshot',{
+        body:{p_player_id:playerId,p_tank_id:tankId}
+      });
+      const allowed=['hurricane','death_knight','vulcan','plasma','chemical','ion_missile','mine'];
+      if(!Array.isArray(state?.weapons)||!state.weapons.length||state.weapons.length>7||
+         state.weapons.some(weapon=>!allowed.includes(weapon)))
+        throw Error('INVALID_ROUND_WEAPONS');
+      const items={repair:0,speed_boost:0,shield_cell:0,radar_ping:0,smoke:0,team_repair:0};
+      if(!state.items||typeof state.items!=='object'||Array.isArray(state.items))
+        throw Error('INVALID_ROUND_ITEMS');
+      for(const [key,quantity] of Object.entries(state.items)){
+       if(!Object.hasOwn(items,key)||!Number.isSafeInteger(quantity)||quantity<0||quantity>30)
+        throw Error('INVALID_ROUND_ITEMS');
+       items[key]=quantity;
+      }
+      const upgrades={speed:0,attack:0,defense:0,energy:0,collision:0};
+      if(!state.upgrades||typeof state.upgrades!=='object'||Array.isArray(state.upgrades))
+        throw Error('INVALID_ROUND_UPGRADES');
+      for(const [key,level] of Object.entries(state.upgrades)){
+       if(!Object.hasOwn(upgrades,key)||!Number.isSafeInteger(level)||level<0||level>10)
+        throw Error('INVALID_ROUND_UPGRADES');
+       upgrades[key]=level;
+      }
+      return {allowedWeapons:new Set(state.weapons),itemsAvailable:items,upgrades};
+    },
     async currentConsumables(playerId,tankId){
       const current=await request('/rest/v1/rpc/xtank_official_item_snapshot',{
         body:{p_player_id:playerId,p_tank_id:tankId}
