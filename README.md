@@ -1,5 +1,19 @@
 # X-TANK ONLINE（X 坦克）
 
+## 2026-10-28 只做功能開發（不自動打包／測試）
+
+依使用者指示，`.github/workflows/windows-exe.yml` 已移除 push 自動觸發，保留 `workflow_dispatch` **手動啟動**。本輪未啟動任何新 EXE 打包或測試。
+
+| 需要的功能 | 已提交的程式／資料庫 | 目前仍需外部條件 |
+| --- | --- | --- |
+| 消耗品預留及意外中斷處理 | 官方 WSS 在開局前原子預留裝備道具，賽果入 DB 交易結算、返還未用數量。新增 `xtank_recover_abandoned_items`：72 小時以上未結算的預留可自動回收，避免與持久化待送賽果衝突；每小時自動維護及稽核記錄。 | 尚未做使用者要求暫停的驗收。極端主機／磁碟同時失效不能當成已證明可完全恢復。 |
+| 進階聊天室與營運 | 房間聊天、慢速模式、房主禁言／踢人；新增**戰鬥中聊天室**。新 `chat_restrictions`、`xtank_chat_restriction`、`xtank_admin_chat_api` 支援跨房持久禁言及管理員後台／紀錄。營運後台可新增、修改未上架活動，控制商城上下架、編輯已下架商品及檢視稽核。 | 正式長期營運驗收尚未執行。 |
+| 單一公網 WSS 24 小時 | `server/main.cjs` 啟停保護；權威對戰／健康檢查；`Dockerfile`、`render.yaml`；新增 `compose.public-wss.yml`＋`Caddyfile.xtank`（Docker 自動重啟、WSS TLS、證書持久化、結算持久化）；可透過 `VITE_XTANK_PUBLIC_WSS_URL` 在玩家端預設官方網址。 | **未實際上線**。缺可操作的常駐公網主機、真實域名及 TLS DNS 設定；提交配置不能代替部署。 |
+
+`supabase/migrations/20261028_xtank_abandoned_escrow_recovery.sql`、`20261028_xtank_persistent_chat_moderation.sql`、`20261028_xtank_liveops_content_editor.sql` 已隨程式提交，並已套用既有 Game Supabase。
+
+---
+
 ## 2026-10-28 使用者確認的開發範圍
 
 **不再開發：跨伺服器 MMR 排位配對、玩家預組隊伍及配對票券、永久／賽後重播，以及「完整還原原版所有內容」這個目標。** 已將這些本輪擴增的前後端程式與介面移除，撤銷專用資料庫 RPC。先前新增的原創音效／特效作為現有遊戲品質改良保留。歷史研究文件仍可作為參考，不代表有原版素材復刻承諾。
