@@ -44,7 +44,31 @@ async function launch(i){
  const c=clients[clients.length-1];Object.assign(c,{browser,context,p});
  p.on('pageerror',e=>fs.appendFileSync(path.join(out,'renderer-errors.log'),e.stack+'\n'));
  p.on('console',m=>{if(m.type()==='error')fs.appendFileSync(path.join(out,'console-errors.log'),m.text()+'\n');});
- await wait(p,()=>window.xtankDiagnostics?.().render.frame>1);if(await p.locator('#xtankAccountOverlay').count() && await p.isVisible('#xtankAccountOverlay')) await ensureGuestEntry(p);try{execFileSync('powershell',['-NoProfile','-Command',`Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $b=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $im=New-Object System.Drawing.Bitmap($b.Width,$b.Height); $g=[System.Drawing.Graphics]::FromImage($im); $g.CopyFromScreen($b.Location,[System.Drawing.Point]::Empty,$b.Size); $im.Save('${path.join(out,'desktop-'+i+'.png').replace(/'/g,"''")}'); $g.Dispose(); $im.Dispose();`]);}catch(e){fs.writeFileSync(path.join(out,'desktop-capture-error.txt'),e.message);}return p;
+ // Two Electron windows can contend for the same software-rendered GPU.
+ // Explicitly foreground each real native window before asserting WebGL frames.
+ // A failed boot gets one genuine reload and a diagnostic snapshot, never a
+ // fabricated PASS or a silent skip of the second client.
+ let ready=false;
+ for(let attempt=0;attempt<2&&!ready;attempt++){
+  try{
+   await p.bringToFront();
+   await wait(p,()=>window.xtankDiagnostics?.().render?.frame>1,45000);
+   ready=true;
+  }catch(error){
+   const diagnostic=await p.evaluate(()=>({
+    url:location.href,readyState:document.readyState,
+    diagnosticsType:typeof window.xtankDiagnostics,
+    diagnostics:typeof window.xtankDiagnostics==='function'?window.xtankDiagnostics():null,
+    visibleText:document.body?.innerText?.slice(0,800)
+   })).catch(e=>({readError:e.message}));
+   fs.writeFileSync(path.join(out,'client-'+i+'-boot-attempt-'+attempt+'.json'),
+     JSON.stringify({error:error.message,diagnostic},null,2));
+   await snap(p,'client-'+i+'-boot-attempt-'+attempt).catch(()=>{});
+   if(attempt===0)await p.reload({waitUntil:'domcontentloaded'});
+   else throw error;
+  }
+ }
+ if(await p.locator('#xtankAccountOverlay').count() && await p.isVisible('#xtankAccountOverlay')) await ensureGuestEntry(p);try{execFileSync('powershell',['-NoProfile','-Command',`Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $b=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $im=New-Object System.Drawing.Bitmap($b.Width,$b.Height); $g=[System.Drawing.Graphics]::FromImage($im); $g.CopyFromScreen($b.Location,[System.Drawing.Point]::Empty,$b.Size); $im.Save('${path.join(out,'desktop-'+i+'.png').replace(/'/g,"''")}'); $g.Dispose(); $im.Dispose();`]);}catch(e){fs.writeFileSync(path.join(out,'desktop-capture-error.txt'),e.message);}return p;
 }
 async function ensureGuestEntry(p){
  // The previous account test deliberately logs out. A visible auth overlay
