@@ -1,0 +1,115 @@
+name: X-TANK server, simulated DB and native multiplayer final acceptance
+on:
+  push:
+    branches:
+      - release-validation/2026-10-29-final-server-qa
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: xtank-server-final-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  server-and-official-database:
+    name: Server protocol, simulated Supabase settlement and Docker health
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - name: Full integration suite including official settlement mocks
+        run: npm test
+      - name: Real authoritative server, fake Supabase, failover and recovery
+        run: node --test test/official-match-e2e.test.cjs test/official-recovery.test.cjs test/official-resume-race.test.cjs
+      - name: Real WebSocket eight-player 90-second acceptance
+        run: XTANK_SOAK_SECONDS=90 XTANK_SOAK_REPORT=qa-evidence/server-90s.json node scripts/soak-wss.cjs
+      - name: Build official server Docker image
+        run: docker build --tag xtank-final-server:qa .
+      - name: Run real Docker server and verify HTTP health
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --detach --name xtank-final-qa --publish 127.0.0.1:18787:8787 xtank-final-server:qa
+          trap 'docker rm -f xtank-final-qa >/dev/null 2>&1 || true' EXIT
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:18787/health > qa-evidence/server-health.json; then break; fi
+            sleep 1
+          done
+          node -e "const d=require('./qa-evidence/server-health.json'); if(d.ok!==true) process.exit(1);"
+          cat qa-evidence/server-health.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: XTANK-Server-and-DB-QA
+          path: qa-evidence/
+          if-no-files-found: warn
+          retention-days: 30
+
+  soak-8-players-30-minutes:
+    name: Real eight-player WSS server 30-minute load
+    runs-on: ubuntu-latest
+    timeout-minutes: 37
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - name: Sustain eight authenticated-independent test sockets for 1800s
+        shell: bash
+        run: |
+          mkdir -p qa-evidence
+          XTANK_SOAK_SECONDS=1800 XTANK_SOAK_REPORT=qa-evidence/soak-30min.json node scripts/soak-wss.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: XTANK-30min-8-Player-Soak
+          path: qa-evidence/soak-30min.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  native-dual-exe:
+    name: Two actual native Windows EXEs join, fire, reconnect and return
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - name: Download already-built real Windows Portable EXE
+        uses: actions/download-artifact@v4
+        with:
+          name: XTANK-Regressed-Portable-EXE
+          run-id: 40799641000
+          github-token: ${{ github.token }}
+          path: release
+      - name: Download independent unpacked Electron EXE
+        uses: actions/download-artifact@v4
+        with:
+          name: XTANK-Regressed-Unpacked
+          run-id: 40799641000
+          github-token: ${{ github.token }}
+          path: release/win-unpacked
+      - run: npm install --no-save --ignore-scripts --no-audit --no-fund playwright@1.56.1
+      - name: Execute actual native EXE multiplayer acceptance
+        run: node scripts/windows-gui-qa.cjs
+        env:
+          XTANK_QA_FILTER: '^D-'
+          XTANK_QA_OUT: qa-evidence/dual-windows
+      - name: Clean up EXE windows
+        if: always()
+        shell: pwsh
+        run: Get-Process -Name 'XTANK*','X-TANK*' -ErrorAction SilentlyContinue | Stop-Process -Force
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: XTANK-Native-Dual-EXE-Evidence
+          path: qa-evidence/dual-windows/
+          if-no-files-found: warn
+          retention-days: 30
