@@ -71,24 +71,26 @@ async function launch(i){
  if(await p.locator('#xtankAccountOverlay').count() && await p.isVisible('#xtankAccountOverlay')) await ensureGuestEntry(p);try{execFileSync('powershell',['-NoProfile','-Command',`Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $b=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $im=New-Object System.Drawing.Bitmap($b.Width,$b.Height); $g=[System.Drawing.Graphics]::FromImage($im); $g.CopyFromScreen($b.Location,[System.Drawing.Point]::Empty,$b.Size); $im.Save('${path.join(out,'desktop-'+i+'.png').replace(/'/g,"''")}'); $g.Dispose(); $im.Dispose();`]);}catch(e){fs.writeFileSync(path.join(out,'desktop-capture-error.txt'),e.message);}return p;
 }
 async function ensureGuestEntry(p){
- // The previous account test deliberately logs out. A visible auth overlay
- // intercepts clicks on subsequent scenarios; explicitly choose guest mode.
+ // A real user can close the account overlay with Escape and still enter
+ // an unranked LAN room. Prefer the keyboard path: the second Electron
+ // window may replace its sign-in view during asynchronous initialization,
+ // making the transient guest button disappear between visibility probes.
  const overlay=p.locator('#xtankAccountOverlay');
  if(!await overlay.count()||!await overlay.isVisible())return;
- if(await p.locator('#xtankGuestContinue').isVisible()){
-  const button=p.locator('#xtankGuestContinue');
-  await button.waitFor({state:'visible',timeout:20000});
-  const rect=await button.boundingBox();
-  assert(rect&&rect.width>0&&rect.height>0,'Guest entry is not clickable');
-  // Real mouse click through Chrome DevTools; avoid Playwright's scroll-to-view
-  // stalling on the second Electron client under Windows software rendering.
-  await p.mouse.click(rect.x+rect.width/2,rect.y+rect.height/2);
- }else{
-  // A failed prior account test may leave a signed-in account panel open.
-  // Close the panel without silently altering authentication state.
-  await p.locator('#xtankAccountClose').click();
+ await p.bringToFront();
+ await p.keyboard.press('Escape');
+ try{
+  await overlay.waitFor({state:'hidden',timeout:10000});
+  return;
+ }catch{
+  // Fallback to the persistent header close control, not a transient tab.
+  const close=p.locator('#xtankAccountClose');
+  await close.waitFor({state:'visible',timeout:10000});
+  const box=await close.boundingBox();
+  assert(box&&box.width>0&&box.height>0,'Account overlay close button inaccessible');
+  await p.mouse.click(box.x+box.width/2,box.y+box.height/2);
+  await overlay.waitFor({state:'hidden',timeout:15000});
  }
- await overlay.waitFor({state:'hidden',timeout:20000});
 }
 async function home(p){
  await ensureGuestEntry(p);
