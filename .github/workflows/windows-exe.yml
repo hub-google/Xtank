@@ -46,6 +46,38 @@ jobs:
           if-no-files-found: error
           retention-days: 10
 
+  windows-real-exe-bot:
+    name: Real Windows EXE and authoritative WebSocket bot (no second GPU)
+    needs: windows-build
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - uses: actions/download-artifact@v4
+        with:
+          name: XTANK-Windows-Portable-EXE
+          path: release
+      - run: npm install --no-save --ignore-scripts --no-audit --no-fund playwright@1.56.1
+      - name: Launch real Windows EXE, real WebSocket bot, verify authoritative battle and resume
+        run: node scripts/windows-exe-plus-bot-qa.cjs
+        env:
+          XTANK_QA_OUT: qa-evidence/native-bot
+      - name: Close Windows game processes
+        if: always()
+        shell: pwsh
+        run: Get-Process -Name 'XTANK*','X-TANK*' -ErrorAction SilentlyContinue | Stop-Process -Force
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: XTANK-Real-Native-EXE-Bot-QA
+          path: qa-evidence/native-bot/
+          if-no-files-found: warn
+          retention-days: 30
+
   windows-gui-shards:
     name: Real EXE - ${{ matrix.group }}
     needs: windows-build
