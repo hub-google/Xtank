@@ -1,0 +1,58 @@
+name: X-TANK isolated two-native LAN reconnect regression
+on:
+  push:
+    branches:
+      - release-validation/2026-10-29-two-native-reconnect-isolated
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: xtank-two-native-reconnect-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  two-exes-only:
+    name: Two native EXEs - isolated GUI join/sync/reconnect
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify QA script syntax (do not rerun 62 Node tests)
+        run: node --check scripts/windows-two-native-lan-qa.cjs
+      - name: Install QA dependencies without rebuilding the game
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Install Playwright CDP
+        run: npm install --no-save --ignore-scripts --no-audit --no-fund playwright@1.56.1
+      - uses: actions/download-artifact@v4
+        with:
+          name: XTANK-Final-Two-Native-Portable
+          repository: hub-google/Xtank
+          run-id: 40834250986
+          github-token: ${{ github.token }}
+          path: release
+      - uses: actions/download-artifact@v4
+        with:
+          name: XTANK-Final-Two-Native-Unpacked
+          repository: hub-google/Xtank
+          run-id: 40834250986
+          github-token: ${{ github.token }}
+          path: release/win-unpacked
+      - name: Run two distinct Windows Electron EXEs and verify reconnect
+        run: node scripts/windows-two-native-lan-qa.cjs
+        env:
+          XTANK_QA_OUT: qa-evidence/two-native
+      - name: Force-close native game windows
+        if: always()
+        shell: pwsh
+        run: Get-Process -Name 'XTANK*','X-TANK*' -ErrorAction SilentlyContinue | Stop-Process -Force
+      - name: Save exact result, frame trace, logs and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: XTANK-Two-Native-Reconnect-Isolated-QA
+          path: qa-evidence/two-native/
+          if-no-files-found: error
+          retention-days: 30
