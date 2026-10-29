@@ -1,0 +1,82 @@
+name: X-TANK weapon and multiplayer regression
+on:
+  push:
+    branches:
+      - release-validation/2026-10-29-weapon-multiplayer
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: xtank-regression-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  package:
+    name: Unit tests, Vite and real portable EXE
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - run: npm test
+      - run: npm run build
+      - run: npm run dist:win
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: XTANK-Regressed-Portable-EXE
+          path: release/*.exe
+          retention-days: 30
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: XTANK-Regressed-Unpacked
+          path: release/win-unpacked/
+          retention-days: 10
+          if-no-files-found: error
+  regression:
+    name: Native EXE - ${{ matrix.name }}
+    needs: package
+    runs-on: windows-latest
+    timeout-minutes: 65
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {name: seven-weapon-fire, filter: '^C-seven-weapons-mouse-fire$'}
+          - {name: multiplayer-lan, filter: '^D-'}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - uses: actions/download-artifact@v4
+        with:
+          name: XTANK-Regressed-Portable-EXE
+          path: release
+      - if: matrix.name == 'multiplayer-lan'
+        uses: actions/download-artifact@v4
+        with:
+          name: XTANK-Regressed-Unpacked
+          path: release/win-unpacked
+      - run: npm install --no-save --ignore-scripts --no-audit --no-fund playwright@1.56.1
+      - name: Real Windows EXE regression
+        run: node scripts/windows-gui-qa.cjs
+        env:
+          XTANK_QA_FILTER: ${{ matrix.filter }}
+          XTANK_QA_OUT: qa-evidence/${{ matrix.name }}
+      - name: Close testing processes
+        if: always()
+        shell: pwsh
+        run: Get-Process -Name 'XTANK*','X-TANK*' -ErrorAction SilentlyContinue | Stop-Process -Force
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: XTANK-Regressed-QA-${{ matrix.name }}
+          path: qa-evidence/${{ matrix.name }}/
+          if-no-files-found: warn
+          retention-days: 30
