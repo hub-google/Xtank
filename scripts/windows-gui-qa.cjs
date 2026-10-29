@@ -68,29 +68,53 @@ async function launch(i){
    else throw error;
   }
  }
- if(await p.locator('#xtankAccountOverlay').count() && await p.isVisible('#xtankAccountOverlay')) await ensureGuestEntry(p);try{execFileSync('powershell',['-NoProfile','-Command',`Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $b=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $im=New-Object System.Drawing.Bitmap($b.Width,$b.Height); $g=[System.Drawing.Graphics]::FromImage($im); $g.CopyFromScreen($b.Location,[System.Drawing.Point]::Empty,$b.Size); $im.Save('${path.join(out,'desktop-'+i+'.png').replace(/'/g,"''")}'); $g.Dispose(); $im.Dispose();`]);}catch(e){fs.writeFileSync(path.join(out,'desktop-capture-error.txt'),e.message);}return p;
+ if(await p.locator('#xtankAccountOverlay').count()) {try{await ensureGuestEntry(p);}catch(error){await snap(p,'client-'+i+'-guest-entry-FAIL').catch(()=>{});throw error;}}try{execFileSync('powershell',['-NoProfile','-Command',`Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $b=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $im=New-Object System.Drawing.Bitmap($b.Width,$b.Height); $g=[System.Drawing.Graphics]::FromImage($im); $g.CopyFromScreen($b.Location,[System.Drawing.Point]::Empty,$b.Size); $im.Save('${path.join(out,'desktop-'+i+'.png').replace(/'/g,"''")}'); $g.Dispose(); $im.Dispose();`]);}catch(e){fs.writeFileSync(path.join(out,'desktop-capture-error.txt'),e.message);}return p;
 }
 async function ensureGuestEntry(p){
- // A real user can close the account overlay with Escape and still enter
- // an unranked LAN room. Prefer the keyboard path: the second Electron
- // window may replace its sign-in view during asynchronous initialization,
- // making the transient guest button disappear between visibility probes.
- const overlay=p.locator('#xtankAccountOverlay');
- if(!await overlay.count()||!await overlay.isVisible())return;
+ // The second real Electron window can change its account view while GPU
+ // initialization is still underway. A Playwright visibility wait on a
+ // transient close button must not block the entire LAN acceptance.
+ const inspect=()=>p.evaluate(()=>{
+  const overlay=document.querySelector('#xtankAccountOverlay');
+  const visible=el=>{
+   if(!el||el.hidden)return false;
+   const style=getComputedStyle(el),r=el.getBoundingClientRect();
+   return style.display!=='none'&&style.visibility!=='hidden'&&r.width>0&&r.height>0;
+  };
+  const controls={};
+  for(const selector of ['#xtankAccountClose','#xtankGuestContinue']){
+   const el=document.querySelector(selector);
+   if(visible(el)){
+    const r=el.getBoundingClientRect();
+    controls[selector]={x:r.x+r.width/2,y:r.y+r.height/2};
+   }
+  }
+  return {overlayVisible:visible(overlay),overlayExists:!!overlay,
+   overlayHidden:overlay?.hidden,controls,
+   documentReady:document.readyState};
+ });
+ let info=await inspect();
+ if(!info.overlayVisible)return;
  await p.bringToFront();
- await p.keyboard.press('Escape');
- try{
-  await overlay.waitFor({state:'hidden',timeout:10000});
-  return;
- }catch{
-  // Fallback to the persistent header close control, not a transient tab.
-  const close=p.locator('#xtankAccountClose');
-  await close.waitFor({state:'visible',timeout:10000});
-  const box=await close.boundingBox();
-  assert(box&&box.width>0&&box.height>0,'Account overlay close button inaccessible');
-  await p.mouse.click(box.x+box.width/2,box.y+box.height/2);
-  await overlay.waitFor({state:'hidden',timeout:15000});
+ for(let attempt=0;attempt<3;attempt++){
+  console.log('QA account overlay attempt',attempt,JSON.stringify(info));
+  await p.keyboard.press('Escape');
+  await delay(400);
+  info=await inspect();
+  if(!info.overlayVisible)return;
+  for(const selector of ['#xtankAccountClose','#xtankGuestContinue']){
+   const point=info.controls[selector];
+   if(!point)continue;
+   await p.mouse.click(point.x,point.y);
+   await delay(400);
+   info=await inspect();
+   if(!info.overlayVisible)return;
+  }
+  await delay(600);
+  info=await inspect();
+  if(!info.overlayVisible)return;
  }
+ throw Error('Real EXE guest overlay could not close: '+JSON.stringify(info));
 }
 // In two independent native Electron windows, the second window may be in
 // front of the first. The LAN controls also sit below a scrollable home panel.
