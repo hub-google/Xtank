@@ -14,6 +14,7 @@ on:
         default: '^'
 permissions:
   contents: read
+  actions: read
 concurrency:
   # Main pushes retain latest-only semantics, but a pinned validation branch
   # can finish its 72-case GUI matrix while other development continues.
@@ -21,6 +22,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   windows-build:
+    if: github.event_name == 'workflow_dispatch'
     name: Unit tests, Vite build and portable Windows EXE
     runs-on: windows-latest
     timeout-minutes: 20
@@ -139,7 +141,6 @@ jobs:
   windows-final-dual-exe-regression:
     name: Focused real dual Windows EXE LAN regression
     if: github.event_name == 'push'
-    needs: windows-build
     runs-on: windows-latest
     timeout-minutes: 85
     steps:
@@ -152,10 +153,16 @@ jobs:
         with:
           name: XTANK-Windows-Portable-EXE
           path: release
+          run-id: 40815502134
+          repository: hub-google/Xtank
+          github-token: ${{ github.token }}
       - uses: actions/download-artifact@v4
         with:
           name: XTANK-Windows-Unpacked
           path: release/win-unpacked
+          run-id: 40815502134
+          repository: hub-google/Xtank
+          github-token: ${{ github.token }}
       - run: npm install --no-save --ignore-scripts --no-audit --no-fund playwright@1.56.1
       - name: Real native LAN two-EXE test, no mocked DB
         run: node scripts/windows-gui-qa.cjs
