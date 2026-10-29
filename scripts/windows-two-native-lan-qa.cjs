@@ -31,13 +31,12 @@ async function launch(i){
  const exe=resolveExecutable({releaseDir:path.resolve('release'),clientIndex:i});
  assert(fs.existsSync(exe),'missing EXE '+exe);
  const log=fs.openSync(path.join(out,'electron-'+i+'.log'),'w');
- const process=spawn(exe,[
+ const proc=spawn(exe,[
   '--remote-debugging-port='+String(9222+i),
   '--user-data-dir='+path.join(os.tmpdir(),'xtank-2native-'+processId+'-'+i),
-  '--disable-features=CalculateNativeWinOcclusion',
-  // Do not force both windows to run background WebGL at full rate.
- ],{stdio:['ignore',log,log]});
- const item={process,exe};clients.push(item);
+  // Do not disable Chromium's native window-occlusion optimizations.
+ ],{stdio:['ignore',log,log],env:{...process.env,XTANK_QA_DUAL_NATIVE:'1'}});
+ const item={process:proc,exe};clients.push(item);
  item.browser=await until('real EXE CDP '+i,async()=>{try{return await chromium.connectOverCDP('http://127.0.0.1:'+(9222+i),{timeout:3000});}catch{return null;}},90000);
  const p=item.p=item.browser.contexts()[0].pages()[0];
  p.setDefaultTimeout(16000);
