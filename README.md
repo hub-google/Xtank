@@ -1,5 +1,11 @@
 # X-TANK ONLINE（X 坦克）
 
+## 2026-10-29｜原生 EXE + 真 WebSocket 玩家多人驗收：PASS
+
+[實際 Windows EXE 與權威 LAN 伺服器 Run #40824186184](https://github.com/hub-google/Xtank/actions/runs/40824186184)｜[有截圖及 results.json 的 Artifact](https://github.com/hub-google/Xtank/actions/runs/40824186184/artifacts/12876380058)｜[最新證據及未完成範圍](docs/32_20261029_自動驗收與正式部署狀態.md)
+
+**已成功實測**：真正的 Windows portable EXE 啟動、實際按下「開啟 LAN 伺服器」、真實建房、第二名 WebSocket 玩家加入、權威 8 坦克狀態同步、實際玩家移動，以及斷線後恢復同一席位。另有 8 人／30 分鐘／144,000 snapshots／0 錯誤／0 斷線的伺服器長測 PASS。已將新測試加入現有手動 Windows QA 工作流程。**尚未通過的獨立工作**：兩個同時渲染的 Windows EXE 在同一低 GPU runner 完成完整多人流程、正式跨網路 WSS 及真實 Supabase 金幣/XP 寫入。保留這些門檻，不宣稱已正式上線。
+
 ## 2026-10-29｜GitHub Actions 最終逐項驗收（正式部署尚未完成）
 
 [完整逐項證據、失敗原因、修正 commits 與正式部署缺口](docs/32_20261029_自動驗收與正式部署狀態.md)｜[原始 Run #40809984040](https://github.com/hub-google/Xtank/actions/runs/40809984040)｜[8 人跨回合成功回歸 #40811018490](https://github.com/hub-google/Xtank/actions/runs/40811018490)
