@@ -107,7 +107,7 @@ async function clickForeground(p,selector){
   el.scrollIntoView({block:'center',inline:'nearest',behavior:'instant'});
  },selector);
  const box=await target.boundingBox();
- const viewport=p.viewportSize();
+ const viewport=await p.evaluate(()=>({width:innerWidth,height:innerHeight}));
  assert(box&&box.width>0&&box.height>0,'Native control has no hit area: '+selector);
  const x=box.x+box.width/2,y=box.y+box.height/2;
  assert(x>=0&&y>=0&&x<viewport.width&&y<viewport.height,
