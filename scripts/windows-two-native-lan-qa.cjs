@@ -122,7 +122,9 @@ async function nativeClick(p,sel){
    const x=await a.evaluate(()=>window.xtankDiagnostics?.());
    const y=await b.evaluate(()=>window.xtankDiagnostics?.());
    const t=x?.match?.tanks?.find(v=>v.id===y?.networkSlot);
-   return t&&Math.abs(t.z-(b0.match.tanks.find(v=>v.id===b0.networkSlot)?.z||0))>0.2;
+   // Local snapshots alias the player's authoritative ID to `player`.
+   const origin=b0.match.tanks.find(v=>v.id==='player');
+   return t&&origin&&Math.abs(t.z-origin.z)>0.2;
   },25000);
   const a1=await a.evaluate(()=>window.xtankDiagnostics()),b1=await b.evaluate(()=>window.xtankDiagnostics());
   record('REAL_GUI_KEYBOARD_SYNC',{secondPlayerSlot:b1.networkSlot,serverTick:a1.match.tick});
