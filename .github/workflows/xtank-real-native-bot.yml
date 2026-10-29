@@ -1,0 +1,64 @@
+name: X-TANK real Windows EXE with authoritative bot
+on:
+  push:
+    branches:
+      - release-validation/2026-10-29-native-bot-gui
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: xtank-native-bot-20261029
+  cancel-in-progress: false
+jobs:
+  package:
+    name: Build portable Windows EXE and test
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - run: npm test
+      - run: npm run build
+      - run: npm run dist:win
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: XTANK-Real-Native-EXE
+          path: release/*.exe
+          retention-days: 30
+          if-no-files-found: error
+  native-bot:
+    name: Real Windows EXE hosts LAN; real WebSocket bot joins, fights, resumes
+    needs: package
+    runs-on: windows-latest
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - uses: actions/download-artifact@v4
+        with:
+          name: XTANK-Real-Native-EXE
+          path: release
+      - run: npm install --no-save --ignore-scripts --no-audit --no-fund playwright@1.56.1
+      - name: Execute real EXE, real Node socket, actual LAN game and reconnection
+        run: node scripts/windows-exe-plus-bot-qa.cjs
+        env:
+          XTANK_QA_OUT: qa-evidence/native-bot
+      - name: Close native game
+        if: always()
+        shell: pwsh
+        run: Get-Process -Name 'XTANK*','X-TANK*' -ErrorAction SilentlyContinue | Stop-Process -Force
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: XTANK-Real-EXE-plus-WebSocket-Bot
+          path: qa-evidence/native-bot/
+          retention-days: 30
+          if-no-files-found: warn
