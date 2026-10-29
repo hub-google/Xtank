@@ -2,6 +2,10 @@ name: Windows EXE build and 72-case GUI QA
 # Development commits do not build or test Windows packages automatically.
 # Run manually only when explicitly requested.
 on:
+  push:
+    branches: [release-validation/2026-10-29-dual-exe-click-regression]
+    paths:
+      - scripts/windows-gui-qa.cjs
   workflow_dispatch:
     inputs:
       qa_filter:
@@ -38,7 +42,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
       - name: Upload independent Electron binary for dual-client acceptance
-        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/heads/release-validation/')
+        if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
         uses: actions/upload-artifact@v4
         with:
           name: XTANK-Windows-Unpacked
@@ -47,6 +51,7 @@ jobs:
           retention-days: 10
 
   windows-gui-shards:
+    if: github.event_name == 'workflow_dispatch'
     name: Real EXE - ${{ matrix.group }}
     needs: windows-build
     runs-on: windows-latest
@@ -131,7 +136,68 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
+  windows-final-dual-exe-regression:
+    name: Focused real dual Windows EXE LAN regression
+    if: github.event_name == 'push'
+    needs: windows-build
+    runs-on: windows-latest
+    timeout-minutes: 85
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - uses: actions/download-artifact@v4
+        with:
+          name: XTANK-Windows-Portable-EXE
+          path: release
+      - uses: actions/download-artifact@v4
+        with:
+          name: XTANK-Windows-Unpacked
+          path: release/win-unpacked
+      - run: npm install --no-save --ignore-scripts --no-audit --no-fund playwright@1.56.1
+      - name: Real native LAN two-EXE test, no mocked DB
+        run: node scripts/windows-gui-qa.cjs
+        env:
+          XTANK_QA_FILTER: '^D-LAN-create-join-start-sync-reconnect
+    if: github.event_name == 'workflow_dispatch'
+    name: Official server Docker packaging & health
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build official server image with compiled engine
+        run: docker build --tag xtank-server:qa .
+      - name: Verify compiled engine, start server, health endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint node xtank-server:qa -e "require('./server/engine.cjs'); console.log('Compiled combat engine loaded')"
+          docker run --detach --name xtank-server-qa --publish 127.0.0.1:18787:8787 xtank-server:qa
+          trap 'docker rm -f xtank-server-qa >/dev/null 2>&1 || true' EXIT
+          for i in $(seq 1 35); do
+            if curl --silent --fail http://127.0.0.1:18787/health > /tmp/xtank-health.json; then break; fi
+            sleep 1
+          done
+          node -e "const x=require('/tmp/xtank-health.json'); if(!x.ok || x.rooms!==0) process.exit(1);"
+          docker logs xtank-server-qa
+
+          XTANK_QA_OUT: qa-evidence/dual-regression
+      - name: Close game processes
+        if: always()
+        shell: pwsh
+        run: Get-Process -Name 'XTANK*','X-TANK*' -ErrorAction SilentlyContinue | Stop-Process -Force
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: XTANK-Dual-EXE-Focused-Regression
+          path: qa-evidence/dual-regression/
+          if-no-files-found: warn
+          retention-days: 30
+
   linux-server-smoke:
+    if: github.event_name == 'workflow_dispatch'
     name: Official server Docker packaging & health
     runs-on: ubuntu-latest
     timeout-minutes: 12
