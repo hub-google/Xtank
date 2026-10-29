@@ -11,15 +11,20 @@ function addresses(port){
  return [...new Set(list)];
 }
 function makeWindow() {
+  // A GitHub-hosted Windows runner has no discrete GPU. When verifying two
+  // real Windows EXEs on that machine, use the game's smallest supported
+  // window and allow Chromium to throttle an occluded window. This flag
+  // changes no normal player's rendering or gameplay defaults.
+  const dualNativeQA=process.env.XTANK_QA_DUAL_NATIVE==='1';
   const win = new BrowserWindow({
-    width: 1366, height: 850, minWidth: 940, minHeight: 640,
+    width: dualNativeQA?940:1366, height: dualNativeQA?640:850, minWidth: 940, minHeight: 640,
     title: 'X-TANK Revival — Prototype',
     backgroundColor: '#0c1524',
     autoHideMenuBar: true,
     webPreferences: {
       preload:path.join(__dirname,'preload.cjs'),
       contextIsolation: true,
-      backgroundThrottling: false,
+      backgroundThrottling: dualNativeQA,
       nodeIntegration: false,
       sandbox: true,
       webSecurity: true,
