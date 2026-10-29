@@ -60,10 +60,13 @@ async function restart(){
  changing=true;
  try{
   const owner=clients[0];
-  const received=take(owner,'LOBBY',m=>m.phase==='lobby',7000);
-  send(owner.ws,{type:'BACK_TO_LOBBY'});
-  await received;
-  const starts=clients.map(c=>take(c,'START',null,7000));
+  // The real game requires EACH connected participant to acknowledge the
+  // result screen. Owner-only acknowledgement leaves the room 'finished' and
+  // the soak appears to stall as soon as an eight-minute round naturally ends.
+  const lobbies=clients.map(c=>take(c,'LOBBY',m=>m.phase==='lobby',15000));
+  for(const c of clients)send(c.ws,{type:'BACK_TO_LOBBY'});
+  await Promise.all(lobbies);
+  const starts=clients.map(c=>take(c,'START',null,15000));
   send(owner.ws,{type:'START'});
   const messages=await Promise.all(starts);
   if(new Set(messages.map(x=>x.slotId)).size!==8)throw Error('DUPLICATE_SLOTS_ON_NEW_ROUND');
