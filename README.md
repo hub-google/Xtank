@@ -395,3 +395,10 @@ X-TANK 是一款最多 8 人同場的 3D 第三人稱即時坦克射擊遊戲。
 - **本輪資料庫 migration**：`supabase/migrations/20261028_xtank_settle_midgame_suspensions.sql`，已套用既有 Game Supabase。
 
 **尚未完成**：雲端服務商實際常駐部署、公開 WSS 網域與 TLS 憑證；因此不能宣稱「24 小時公網已上線」。上述新修改尚未按要求執行驗收。
+
+## 2026-10-29｜雙原生 Windows EXE 驗收：已定位 QA 假陽性，隔離重測
+
+- [Run 40832651893](https://github.com/hub-google/Xtank/actions/runs/40832651893) 與 [Run 40834250986](https://github.com/hub-google/Xtank/actions/runs/40834250986) 的雙原生 EXE job 均為 **CANCELLED**，不是 PASS；後者的 [Artifact 12882675480](https://github.com/hub-google/Xtank/actions/runs/40834250986/artifacts/12882675480) 明確為 **FAIL**：舊測試誤把房主 tick=0、0 坦克與訪客 tick=0.6 判為同步，最終重連逾時，兩端出現 `INVALID_SESSION`／連線中斷。
+- 已在主線 [b69c85d](https://github.com/hub-google/Xtank/commit/b69c85dd356bb2d11be6ba4b964d07d2c10fc758) 修正雙原生 EXE QA 的同步條件、權威位移比對、重連前截圖阻塞、SwiftShader 低負載視窗與 WebSocket 診斷紀錄。
+- [獨立 Windows 精準重測 40840981932](https://github.com/hub-google/Xtank/actions/runs/40840981932)：固定驗證分支、重用已打包的兩份 EXE，不重跑既有 62 個 Node、72 組矩陣與 30 分鐘壓測；是否通過須看最終 job 和 artifact，**不得預先標 PASS**。
+- **仍未完成：** 兩個原生 EXE 的完整 PASS 證據、24 小時公開 WSS/TLS 常駐、跨不同網路的原生 Windows EXE、真實 Supabase 金幣／XP 入帳及重啟持久化 E2E。詳細證據見 [驗收狀態](docs/32_20261029_自動驗收與正式部署狀態.md)。沒有建立付費主機或公開服務端金鑰。
