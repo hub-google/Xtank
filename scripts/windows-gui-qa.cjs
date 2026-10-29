@@ -401,6 +401,7 @@ async function testMockedNativeAccount(p){
  // A tank matrix regex such as ^B-D- must NOT launch a second network client.
   const q=needsNetworkClient(filter)?await launch(1):null;
  await step('D-LAN-create-join-start-sync-reconnect',p,async()=>{
+ // The second native EXE was last foregrounded; return focus to the host.
  await home(p);await home(q);await clickForeground(p,'#hostServerButton');await p.waitForFunction(()=>document.querySelector('#networkStatus').textContent.includes('已啟動'));
  await p.fill('#playerName','QA-A');await p.selectOption('#mapSelect','chess');await clickForeground(p,'#makeRoomButton');await wait(p,()=>document.querySelector('#roomCode').value.length===6);await clickForeground(p,'#leaveNetworkButton');assert(!await p.isVisible('#networkLobby'));await p.fill('#roomCode','');await clickForeground(p,'#makeRoomButton');await wait(p,()=>document.querySelector('#roomCode').value.length===6);const code=await p.inputValue('#roomCode');
  proxy=net.createServer(client=>{const upstream=net.connect(8787,'127.0.0.1');tunnels.add(client);tunnels.add(upstream);client.pipe(upstream);upstream.pipe(client);for(const sock of [client,upstream]){sock.on('error',()=>{});sock.on('close',()=>{tunnels.delete(sock);client.destroy();upstream.destroy();});}});await new Promise(r=>proxy.listen(8788,'127.0.0.1',r));await q.fill('#serverAddress','ws://127.0.0.1:8788');
