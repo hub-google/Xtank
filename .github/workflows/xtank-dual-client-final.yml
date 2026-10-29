@@ -1,0 +1,54 @@
+name: X-TANK dual native Windows LAN acceptance
+on:
+  push:
+    branches:
+      - release-validation/2026-10-29-dual-client-regression
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: xtank-dual-client-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  native-lan:
+    name: Two independent Windows EXE clients and authoritative LAN acceptance
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - name: Retrieve already-verified portable EXE from the passing build
+        uses: actions/download-artifact@v4
+        with:
+          name: XTANK-Regressed-Portable-EXE
+          path: release
+          run-id: 40799641000
+          github-token: ${{ github.token }}
+      - name: Retrieve separately packaged independent second EXE
+        uses: actions/download-artifact@v4
+        with:
+          name: XTANK-Regressed-Unpacked
+          path: release/win-unpacked
+          run-id: 40799641000
+          github-token: ${{ github.token }}
+      - run: npm install --no-save --ignore-scripts --no-audit --no-fund playwright@1.56.1
+      - name: Execute real dual-client LAN scenarios
+        run: node scripts/windows-gui-qa.cjs
+        env:
+          XTANK_QA_FILTER: '^D-'
+          XTANK_QA_OUT: qa-evidence/dual-client
+      - name: Terminate test processes
+        if: always()
+        shell: pwsh
+        run: Get-Process -Name 'XTANK*','X-TANK*' -ErrorAction SilentlyContinue | Stop-Process -Force
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: XTANK-Dual-Client-QA
+          path: qa-evidence/dual-client/
+          if-no-files-found: warn
+          retention-days: 30
