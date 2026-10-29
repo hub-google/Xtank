@@ -1,10 +1,12 @@
 # X-TANK ONLINE（X 坦克）
 
-## 2026-10-29｜GitHub Actions 自動化伺服器驗收
+## 2026-10-29｜GitHub Actions 最終逐項驗收（正式部署尚未完成）
 
-[本輪 GitHub Actions #40809984040](https://github.com/hub-google/Xtank/actions/runs/40809984040)｜[最新逐項證據與正式部署缺口](docs/32_20261029_自動驗收與正式部署狀態.md)
+[完整逐項證據、失敗原因、修正 commits 與正式部署缺口](docs/32_20261029_自動驗收與正式部署狀態.md)｜[原始 Run #40809984040](https://github.com/hub-google/Xtank/actions/runs/40809984040)｜[8 人跨回合成功回歸 #40811018490](https://github.com/hub-google/Xtank/actions/runs/40811018490)
 
-**已實際通過**：62/62 Node 單元整合測試、3/3 模擬 Supabase 正式結算／故障恢復／重連測試、8 位真實 WebSocket 模擬玩家持續 90 秒（7,200 snapshots、零錯誤／零斷線）、Docker 伺服器健康檢查。**未可宣稱通過**：本 Run 的 30 分鐘 8 人負載與雙 Windows EXE LAN 驗收，須各自以最後 job 結論判定；正式公網 WSS 與真實跨網 Supabase 入帳仍未部署／驗收。
+**已證實 PASS**：62/62 Node、3/3 模擬 Supabase、8 條真 WebSocket 連線 90 秒（7,200 snapshots）、Docker 健康檢查、75 秒 13 回合啟動／12 次自然跨回合（6,048 snapshots）、正常時間 30 分鐘 4 回合啟動／3 次跨回合（144,000 snapshots，0 斷線、0 錯誤）。**仍 FAIL**：原始 Run 的雙 Windows 原生 EXE GUI 工作（`#hostServerButton` 點擊逾時，`results.json` 為 1 FAIL、93 BLOCKED），以及原始 30 分鐘測試（只跑 485 秒，QA 回大廳流程問題）；後者已由新 Run 成功回歸。
+
+**本輪 main 修正**：[f2d422e](https://github.com/hub-google/Xtank/commit/f2d422e9a1169e242c16cc44863201be5771a2e1)、[3ec384a](https://github.com/hub-google/Xtank/commit/3ec384a121d3c9a44e6ffe6bfe03290207bf53b0) 修正雙 EXE GUI 測試的真實視窗置前與可見按鈕點擊；[精準 Windows EXE 重測 #40815502134](https://github.com/hub-google/Xtank/actions/runs/40815502134) 仍在執行，**不可預先宣稱 PASS**。本地 mock DB 不是真 Supabase；Docker 啟動不等於公網 24 小時 WSS。正式 Render/GCP 主機帳號、可能費用授權、TLS、持久化磁碟及兩台跨網 EXE 真 DB E2E 仍待完成。
 
 ## 2026-10-28｜Windows EXE 打包及 GUI 驗收
 
