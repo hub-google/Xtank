@@ -26,7 +26,14 @@ async function diag(p){return p.evaluate(()=>({
   roomPeople:document.querySelector('#roomPeople')?.textContent,
   game:typeof window.xtankDiagnostics==='function'?window.xtankDiagnostics():null,
 }));}
-async function screenshot(p,name){try{fs.writeFileSync(path.join(out,name+'.png'),await p.screenshot({timeout:20000}));}catch(e){record('SCREENSHOT_FAILED',{name,error:e.message});}}
+// Screenshots are supporting evidence, never a prerequisite for network resume.
+async function screenshot(p,name){try{fs.writeFileSync(path.join(out,name+'.png'),await p.screenshot({timeout:5000,animations:'disabled'}));}catch(e){record('SCREENSHOT_FAILED',{name,error:e.message});}}
+async function quick(p){return p.evaluate(()=>{
+ const d=window.xtankDiagnostics?.();return {room:d?.networkRoomId,slot:d?.networkSlot,tick:d?.match?.tick??null,
+ ended:d?.match?.ended??null,tanks:d?.match?.tanks?.map(t=>({id:t.id,x:t.x,z:t.z,alive:t.alive}))||[],
+ status:document.querySelector('#networkStatus')?.textContent,frameMs:d?.frameMs};
+});}
+async function checkpoint(label,a,b){const [host,guest]=await Promise.all([quick(a),quick(b)]);record(label,{host,guest});return {host,guest};}
 async function launch(i){
  const exe=resolveExecutable({releaseDir:path.resolve('release'),clientIndex:i});
  assert(fs.existsSync(exe),'missing EXE '+exe);
@@ -39,7 +46,26 @@ async function launch(i){
  const item={process:proc,exe};clients.push(item);
  item.browser=await until('real EXE CDP '+i,async()=>{try{return await chromium.connectOverCDP('http://127.0.0.1:'+(9222+i),{timeout:3000});}catch{return null;}},90000);
  const p=item.p=item.browser.contexts()[0].pages()[0];
- p.setDefaultTimeout(16000);
+ p.setDefaultTimeout(12000);
+ // Keep both actual Electron windows/renderers, but reduce SwiftShader pixel load
+ // on the headless-GPU Windows CI machine; never mock the network or game.
+ await p.setViewportSize({width:640,height:420});
+ p.on('websocket',ws=>{
+  let snapshots=0;
+  for(const [event,direction] of [['framesent','sent'],['framereceived','received']]){
+   ws.on(event,frame=>{
+    try{
+     const msg=JSON.parse(frame.payload);
+     if(msg.type==='SNAPSHOT'){if(++snapshots%100!==1)return;}
+     else if(!['JOINED','START','RESUME','ERROR','LOBBY','MATCH_END','PING'].includes(msg.type))return;
+     if(msg.type==='PING')return;
+     const info={at:new Date().toISOString(),client:i,direction,type:msg.type,code:msg.code,
+       roomId:msg.roomId,slotId:msg.slotId,tick:msg.state?.tick??msg.tick};
+     fs.appendFileSync(path.join(out,'network-frames.jsonl'),JSON.stringify(info)+'\\n');
+    }catch{}
+   });
+  }
+ });
  p.on('pageerror',e=>fs.appendFileSync(path.join(out,'renderer-errors.log'),i+' '+e.stack+'\n'));
  await until('real WebGL frames client '+i,()=>p.evaluate(()=>window.xtankDiagnostics?.().render?.frame>1),60000);
  // The actual app supports this persisted native low-graphics preset.
@@ -102,45 +128,51 @@ async function nativeClick(p,sel){
   await fixture(b,'#playerName','QA-B');
   await nativeClick(b,'#joinRoomButton');
   await until('both actual native EXEs in same room',()=>a.evaluate(()=>document.querySelector('#roomPeople')?.textContent?.includes('QA-B')),45000);
-  const joined=await diag(b);
-  assert.equal(joined.game.networkRoomId,room);
-  record('NATIVE_TO_NATIVE_ROOM_JOIN',{room,guest:joined.game.networkRoomId,slot:joined.game.networkSlot});
+  const joined=await quick(b);
+  assert.equal(joined.room,room);
+  record('NATIVE_TO_NATIVE_ROOM_JOIN',{room,guest:joined.room,slot:joined.slot});
   await screenshot(b,'guest-joined');
   await nativeClick(a,'#startNetworkButton');
-  await until('two native EXEs in same live match',async()=>{
-   const x=await a.evaluate(()=>window.xtankDiagnostics?.());
-   const y=await b.evaluate(()=>window.xtankDiagnostics?.());
-   return x?.match?.tanks?.length>1&&y?.match?.tanks?.length>1&&x.networkRoomId===room&&y.networkRoomId===room&&x.match.mapId==='chess'&&y.match.mapId==='chess';
-  },70000);
-  const a0=await a.evaluate(()=>window.xtankDiagnostics()),b0=await b.evaluate(()=>window.xtankDiagnostics());
-  record('SHARED_AUTHORITATIVE_MATCH',{room,aTick:a0.match.tick,bTick:b0.match.tick,tanks:a0.match.tanks.length,aSlot:a0.networkSlot,bSlot:b0.networkSlot});
+  // Old QA only checked that both games existed: it incorrectly marked
+  // host tick=0, tanks=0 and guest tick=0.6 as a synchronized match.
+  await until('two live native EXEs with advancing synchronized snapshots',async()=>{
+   const [x,y]=await Promise.all([quick(a),quick(b)]);
+   return x.room===room&&y.room===room&&x.slot&&y.slot&&x.slot!==y.slot&&
+    x.tick>2&&y.tick>2&&!x.ended&&!y.ended&&
+    x.tanks.length>1&&y.tanks.length>1&&
+    x.tanks.some(t=>t.id===y.slot)&&Math.abs(x.tick-y.tick)<3;
+  },45000);
+  const {host:a0,guest:b0}=await checkpoint('SHARED_AUTHORITATIVE_MATCH',a,b);
   // Native keyboard input on second real EXE must be observable on first GUI.
   await b.bringToFront();
   await b.keyboard.down('s');await sleep(1700);await b.keyboard.up('s');
-  await until('guest movement synchronized back to host',async()=>{
-   const x=await a.evaluate(()=>window.xtankDiagnostics?.());
-   const y=await b.evaluate(()=>window.xtankDiagnostics?.());
-   const t=x?.match?.tanks?.find(v=>v.id===y?.networkSlot);
-   // Local snapshots alias the player's authoritative ID to `player`.
-   const origin=b0.match.tanks.find(v=>v.id==='player');
-   return t&&origin&&Math.abs(t.z-origin.z)>0.2;
-  },25000);
-  const a1=await a.evaluate(()=>window.xtankDiagnostics()),b1=await b.evaluate(()=>window.xtankDiagnostics());
-  record('REAL_GUI_KEYBOARD_SYNC',{secondPlayerSlot:b1.networkSlot,serverTick:a1.match.tick});
-  await screenshot(a,'host-match');
-  await screenshot(b,'guest-match');
+  const origin=a0.tanks.find(v=>v.id===b0.slot);
+  assert(origin,'guest slot missing in authoritative host snapshot');
+  await until('guest physical keyboard movement synchronized to host',async()=>{
+   const [x,y]=await Promise.all([quick(a),quick(b)]);
+   const t=x.tanks.find(v=>v.id===y.slot);
+   return t&&x.tick>a0.tick+1&&y.tick>b0.tick+1&&
+     Math.hypot(t.x-origin.x,t.z-origin.z)>0.2;
+  },20000);
+  const {host:a1,guest:b1}=await checkpoint('REAL_GUI_KEYBOARD_SYNC',a,b);
   // Interrupt actual network tunnel. Both sides must preserve player identity
   // and the guest client must resume its previous authoritative slot.
-  const oldSlot=b1.networkSlot,oldRoom=b1.networkRoomId,oldTick=b1.match.tick;
-  for(const sock of tunnels)sock.destroy();
-  await until('guest native EXE resumes its same slot',async()=>{
-   const x=await b.evaluate(()=>window.xtankDiagnostics?.());
-   return x?.networkSlot===oldSlot&&x.networkRoomId===oldRoom&&x.match?.tick>oldTick+1.5;
-  },30000);
-  const after=await b.evaluate(()=>window.xtankDiagnostics());
-  assert.equal(after.networkSlot,oldSlot);assert.equal(after.networkRoomId,oldRoom);
-  record('NATIVE_TO_NATIVE_RESUME',{slot:oldSlot,room:oldRoom,tickBefore:oldTick,tickAfter:after.match.tick});
+  const oldSlot=b1.slot,oldRoom=b1.room,oldTick=b1.tick;
+  record('INTERRUPT_PROXY',{slot:oldSlot,room:oldRoom,tickBefore:oldTick,sockets:tunnels.size});
+  for(const sock of [...tunnels])sock.destroy();
+  await until('guest native EXE resumes its same slot with fresh snapshots',async()=>{
+   const x=await quick(b);
+   return x.slot===oldSlot&&x.room===oldRoom&&x.tick>oldTick+1.5&&
+     !/INVALID_SESSION|連線中斷/.test(x.status||'');
+  },25000);
+  const {host,guest:after}=await checkpoint('NATIVE_TO_NATIVE_RESUME',a,b);
+  assert.equal(after.slot,oldSlot);assert.equal(after.room,oldRoom);
+  assert(after.tick>oldTick+1.5,'reconnected guest did not receive fresh authoritative ticks');
+  assert(host.tanks.some(t=>t.id===oldSlot),'guest seat lost on authoritative host');
   result.status='PASS';
+  record('PASS',{slot:oldSlot,room:oldRoom,tickBefore:oldTick,tickAfter:after.tick});
+  await screenshot(a,'host-match');
+  await screenshot(b,'guest-match');
  }catch(e){
   result.error=e.stack||String(e);console.error('NATIVE_DUAL_FAIL',result.error);
   for(let i=0;i<clients.length;i++){const p=clients[i].p;if(p){try{fs.writeFileSync(path.join(out,'failure-'+i+'.json'),JSON.stringify(await diag(p),null,2));await screenshot(p,'failure-'+i);}catch{}}}
@@ -149,6 +181,9 @@ async function nativeClick(p,sel){
   fs.writeFileSync(path.join(out,'results.json'),JSON.stringify(result,null,2));
   for(const socket of tunnels)try{socket.destroy();}catch{}
   try{proxy?.close();}catch{}
-  for(const client of clients){try{await client.browser?.close();}catch{}try{if(client.process?.pid)execFileSync('taskkill',['/pid',String(client.process.pid),'/t','/f'],{timeout:15000});}catch{}}
+  // Kill native renderer trees first: CDP browser.close can otherwise hang
+  // indefinitely when two software-GPU windows are saturated.
+  for(const client of clients){try{if(client.process?.pid)execFileSync('taskkill',['/pid',String(client.process.pid),'/t','/f'],{timeout:12000});}catch{}}
+  for(const client of clients){try{await Promise.race([client.browser?.close(),sleep(2500)]);}catch{}}
  }
 })();
