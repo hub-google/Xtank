@@ -12,7 +12,7 @@ fs.mkdirSync(out,{recursive:true});
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const result={name:'two independent native Windows EXEs LAN integration',status:'FAIL',events:[]};
 const clients=[],tunnels=new Set();let proxy;
-function record(phase,evidence){result.events.push({phase,evidence});console.log('NATIVE_DUAL',phase,JSON.stringify(evidence));}
+function record(phase,evidence){result.events.push({phase,evidence});fs.writeFileSync(path.join(out,'results.json'),JSON.stringify(result,null,2));console.log('NATIVE_DUAL',phase,JSON.stringify(evidence));}
 async function until(label,fn,ms=30000){
  const end=Date.now()+ms;let last;
  while(Date.now()<end){try{let v=await fn();if(v)return v;}catch(e){last=e.message;}await sleep(170);}
