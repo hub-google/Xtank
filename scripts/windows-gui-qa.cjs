@@ -44,7 +44,7 @@ async function launch(i){
  const c=clients[clients.length-1];Object.assign(c,{browser,context,p});
  p.on('pageerror',e=>fs.appendFileSync(path.join(out,'renderer-errors.log'),e.stack+'\n'));
  p.on('console',m=>{if(m.type()==='error')fs.appendFileSync(path.join(out,'console-errors.log'),m.text()+'\n');});
- await wait(p,()=>window.xtankDiagnostics?.().render.frame>1);if(await p.locator('#xtankAccountOverlay').count() && await p.isVisible('#xtankAccountOverlay')) await p.click('#xtankGuestContinue');try{execFileSync('powershell',['-NoProfile','-Command',`Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $b=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $im=New-Object System.Drawing.Bitmap($b.Width,$b.Height); $g=[System.Drawing.Graphics]::FromImage($im); $g.CopyFromScreen($b.Location,[System.Drawing.Point]::Empty,$b.Size); $im.Save('${path.join(out,'desktop-'+i+'.png').replace(/'/g,"''")}'); $g.Dispose(); $im.Dispose();`]);}catch(e){fs.writeFileSync(path.join(out,'desktop-capture-error.txt'),e.message);}return p;
+ await wait(p,()=>window.xtankDiagnostics?.().render.frame>1);if(await p.locator('#xtankAccountOverlay').count() && await p.isVisible('#xtankAccountOverlay')) await ensureGuestEntry(p);try{execFileSync('powershell',['-NoProfile','-Command',`Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $b=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $im=New-Object System.Drawing.Bitmap($b.Width,$b.Height); $g=[System.Drawing.Graphics]::FromImage($im); $g.CopyFromScreen($b.Location,[System.Drawing.Point]::Empty,$b.Size); $im.Save('${path.join(out,'desktop-'+i+'.png').replace(/'/g,"''")}'); $g.Dispose(); $im.Dispose();`]);}catch(e){fs.writeFileSync(path.join(out,'desktop-capture-error.txt'),e.message);}return p;
 }
 async function ensureGuestEntry(p){
  // The previous account test deliberately logs out. A visible auth overlay
@@ -52,7 +52,13 @@ async function ensureGuestEntry(p){
  const overlay=p.locator('#xtankAccountOverlay');
  if(!await overlay.count()||!await overlay.isVisible())return;
  if(await p.locator('#xtankGuestContinue').isVisible()){
-  await p.locator('#xtankGuestContinue').click();
+  const button=p.locator('#xtankGuestContinue');
+  await button.waitFor({state:'visible',timeout:20000});
+  const rect=await button.boundingBox();
+  assert(rect&&rect.width>0&&rect.height>0,'Guest entry is not clickable');
+  // Real mouse click through Chrome DevTools; avoid Playwright's scroll-to-view
+  // stalling on the second Electron client under Windows software rendering.
+  await p.mouse.click(rect.x+rect.width/2,rect.y+rect.height/2);
  }else{
   // A failed prior account test may leave a signed-in account panel open.
   // Close the panel without silently altering authentication state.
@@ -304,7 +310,32 @@ async function testMockedNativeAccount(p){
 });
  await step('C-wall-boundary-blocking',p,async()=>{await start(p);await key(p,'a',1500);const a=await state(p);await key(p,'a',500);const b=await state(p);assert(a.match.tanks[0].x>=1.49);assert(Math.abs(b.match.tanks[0].x-a.match.tanks[0].x)<.1);});
  await step('C-mine-trigger-splash',p,async()=>{await start(p);await p.keyboard.press('7');await p.mouse.move(700,350);await p.mouse.down();await delay(150);await p.mouse.up();await key(p,'w',750);await p.waitForFunction(()=>window.xtankDiagnostics().events.some(e=>e.type==='explosion'&&e.weapon==='mine'),null,{timeout:45000});const s=await state(p);const boom=s.events.find(e=>e.type==='explosion'&&e.weapon==='mine');assert(s.events.some(e=>e.type==='hit'&&e.tick===boom.tick),'mine splash damage');});
- await step('C-seven-weapons-mouse-fire',p,async()=>{await start(p);await p.mouse.move(700,350);const weapons=['hurricane','death_knight','vulcan','plasma','chemical','ion_missile','mine'];for(let i=0;i<7;i++){await p.keyboard.press(''+(i+1));await p.mouse.down();await delay(2800);await p.mouse.up();const s=await state(p);assert(s.events.some(e=>e.type==='fire'&&e.owner==='player'&&e.weapon===weapons[i]),weapons[i]);await snap(p,'weapon-'+weapons[i]);}});
+ await step('C-seven-weapons-mouse-fire',p,async()=>{
+  const weapons=['hurricane','death_knight','vulcan','plasma','chemical','ion_missile','mine'];
+  for(let i=0;i<weapons.length;i++){
+   // Every weapon must produce its own authoritative fire event while the
+   // player is alive. A dead player cannot fire; a multi-minute sequence of
+   // unprotected bot attacks is not evidence of a broken weapon.
+   await start(p);
+   await p.keyboard.press(String(i+1));
+   await p.mouse.move(700,350);
+   let fired=false;
+   await p.mouse.down();
+   try{
+    const until=Date.now()+5000;
+    while(Date.now()<until){
+     const snapshot=await state(p);
+     if(snapshot.events.some(e=>e.type==='fire'&&e.owner==='player'&&e.weapon===weapons[i])){
+      fired=true;break;
+     }
+     if(!snapshot.match?.tanks[0]?.alive)break;
+     await delay(100);
+    }
+   }finally{await p.mouse.up();}
+   assert(fired,'Live player did not fire weapon '+weapons[i]);
+   await snap(p,'weapon-'+weapons[i]);
+  }
+ });
  await step('C-items-and-skill',p,async()=>{await start(p,'D');await p.keyboard.down('w');for(const [key,type] of [['e','ability'],['F1','repair'],['F2','boost'],['F4','radar'],['F5','smoke'],['F6','teamRepair']]){
  const deadline=Date.now()+30000;let done=false;
  while(Date.now()<deadline){const a=await state(p);if(a.events.some(e=>e.type===type&&e.id==='player')){done=true;break;}const t=a.match.tanks[0];if(t.alive&&(key!=='e'||t.hp>14)&&(key!=='F1'||t.hp<t.maxHp))await p.keyboard.press(key);await delay(300);}
