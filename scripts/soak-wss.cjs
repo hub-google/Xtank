@@ -75,7 +75,10 @@ async function restart(){
 }
 async function run(){
  if(process.env.XTANK_OFFICIAL_MODE==='1')throw Error('SOAK_REQUIRES_ISOLATED_LAN_SERVER');
- host=await createHost({host:'127.0.0.1',port:0});
+ const fast=process.env.XTANK_SOAK_TEST_ROUND_SECONDS;
+ const testRoundSeconds=fast===undefined?null:Number(fast);
+ if(testRoundSeconds!==null&&process.env.NODE_ENV!=='test')throw Error('SOAK_FAST_ROUNDS_ONLY_IN_NODE_ENV_TEST');
+ host=await createHost({host:'127.0.0.1',port:0,testRoundSeconds});
  const kinds=['X','D','M','R','H','A','O','S'];
  const owner=await dial(host.port,'soak-0');
  const first=take(owner,'JOINED');
