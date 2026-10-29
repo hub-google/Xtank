@@ -92,6 +92,33 @@ async function ensureGuestEntry(p){
   await overlay.waitFor({state:'hidden',timeout:15000});
  }
 }
+// In two independent native Electron windows, the second window may be in
+// front of the first. The LAN controls also sit below a scrollable home panel.
+// Playwright's auto-scroll click can stall under Windows software rendering.
+// Foreground the actual EXE, scroll only for visibility, then send a genuine
+// mouse input event; never invoke the button's DOM click handler directly.
+async function clickForeground(p,selector){
+ await p.bringToFront();
+ const target=p.locator(selector);
+ await target.waitFor({state:'visible',timeout:15000});
+ await p.evaluate(sel=>{
+  const el=document.querySelector(sel);
+  if(!el)throw Error('Missing native control: '+sel);
+  el.scrollIntoView({block:'center',inline:'nearest',behavior:'instant'});
+ },selector);
+ const box=await target.boundingBox();
+ const viewport=p.viewportSize();
+ assert(box&&box.width>0&&box.height>0,'Native control has no hit area: '+selector);
+ const x=box.x+box.width/2,y=box.y+box.height/2;
+ assert(x>=0&&y>=0&&x<viewport.width&&y<viewport.height,
+  'Native control outside visible EXE viewport: '+selector+' '+JSON.stringify({box,viewport}));
+ const hit=await p.evaluate(({sel,x,y})=>{
+  const el=document.querySelector(sel),top=document.elementFromPoint(x,y);
+  return !!el&&!!top&&(el===top||el.contains(top));
+ },{sel:selector,x,y});
+ assert(hit,'Native control is obscured: '+selector);
+ await p.mouse.click(x,y);
+}
 async function home(p){
  await ensureGuestEntry(p);
  let s;
@@ -374,12 +401,12 @@ async function testMockedNativeAccount(p){
  // A tank matrix regex such as ^B-D- must NOT launch a second network client.
   const q=needsNetworkClient(filter)?await launch(1):null;
  await step('D-LAN-create-join-start-sync-reconnect',p,async()=>{
- await home(p);await home(q);await p.click('#hostServerButton');await p.waitForFunction(()=>document.querySelector('#networkStatus').textContent.includes('已啟動'));
- await p.fill('#playerName','QA-A');await p.selectOption('#mapSelect','chess');await p.click('#makeRoomButton');await wait(p,()=>document.querySelector('#roomCode').value.length===6);await p.click('#leaveNetworkButton');assert(!await p.isVisible('#networkLobby'));await p.fill('#roomCode','');await p.click('#makeRoomButton');await wait(p,()=>document.querySelector('#roomCode').value.length===6);const code=await p.inputValue('#roomCode');
+ await home(p);await home(q);await clickForeground(p,'#hostServerButton');await p.waitForFunction(()=>document.querySelector('#networkStatus').textContent.includes('已啟動'));
+ await p.fill('#playerName','QA-A');await p.selectOption('#mapSelect','chess');await clickForeground(p,'#makeRoomButton');await wait(p,()=>document.querySelector('#roomCode').value.length===6);await clickForeground(p,'#leaveNetworkButton');assert(!await p.isVisible('#networkLobby'));await p.fill('#roomCode','');await clickForeground(p,'#makeRoomButton');await wait(p,()=>document.querySelector('#roomCode').value.length===6);const code=await p.inputValue('#roomCode');
  proxy=net.createServer(client=>{const upstream=net.connect(8787,'127.0.0.1');tunnels.add(client);tunnels.add(upstream);client.pipe(upstream);upstream.pipe(client);for(const sock of [client,upstream]){sock.on('error',()=>{});sock.on('close',()=>{tunnels.delete(sock);client.destroy();upstream.destroy();});}});await new Promise(r=>proxy.listen(8788,'127.0.0.1',r));await q.fill('#serverAddress','ws://127.0.0.1:8788');
- await q.fill('#playerName','QA-B');await q.fill('#roomCode','000000');await q.click('#joinRoomButton');await q.waitForFunction(()=>document.querySelector('#networkStatus').textContent.includes('ROOM_NOT_FOUND'));await snap(q,'wrong-room');
+ await q.fill('#playerName','QA-B');await q.fill('#roomCode','000000');await clickForeground(q,'#joinRoomButton');await q.waitForFunction(()=>document.querySelector('#networkStatus').textContent.includes('ROOM_NOT_FOUND'));await snap(q,'wrong-room');
  for(let i=0;i<7;i++){const w=new WebSocket('ws://127.0.0.1:8787');fillers.push(w);await new Promise((ok,bad)=>{w.once('open',()=>w.send(JSON.stringify({type:'JOIN',roomId:code,name:'Capacity-'+i,tank:'X'})));w.on('message',raw=>{const m=JSON.parse(raw);if(m.type==='JOINED')ok();if(m.type==='ERROR')bad(Error(m.code));});w.once('error',bad);});}
- await q.fill('#roomCode',code);await q.click('#joinRoomButton');await q.waitForFunction(()=>document.querySelector('#networkStatus').textContent.includes('ROOM_FULL'));await snap(q,'room-full');results.push({name:'D-room-full',status:'PASS'});for(const w of fillers)w.close();await delay(32000);for(let i=0;i<6;i++){const w=new WebSocket('ws://127.0.0.1:8787');fillers.push(w);await new Promise((ok,bad)=>{w.once('open',()=>w.send(JSON.stringify({type:'JOIN',roomId:code,name:'Idle-helper-'+i,tank:'D'})));w.on('message',raw=>{const m=JSON.parse(raw);if(m.type==='JOINED')ok();if(m.type==='ERROR')bad(Error(m.code));});w.once('error',bad);});}await q.click('#joinRoomButton');await p.waitForFunction(()=>document.querySelector('#roomPeople').textContent.includes('QA-B'));await p.click('#startNetworkButton');await wait(q,()=>window.xtankDiagnostics().match?.tanks.length>1);
+ await q.fill('#roomCode',code);await clickForeground(q,'#joinRoomButton');await q.waitForFunction(()=>document.querySelector('#networkStatus').textContent.includes('ROOM_FULL'));await snap(q,'room-full');results.push({name:'D-room-full',status:'PASS'});for(const w of fillers)w.close();await delay(32000);for(let i=0;i<6;i++){const w=new WebSocket('ws://127.0.0.1:8787');fillers.push(w);await new Promise((ok,bad)=>{w.once('open',()=>w.send(JSON.stringify({type:'JOIN',roomId:code,name:'Idle-helper-'+i,tank:'D'})));w.on('message',raw=>{const m=JSON.parse(raw);if(m.type==='JOINED')ok();if(m.type==='ERROR')bad(Error(m.code));});w.once('error',bad);});}await clickForeground(q,'#joinRoomButton');await p.waitForFunction(()=>document.querySelector('#roomPeople').textContent.includes('QA-B'));await clickForeground(p,'#startNetworkButton');await wait(q,()=>window.xtankDiagnostics().match?.tanks.length>1);
  for(const page of [p,q])assert.equal((await state(page)).match.mapId,'chess');
  const a=await state(p);await key(p,'s',700);await delay(400);const b=await state(p),c=await state(q);assert(b.match.tanks[0].z>a.match.tanks[0].z+.5);const remote=c.match.tanks.find(t=>t.id==='remote-host');assert(Math.abs(remote.z-b.match.tanks[0].z)<1);
  await p.mouse.move(650,300);await p.mouse.down();await delay(1600);await p.mouse.up();await delay(300);assert((await state(q)).events.some(e=>e.type==='fire'&&e.owner==='remote-host'));
