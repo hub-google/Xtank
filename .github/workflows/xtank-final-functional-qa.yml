@@ -1,0 +1,86 @@
+name: X-TANK final Windows EXE functional acceptance
+on:
+  push:
+    branches:
+      - release-validation/2026-10-29-final-qa
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: xtank-final-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  package:
+    name: Build Windows EXE and execute 62 unit/integration tests
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - run: npm test
+      - run: npm run build
+      - run: npm run dist:win
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: XTANK-Final-Windows-EXE
+          path: release/*.exe
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: XTANK-Final-Unpacked-Client
+          path: release/win-unpacked/
+          if-no-files-found: error
+          retention-days: 10
+
+  native-functional:
+    name: Native GUI - ${{ matrix.group }}
+    needs: package
+    runs-on: windows-latest
+    timeout-minutes: ${{ matrix.minutes }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {group: ui, filter: '^(A-|C-(wall-clock|WASD|Escape))', minutes: 50}
+          - {group: combat, filter: '^C-(?!AI-damage|wall-clock|WASD|Escape)', minutes: 70}
+          - {group: natural-match, filter: '^C-AI-damage-death-respawn-score-result', minutes: 40}
+          - {group: multiplayer, filter: '^D-', minutes: 70}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - uses: actions/download-artifact@v4
+        with:
+          name: XTANK-Final-Windows-EXE
+          path: release
+      - name: Independent second client for the multiplayer scenarios
+        if: matrix.group == 'multiplayer'
+        uses: actions/download-artifact@v4
+        with:
+          name: XTANK-Final-Unpacked-Client
+          path: release/win-unpacked
+      - run: npm install --no-save --ignore-scripts --no-audit --no-fund playwright@1.56.1
+      - name: Launch real EXE and assert actual Windows GUI behavior
+        run: node scripts/windows-gui-qa.cjs
+        env:
+          XTANK_QA_FILTER: ${{ matrix.filter }}
+          XTANK_QA_OUT: qa-evidence/${{ matrix.group }}
+      - name: Terminate test EXE processes
+        if: always()
+        shell: pwsh
+        run: Get-Process -Name 'XTANK*','X-TANK*' -ErrorAction SilentlyContinue | Stop-Process -Force
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: XTANK-Final-QA-${{ matrix.group }}
+          path: qa-evidence/${{ matrix.group }}/
+          if-no-files-found: warn
+          retention-days: 30
