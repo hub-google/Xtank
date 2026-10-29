@@ -1,0 +1,75 @@
+name: X-TANK two independently packaged native Windows EXEs
+on:
+  push:
+    branches:
+      - release-validation/2026-10-29-two-native-lowgpu
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: xtank-two-real-native-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    name: Build identical portable and unpacked Windows game binaries
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - run: node --check scripts/windows-two-native-lan-qa.cjs
+      - run: npm test
+      - run: npm run build
+      - run: npm run dist:win
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: XTANK-Final-Two-Native-Portable
+          path: release/*.exe
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: XTANK-Final-Two-Native-Unpacked
+          path: release/win-unpacked/
+          if-no-files-found: error
+          retention-days: 10
+  two-exes:
+    name: Two native EXEs - real GUI create/join/keyboard/sync/reconnect
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-audit --no-fund
+      - uses: actions/download-artifact@v4
+        with:
+          name: XTANK-Final-Two-Native-Portable
+          path: release
+      - uses: actions/download-artifact@v4
+        with:
+          name: XTANK-Final-Two-Native-Unpacked
+          path: release/win-unpacked
+      - run: npm install --no-save --ignore-scripts --no-audit --no-fund playwright@1.56.1
+      - name: Real 2-process Electron GUI LAN test
+        run: node scripts/windows-two-native-lan-qa.cjs
+        env:
+          XTANK_QA_OUT: qa-evidence/two-native
+      - name: Terminate test EXEs
+        if: always()
+        shell: pwsh
+        run: Get-Process -Name 'XTANK*','X-TANK*' -ErrorAction SilentlyContinue | Stop-Process -Force
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: XTANK-Two-Native-LAN-Actual-QA
+          path: qa-evidence/two-native/
+          if-no-files-found: warn
+          retention-days: 30
