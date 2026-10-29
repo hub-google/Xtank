@@ -1,5 +1,11 @@
 # X-TANK ONLINE（X 坦克）
 
+## 2026-10-29｜GitHub Actions 自動化伺服器驗收
+
+[本輪 GitHub Actions #40809984040](https://github.com/hub-google/Xtank/actions/runs/40809984040)｜[最新逐項證據與正式部署缺口](docs/32_20261029_自動驗收與正式部署狀態.md)
+
+**已實際通過**：62/62 Node 單元整合測試、3/3 模擬 Supabase 正式結算／故障恢復／重連測試、8 位真實 WebSocket 模擬玩家持續 90 秒（7,200 snapshots、零錯誤／零斷線）、Docker 伺服器健康檢查。**未可宣稱通過**：本 Run 的 30 分鐘 8 人負載與雙 Windows EXE LAN 驗收，須各自以最後 job 結論判定；正式公網 WSS 與真實跨網 Supabase 入帳仍未部署／驗收。
+
 ## 2026-10-28｜Windows EXE 打包及 GUI 驗收
 
 [查看實際 GitHub Actions 結果](https://github.com/hub-google/Xtank/actions/runs/40638323009) ｜ [下載可攜式 Windows EXE Artifact](https://github.com/hub-google/Xtank/actions/runs/40638323009/artifacts/12794407679) ｜ [完整測試狀態與限制](docs/31_20261028_Windows_EXE_驗收紀錄.md)。已取得 **62/62 單元整合 PASS、Docker PASS、72/72 Windows 原生 EXE 戰鬥矩陣 PASS**。一般介面與延伸多人 GUI 工作尚無最終結論，不可視為整體全部驗收通過。
