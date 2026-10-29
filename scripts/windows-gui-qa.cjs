@@ -121,6 +121,24 @@ async function ensureGuestEntry(p){
 // Playwright's auto-scroll click can stall under Windows software rendering.
 // Foreground the actual EXE, scroll only for visibility, then send a genuine
 // mouse input event; never invoke the button's DOM click handler directly.
+// Test fixture input only: update the actual native HTML form and dispatch
+// browser events. This is not a shortcut for creating rooms or gameplay:
+// those actions still use physical CDP mouse/key inputs on the EXE.
+async function setFixtureField(p,selector,value){
+ const observed=await p.evaluate(({selector,value})=>{
+  const field=document.querySelector(selector);
+  if(!field||!(field instanceof HTMLInputElement||field instanceof HTMLSelectElement))
+   throw Error('Missing HTML fixture field: '+selector);
+  const choices=field instanceof HTMLSelectElement
+   ?Array.from(field.options).map(x=>x.value):null;
+  if(choices&&!choices.includes(value))throw Error('Invalid fixture choice '+selector+'='+value);
+  field.value=value;
+  field.dispatchEvent(new Event('input',{bubbles:true}));
+  field.dispatchEvent(new Event('change',{bubbles:true}));
+  return field.value;
+ },{selector,value});
+ assert.equal(observed,value,'Native field did not accept test value '+selector);
+}
 async function clickForeground(p,selector){
  await p.bringToFront();
  const target=p.locator(selector);
@@ -427,11 +445,11 @@ async function testMockedNativeAccount(p){
  await step('D-LAN-create-join-start-sync-reconnect',p,async()=>{
  // The second native EXE was last foregrounded; return focus to the host.
  await home(p);await home(q);await clickForeground(p,'#hostServerButton');await p.waitForFunction(()=>document.querySelector('#networkStatus').textContent.includes('已啟動'));
- await p.fill('#playerName','QA-A');await p.selectOption('#mapSelect','chess');await clickForeground(p,'#makeRoomButton');await wait(p,()=>document.querySelector('#roomCode').value.length===6);await clickForeground(p,'#leaveNetworkButton');assert(!await p.isVisible('#networkLobby'));await p.fill('#roomCode','');await clickForeground(p,'#makeRoomButton');await wait(p,()=>document.querySelector('#roomCode').value.length===6);const code=await p.inputValue('#roomCode');
- proxy=net.createServer(client=>{const upstream=net.connect(8787,'127.0.0.1');tunnels.add(client);tunnels.add(upstream);client.pipe(upstream);upstream.pipe(client);for(const sock of [client,upstream]){sock.on('error',()=>{});sock.on('close',()=>{tunnels.delete(sock);client.destroy();upstream.destroy();});}});await new Promise(r=>proxy.listen(8788,'127.0.0.1',r));await q.fill('#serverAddress','ws://127.0.0.1:8788');
- await q.fill('#playerName','QA-B');await q.fill('#roomCode','000000');await clickForeground(q,'#joinRoomButton');await q.waitForFunction(()=>document.querySelector('#networkStatus').textContent.includes('ROOM_NOT_FOUND'));await snap(q,'wrong-room');
+ await setFixtureField(p,'#playerName','QA-A');await setFixtureField(p,'#mapSelect','chess');await clickForeground(p,'#makeRoomButton');await wait(p,()=>document.querySelector('#roomCode').value.length===6);await clickForeground(p,'#leaveNetworkButton');assert(!await p.isVisible('#networkLobby'));await setFixtureField(p,'#roomCode','');await clickForeground(p,'#makeRoomButton');await wait(p,()=>document.querySelector('#roomCode').value.length===6);const code=await p.inputValue('#roomCode');
+ proxy=net.createServer(client=>{const upstream=net.connect(8787,'127.0.0.1');tunnels.add(client);tunnels.add(upstream);client.pipe(upstream);upstream.pipe(client);for(const sock of [client,upstream]){sock.on('error',()=>{});sock.on('close',()=>{tunnels.delete(sock);client.destroy();upstream.destroy();});}});await new Promise(r=>proxy.listen(8788,'127.0.0.1',r));await setFixtureField(q,'#serverAddress','ws://127.0.0.1:8788');
+ await setFixtureField(q,'#playerName','QA-B');await setFixtureField(q,'#roomCode','000000');await clickForeground(q,'#joinRoomButton');await q.waitForFunction(()=>document.querySelector('#networkStatus').textContent.includes('ROOM_NOT_FOUND'));await snap(q,'wrong-room');
  for(let i=0;i<7;i++){const w=new WebSocket('ws://127.0.0.1:8787');fillers.push(w);await new Promise((ok,bad)=>{w.once('open',()=>w.send(JSON.stringify({type:'JOIN',roomId:code,name:'Capacity-'+i,tank:'X'})));w.on('message',raw=>{const m=JSON.parse(raw);if(m.type==='JOINED')ok();if(m.type==='ERROR')bad(Error(m.code));});w.once('error',bad);});}
- await q.fill('#roomCode',code);await clickForeground(q,'#joinRoomButton');await q.waitForFunction(()=>document.querySelector('#networkStatus').textContent.includes('ROOM_FULL'));await snap(q,'room-full');results.push({name:'D-room-full',status:'PASS'});for(const w of fillers)w.close();await delay(32000);for(let i=0;i<6;i++){const w=new WebSocket('ws://127.0.0.1:8787');fillers.push(w);await new Promise((ok,bad)=>{w.once('open',()=>w.send(JSON.stringify({type:'JOIN',roomId:code,name:'Idle-helper-'+i,tank:'D'})));w.on('message',raw=>{const m=JSON.parse(raw);if(m.type==='JOINED')ok();if(m.type==='ERROR')bad(Error(m.code));});w.once('error',bad);});}await clickForeground(q,'#joinRoomButton');await p.waitForFunction(()=>document.querySelector('#roomPeople').textContent.includes('QA-B'));await clickForeground(p,'#startNetworkButton');await wait(q,()=>window.xtankDiagnostics().match?.tanks.length>1);
+ await setFixtureField(q,'#roomCode',code);await clickForeground(q,'#joinRoomButton');await q.waitForFunction(()=>document.querySelector('#networkStatus').textContent.includes('ROOM_FULL'));await snap(q,'room-full');results.push({name:'D-room-full',status:'PASS'});for(const w of fillers)w.close();await delay(32000);for(let i=0;i<6;i++){const w=new WebSocket('ws://127.0.0.1:8787');fillers.push(w);await new Promise((ok,bad)=>{w.once('open',()=>w.send(JSON.stringify({type:'JOIN',roomId:code,name:'Idle-helper-'+i,tank:'D'})));w.on('message',raw=>{const m=JSON.parse(raw);if(m.type==='JOINED')ok();if(m.type==='ERROR')bad(Error(m.code));});w.once('error',bad);});}await clickForeground(q,'#joinRoomButton');await p.waitForFunction(()=>document.querySelector('#roomPeople').textContent.includes('QA-B'));await clickForeground(p,'#startNetworkButton');await wait(q,()=>window.xtankDiagnostics().match?.tanks.length>1);
  for(const page of [p,q])assert.equal((await state(page)).match.mapId,'chess');
  const a=await state(p);await key(p,'s',700);await delay(400);const b=await state(p),c=await state(q);assert(b.match.tanks[0].z>a.match.tanks[0].z+.5);const remote=c.match.tanks.find(t=>t.id==='remote-host');assert(Math.abs(remote.z-b.match.tanks[0].z)<1);
  await p.mouse.move(650,300);await p.mouse.down();await delay(1600);await p.mouse.up();await delay(300);assert((await state(q)).events.some(e=>e.type==='fire'&&e.owner==='remote-host'));
